@@ -1,9 +1,11 @@
 import os
 import secrets
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
-load_dotenv()
+# usecwd: find backend/.env from the working directory, since the code itself
+# may live in a read-only store far from it.
+load_dotenv(find_dotenv(usecwd=True))
 
 # No pre-registration is required with Lichess for OAuth apps that use PKCE
 # and a 127.0.0.1 redirect URI, so this works out of the box for local dev.
