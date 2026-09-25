@@ -29,11 +29,6 @@ EXPLORER_CACHE_TTL_SECONDS = 24 * 60 * 60
 # account call it didn't actually need — see explorer-cache.md.
 RATING_CACHE_TTL_SECONDS = 60 * 60
 
-# A real evaluation never changes for a fixed position, so a hit is trusted
-# forever (no TTL check at all). A miss ("no cloud eval for this position
-# yet") is retried after this long, in case Lichess has since analyzed it.
-CLOUD_EVAL_MISS_TTL_SECONDS = 24 * 60 * 60
-
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -115,16 +110,6 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS rating_cache (
                 username TEXT PRIMARY KEY,
                 bucket INTEGER NOT NULL,
-                fetched_at TEXT NOT NULL
-            )
-            """
-        )
-
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS cloud_eval_cache (
-                fen TEXT PRIMARY KEY,
-                cp REAL,
                 fetched_at TEXT NOT NULL
             )
             """
@@ -257,27 +242,24 @@ def update_explorer_settings(owner: str, study_id: int, explorer_settings: dict[
     return _row_to_study(row)
 
 
-def set_study_stats(owner: str, study_id: int, stats: dict[str, Any]) -> dict[str, Any] | None:
+def merge_study_stats(
+    owner: str, study_id: int, updates: dict[str, Any], *, explorer_settings: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
+    """Merge against the latest row inside one transaction, preserving other stats jobs' results."""
     with _connect() as conn:
-        cur = conn.execute(
-            "UPDATE studies SET stats = ? WHERE owner = ? AND id = ?",
-            (json.dumps(stats), owner, study_id),
-        )
-        if cur.rowcount == 0:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT stats FROM studies WHERE owner = ? AND id = ?", (owner, study_id)).fetchone()
+        if row is None:
             return None
-        row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
-    assert row is not None
-    return _row_to_study(row)
-
-
-def set_study_evals(owner: str, study_id: int, evals: dict[str, Any]) -> dict[str, Any] | None:
-    with _connect() as conn:
-        cur = conn.execute(
-            "UPDATE studies SET evals = ? WHERE owner = ? AND id = ?",
-            (json.dumps(evals), owner, study_id),
-        )
-        if cur.rowcount == 0:
-            return None
+        stats = json.loads(row["stats"]) if row["stats"] else {}
+        stats.update(updates)
+        if explorer_settings is None:
+            conn.execute("UPDATE studies SET stats = ? WHERE owner = ? AND id = ?", (json.dumps(stats), owner, study_id))
+        else:
+            conn.execute(
+                "UPDATE studies SET stats = ?, explorer_settings = ?, updated_at = datetime('now') WHERE owner = ? AND id = ?",
+                (json.dumps(stats), json.dumps(explorer_settings), owner, study_id),
+            )
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
     assert row is not None
     return _row_to_study(row)
@@ -342,39 +324,6 @@ def set_rating_cache(username: str, bucket: int, fetched_at: str) -> None:
             ON CONFLICT(username) DO UPDATE SET bucket = excluded.bucket, fetched_at = excluded.fetched_at
             """,
             (username, bucket, fetched_at),
-        )
-
-
-def get_cloud_eval_cache(fen: str) -> dict[str, Any] | None:
-    """None on a miss that's worth retrying (never fetched, or a stored
-    "no eval" older than CLOUD_EVAL_MISS_TTL_SECONDS). A stored real value
-    (cp is not None) is always returned regardless of age — an engine
-    evaluation of a fixed position doesn't go stale the way real-world game
-    stats do. Global and permanent-ish by design: this is what lets
-    "Calculate scores" reuse an opponent-move-outside-your-tree evaluation
-    indefinitely, across every future recalculation of any study that ever
-    needs that exact position, instead of re-fetching it from Lichess every
-    single run — see explorer-cache.md.
-    """
-    with _connect() as conn:
-        row = conn.execute("SELECT cp, fetched_at FROM cloud_eval_cache WHERE fen = ?", (fen,)).fetchone()
-    if row is None:
-        return None
-    if row["cp"] is None:
-        fetched_at = datetime.fromisoformat(row["fetched_at"])
-        if (datetime.now(UTC) - fetched_at).total_seconds() > CLOUD_EVAL_MISS_TTL_SECONDS:
-            return None
-    return {"cp": row["cp"], "fetchedAt": row["fetched_at"]}
-
-
-def set_cloud_eval_cache(fen: str, cp: float | None, fetched_at: str) -> None:
-    with _connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO cloud_eval_cache (fen, cp, fetched_at) VALUES (?, ?, ?)
-            ON CONFLICT(fen) DO UPDATE SET cp = excluded.cp, fetched_at = excluded.fetched_at
-            """,
-            (fen, cp, fetched_at),
         )
 
 

@@ -45,22 +45,20 @@
       <section>
         <h2>Stats list</h2>
         <ul>
-          <li>Load the account's studies. Show an empty state with a New study link when there are none.</li>
-          <li>Render one card per study with its score-tier chess-piece badge, study name, studied side, and expected score as a percentage. Until calculated, show a dash and “Not calculated yet.”</li>
-          <li>When score exists, show its Explorer source (Lirep or Lichess Players/Masters, including minimum rating for Players), number of positions evaluated, and calculation time. If expected evaluation exists, show it too.</li>
-          <li>The score badge tiers are gold at 60%+, silver at 55%+, bronze at 50%+, and unbadged/below breakeven under 50%. The piece badge on a calculated card opens the study detail page. A card with no calculated score does not open.</li>
-          <li>Each card has Calculate or Recalculate. Disable the button while working. It starts the win-probability job and then the expected-evaluation job in sequence, updating the button label with current progress. If the first succeeds and second fails, retain and display the successful result instead of discarding it.</li>
+          <li>Load the account's studies. When there are none, show empty White and Black opening groups.</li>
+          <li>Group study cards by studied side. Each card shows the study name, side, opening moves, and expected score as a percentage (or a dash if not calculated).</li>
+          <li>Every card links to its study detail page, including cards without a calculated score. Calculations are started from the detail page; the list has no Calculate/Recalculate button or job sequence.</li>
         </ul>
       </section>
 
       <section>
         <h2>Study detail screen</h2>
-        <p>Open at <code>stat.html?id={studyId}</code>. Show the tier badge and legend toggle, study name, and Playing White/Black badge. Show two metric cards, calculation actions, Explorer settings, then coverage chart. Every metric and chart must identify if its calculation begins at a custom starting point.</p>
+        <p>Open at <code>stat.html?id={studyId}</code>. Show the tier badge and legend toggle, study name, and Playing White/Black badge. Show win probability, expected evaluation, and practice knowledge cards, then calculation actions, Explorer settings, and coverage chart. Win probability, expected evaluation, and coverage identify a custom starting point when set.</p>
         <h3>Metric cards</h3>
         <ul>
-          <li><strong>Win probability</strong> is displayed as a percentage but means expected score: a win = 1, draw = 0.5, loss = 0, from the studied side's perspective. Include source, evaluated-position count, and timestamp.</li>
-          <li><strong>Expected evaluation at the end of prep</strong> is a weighted Stockfish score in pawns from the studied side's POV, formatted to two decimals with a sign. Display forced-mate labels for capped mate values and calculation time. If end positions lacked an engine evaluation, they contribute 0.00 and the card states how many misses occurred.</li>
-          <li>Empty metrics show a dash and “Not calculated yet.” The tier legend explains all score thresholds.</li>
+          <li><strong>Win probability</strong> shows win and loss percentages (draws are the remainder), plus expected score: a win = 1, draw = 0.5, loss = 0, from the studied side's perspective. Include source, evaluated-position count, and timestamp. The expected-score tier badge is gold at 60%+, silver at 55%+, bronze at 50%+, and below breakeven under 50%.</li>
+          <li><strong>Expected evaluation at the end of prep</strong> is a weighted Stockfish score in pawns from the studied side's POV, formatted to two decimals with a sign. Display forced-mate labels for capped mate values and calculation time. If end positions lacked an engine evaluation, they contribute 0.00 and the card states how many misses occurred. Older server-calculated summaries are marked as legacy until recalculated locally.</li>
+          <li><strong>Practice knowledge</strong> shows average recall across positions, or an empty state if there is no practice data. Empty calculation metrics show a dash and “Not calculated yet.” The tier legend explains score thresholds.</li>
         </ul>
       </section>
 
@@ -77,13 +75,13 @@
       <section>
         <h2>Three independent actions</h2>
         <h3>Update evaluations</h3>
-        <p>This action prepares only the engine evaluations required by the expected-evaluation walk. Starting at the effective starting node, follow the studied side's prepared move and the opponent's Explorer-weighted replies. Evaluate a nonterminal studied-side leaf, an opponent position with no Explorer games, or an opponent reply that exits the tree. Reuse saved node evaluations and globally cached FEN evaluations; do not evaluate unrelated tree nodes. Checkpoint results every five positions and save the final results, so a later run can resume from saved evaluations. Save node evaluations to this study and off-tree evaluations to the shared global FEN cache.</p>
+        <p>This browser action discovers only the FENs required at the frontier of the expected-evaluation walk, starting at the effective starting node. Follow prepared moves and fetch opponent replies via <code>/api/explorer</code>. The frontier includes nonterminal studied-side leaves, opponent positions with no listed games, and positions after unprepared opponent replies; terminal positions need no engine score. Reuse this account's cached FEN evaluations on this device and run local Stockfish only for missing FENs. Store each completed White-POV centipawn value in browser IndexedDB immediately, so interrupted runs can resume. Do not analyze unrelated tree nodes or save new evaluations to the backend.</p>
         <p>Show “Finding required positions…” while walking the tree and Explorer, then show how many of the required positions are already available and how many need calculation. Show exact progress for remaining engine work and report “Already up to date” when there is none.</p>
         <h3>Update win probability</h3>
         <p>Start a backend job that calculates expected score and coverage from Explorer data. It does not call Stockfish or Cloud Eval. Save only its fields and timestamp, independently of expected evaluation. Explorer lookups use a persistent cross-study cache with a 24-hour TTL.</p>
         <h3>Update expected evaluation</h3>
-        <p>Start a separate backend job. Prefer stored study evaluations for tree nodes and shared cached FEN evaluations for off-tree replies. Use Lichess Cloud Eval only for positions not covered by either cache; Cloud Eval has sparse coverage, and missing positions count as 0.00. A 404 can be recorded as a retryable miss; a 429 must fail clearly and must not be immediately retried. Show this action in warning styling with a note to run Update evaluations first when no saved evaluations exist, but do not block it.</p>
-        <p>Each detail-page action runs independently and updates its own result/timestamp without clearing the other. All three action buttons are disabled while any one runs. The two server jobs return a job ID and are polled about every 400 ms; show a simple progress bar and completed-position count. Since the total is unknown, estimate the bar using tree-node count and cap it at 100%. On failure, show the message beside the relevant bar and re-enable the actions.</p>
+        <p>In the browser, discover and evaluate any missing frontier FENs using the same local flow as Update evaluations, then perform the Explorer-weighted tree walk locally. It works without running Update evaluations first. A position without a usable engine score contributes 0.00 and is counted in <code>evalMisses</code>; there is no Cloud Eval fallback. Send only <code>evalCp</code>, <code>evalMisses</code>, and the selected <code>explorerSettings</code> to synchronous <code>POST /api/studies/{id}/expected-eval</code>. The backend saves the study summary and settings, not per-position evaluations; it runs neither an engine nor a job for this action.</p>
+        <p>Each detail-page action runs independently and updates its own result/timestamp without clearing the other. All three action buttons are disabled while any one runs. Only the win-probability action starts a backend job: poll <code>GET /api/jobs/{jobId}</code> about every 400 ms, estimating progress from tree size because the actual total is unknown. The two local actions show discovery and then exact engine-work progress. On failure, show the message beside the relevant bar and re-enable the actions.</p>
       </section>
 
       <section>
@@ -99,7 +97,7 @@
       <section>
         <h2>Coverage chart and caching</h2>
         <p>Render a responsive line chart with percentage on the vertical axis and the studied opponent's move number on the horizontal axis. Hovering near the line shows opponent move number, coverage percentage, and number of remembered moves at that depth. If no coverage is stored, show an explanatory empty state and require recalculation to populate it.</p>
-        <p>Explorer responses and rating resolutions persist in SQLite across backend restarts. Successful engine evaluations are cached by FEN globally; required study tree-node evaluations are stored on the study. Backend calculation jobs are in-memory and do not survive a process restart. Process one Explorer request at a time and fail fast on 429 with a wait-a-minute message.</p>
+        <p>Explorer responses and per-user rating buckets persist in backend SQLite across restarts; Explorer responses are shared across studies/accounts for identical queries and expire after 24 hours. Engine evaluations are keyed by username and FEN in browser IndexedDB, per account and per device, not synced. Clearing browser data forces recomputation; when IndexedDB is unavailable (including private modes that block it), evaluations last only for the current page/tab visit. On loading a study, legacy server-side <code>evals.byNode</code> values are imported into the local FEN cache where absent. An older database may still contain the unused <code>cloud_eval_cache</code> table, but new databases do not create it. The <code>/api/studies/{id}/evals</code> and <code>/api/eval-cache/lookup</code> endpoints have been removed. Backend win-probability job progress is in-memory and does not survive a process restart. Live Explorer 429 errors fail fast with a wait-a-minute message.</p>
       </section>
 
       <section>
@@ -108,8 +106,8 @@
           <li>Expected score reports game results, not engine quality. It can disagree with expected evaluation; this is intentional.</li>
           <li>All results assume perfect memorization and one prepared move at each studied-side decision. They do not model mistakes by the user.</li>
           <li>Opponent frequencies reflect the selected current pool, not move quality. Sparse data, capped move lists, and changes in current ratings affect estimates.</li>
-          <li>Local Stockfish is fixed-depth and runs on the user's device. Cloud Eval is only a fallback when needed and may have no evaluation for a position.</li>
-          <li>Recalculation is manual because it may require sequential network calls and take several seconds. Settings are saved when a backend metric is recalculated; Update evaluations uses the current Explorer selection to discover off-tree positions.</li>
+          <li>Local Stockfish is fixed-depth and runs on the user's device. Missing local evaluations contribute 0 and are reported; no Cloud Eval fallback is used.</li>
+          <li>Recalculation is manual because Explorer requests and local engine searches may take time. Update win probability and Update expected evaluation persist selected Explorer settings; Update evaluations uses the current selection only to discover frontier positions.</li>
         </ul>
       </section>
 

@@ -1,417 +1,208 @@
 # Stats page
 
-Deep-dive companion to the ["The Stats tab"](README.md#the-stats-tab) section
-of the main README. Everything here lives in `backend/app/stats.py` (the
-computation) and `frontend/src/stat.ts` / `frontend/src/stats.ts` (the UI).
+Deep-dive companion to ["The Stats tab"](README.md#the-stats-tab) and the
+general tree-walk idea in [§2 "Core idea"](README.md#2-core-idea). Win
+probability and coverage run in `backend/app/stats.py`; expected evaluation
+runs in `frontend/src/stat.ts`. The stats list is in `frontend/src/stats.ts`.
 
-All three stats below are computed by the **same backward-induction walk**
-over a study's tree — the restricted, single-tree version of the general
-Markov-chain idea from [§2 "Core idea"](README.md#2-core-idea) of the main
-README. They differ only in what value a leaf gets and how values combine:
+All three calculations assume the studied side always plays its one prepared
+move. At an opponent turn, the Opening Explorer supplies the frequency of
+each listed reply in the selected pool. The calculations differ at the edge
+of the tree:
 
-| Stat | Leaf value | Combine rule |
+| Stat | At the edge of preparation | Where calculated |
 | --- | --- | --- |
-| Expected score (with win/loss probabilities) | Win/draw/loss distribution or the position's expected score | weighted average by real move frequency |
-| Coverage | 1 if still in-book, dropped otherwise | probability mass still following the tree |
-| Expected eval | Stockfish cp (local Stockfish, or Cloud Eval as a fallback) | weighted average by real move frequency |
+| Expected score / win and loss probabilities | Explorer win/draw/loss results | Backend job |
+| Coverage | Drop probability mass that leaves the tree | Backend job |
+| Expected evaluation | Local Stockfish centipawns, weighted by Explorer move frequency | Browser |
 
-**Expected score (including its win/loss probabilities) and Coverage are 100% Opening Explorer-derived — always.**
-Every number they produce comes from Explorer win/draw/loss
-counts (plus deterministic chess rules for an outright checkmate/stalemate
-in the tree, which needs no external data at all). Neither ever calls
-Stockfish or the Cloud Eval API, not even as a fallback, not even for a move
-outside your tree — `_outcome_probabilities` in `stats.py` propagates the
-win/draw/loss distribution directly from the Explorer's own counts. Expected
-score is win probability plus half the draw probability; the UI shows win and
-loss probabilities and treats the remainder as draws. This is a deliberate,
-load-bearing design choice, not an accident of how the code happens to be
-written today: **these two stats must never be approximated from an engine
-evaluation** (e.g. by inverting Lichess's cp→win% formula, quoted in the main
-README's [§2 "Core idea"](README.md#2-core-idea), to back out a "cp
-equivalent" from a win rate), because that would silently blend two
-different things the README's own Objectives table treats as distinct —
-objective engine assessment (`eeval`) and real-world result rate (`escore`)
-— and explicitly notes "often disagree, which is itself informative." Only
-**§3 below, Expected evaluation**, ever needs an actual Stockfish number, and
-it always uses a real one.
+**Expected score and coverage never use engine evaluations.** They measure
+real game outcomes and the chance of staying in book, not objective position
+quality. Expected evaluation uses actual local Stockfish results, never a
+win-rate-to-centipawn conversion or a Lichess Cloud Eval fallback.
 
-## 1. Expected score
+## 1. Expected score and win probability
 
-Shown as a percentage with a medal (🥇 ≥ 60%, 🥈 ≥ 55%, 🥉 ≥ 50%). Answers:
-*"if I've perfectly memorized this repertoire, what fraction of a point do I
-score on average against real opposition?"* This is the `escore` objective
-from §2, restricted to exactly the tree you've built rather than a full
-depth-budget expansion over the whole opening space.
+The `escore` objective: *"If I've memorized this repertoire, what fraction
+of a point do I score on average against real opposition?"* A win counts
+1, a draw 0.5, a loss 0. The backend's `_Evaluator.outcomes` walks from the
+study's effective starting node:
 
-A draw counts as half a point — same as chess scoring, and same as Lichess's
-own "expected score" stat on profile pages. A single win/loss-only number
-would throw away real information: a repertoire that draws 80% of the time
-isn't equivalent to one that loses 80% of the time, even though neither
-"wins."
+1. A finished game has its exact win/draw/loss outcome.
+2. On the studied side's turn, follow its sole prepared move. If there is no
+   child, use that position's overall Explorer results; if there are no games,
+   use a neutral 0.5 expected score.
+3. On the opponent's turn, weight each Explorer-listed reply by its games
+   divided by the total games **in the listed moves**. Recurse into prepared
+   replies. For an unprepared reply, use that move's own Explorer W/D/L
+   distribution and stop that branch. With no listed games, use neutral 0.5.
 
-**The algorithm**, walking the tree from the root (`_Evaluator.outcomes` in
-`stats.py`):
-
-1. **At a finished game** (checkmate/stalemate/etc., detected with
-   `python-chess`): assign all probability to the actual win, draw, or loss.
-2. **At a position where it's the studied side's move:** assume **perfect
-   memorization** — they always play the tree's recorded move (there's only
-   ever one, see "Assumptions" below). The outcome distribution is that of
-   the child.
-3. **At a position where it's the opponent's move:** fetch the Opening
-   Explorer's move list for this exact position (same database/rating/speed
-   settings as the study's `explorerSettings`), and take a weighted average
-   over *all* of the opponent's real replies, weighted by how often each is
-   actually played:
-   - If a reply matches a branch you've prepared, recurse into it.
-   - If a reply isn't in your tree, your preparation ends right there — its
-      contribution is that single move's own win/draw/loss distribution (which
-      the explorer already reports per move), not a recursive expansion.
-
-Win and loss probabilities are shown together on the expected-score card; draw
-probability is their remainder. These outcomes are saved by the same **Update
-win probability** action. Older saved calculations gain outcome probabilities
-the next time that action is run.
+The study detail shows win and loss probabilities; draws are the remainder.
+Expected score is `winProbability = winRate + 0.5 * drawProbability`.
+The stats list shows expected score and uses its tier badges (gold at 60%+,
+silver at 55%+, bronze at 50%+, otherwise below breakeven). Its cards link
+to study details; calculations are started on the detail page, not from a
+Calculate/Recalculate button on the list.
 
 ## 2. Coverage
 
-The line chart on a study's detail page. `coverage[i]` = the probability that
-a real game, sampled the same way as the expected-score walk, is *still
-following a line inside your tree* after both sides have made their
-`(i+1)`-th move. It answers a different question from expected score: not
-"how well do I do", but "how often do I even get to use this prep before the
-opponent goes somewhere I haven't covered."
-
-Computed by `_Evaluator.coverage`, which reuses the same explorer-response
-cache as `score` (so it's nearly free to compute right after `score` has
-already walked the tree once): walk the tree tracking a probability mass
-starting at 1.0; at the studied side's move the mass passes through unchanged
-(you always have your one prepared reply); at the opponent's move, the mass
-splits across their real replies by frequency, and any mass that goes to a
-move outside your tree is dropped (it's left the book). The chart plots the
-remaining mass at each of the opponent's move numbers.
-
-**Why coverage never drops on your own move:** by the one-move-per-position
-rule (see "Assumptions" below), you always have exactly one prepared reply,
-so every drop in the chart comes from an opponent move you haven't covered —
-which is exactly what you want to see when deciding where to extend your
-prep next. The chart's hover tooltip also shows how many distinct branches
-(`nodeCountsByMove` in `stat.ts`) you've memorized a response to by that
-point, purely structural (no explorer data needed).
+`_Evaluator.coverage` tracks the probability that play remains in the study
+after each opponent move from the effective starting point. Mass starts at
+1; the studied side's prepared move carries it forward, and opponent moves
+split it by Explorer frequency. Mass going to an unprepared reply leaves the
+book. The chart records remaining mass after each opponent move and shows
+a separate structural count of remembered moves in its tooltip. The backend
+reuses its in-run Explorer responses from the expected-score walk, as well
+as the persistent Explorer cache described in
+[explorer-cache.md](explorer-cache.md).
 
 ## 3. Expected evaluation at the end of prep
 
-*"If both sides play according to real-world tendencies until my preparation
-runs out, what does Stockfish think of the resulting position?"* This is the
-`eeval` objective from the main README's [§2 "Core
-idea"](README.md#2-core-idea), restricted to this study's tree.
+The `eeval` objective: *"If both sides play according to real-world
+tendencies until preparation runs out, what does Stockfish think of the
+resulting position?"* `findRequiredEvaluations` and `expectedEvaluation`
+in `frontend/src/stat.ts` walk only the reachable portion of the tree from
+the effective starting node:
 
-**The algorithm, in one sentence:** assume the studied side always plays the
-prepared move; the moment the opponent plays something there's no prepared
-follow-up for, evaluate the resulting position with Stockfish, weighted by
-how often that opponent move is actually played.
+1. A terminal position has its exact result: checkmate is capped at
+   `±100,000` cp and a draw is 0. No Explorer or engine call is needed.
+2. At the studied side's turn, follow the sole prepared child. If none
+   exists, the position itself is an evaluation frontier.
+3. At the opponent's turn, fetch the move list via `/api/explorer`. Recurse
+   into prepared replies. Each listed unprepared reply with games creates a
+   frontier position *after* that move. With no listed games, the current
+   position is the frontier instead.
+4. For the expected-eval result, weight each opponent reply's child value
+   by its fraction of games among listed moves. Values at frontier positions
+   come from the browser's FEN cache or local Stockfish. A position without
+   a usable local evaluation contributes **0 cp**; `evalMisses` reports the
+   number of such required positions. There is no Cloud Eval fallback.
 
-Walking the tree exactly like `outcomes()` does (`_Evaluator.eval_score` in
-`stats.py`):
+The browser uses the same Stockfish WASM engine as the Study editor, at its
+fixed `SEARCH_DEPTH`. UCI scores are relative to the side to move, so the
+browser converts them to **White's point of view** before caching `FEN -> cp`.
+The weighted result is then converted to the studied side's point of view
+and displayed in pawns (`cp / 100`). Engine-reported mates use a
+distance-sensitive value near the `±100,000` cap. The cap is a finite
+stand-in for a decisive result when averaging with ordinary cp values.
 
-1. **Studied side's move:** recurse into the one prepared child. No choice,
-   no Stockfish needed.
-2. **Opponent's move:** for each of their real replies (from the same
-    Opening Explorer response `outcomes()` already fetches at this position,
-   weighted by frequency):
-   - **in your tree** → recurse; the eval bubbles up from further down the
-     line, same process.
-   - **not in your tree** → prep ends right here. Evaluate the position
-     *after* that move with Stockfish — this is the only place a real engine
-     call happens — and weight it by that move's real-world frequency.
-3. **Checkmate/stalemate reached inside the tree:** an exact `±100,000`
-   ("mate") value, sign depending on who's winning — no Explorer or Stockfish
-   needed at all.
-4. **Edge cases** (rare in practice): the studied side reaches a leaf with no
-   decided continuation, or the Explorer reports zero games for a position —
-   both just evaluate that position directly, no weighting to do.
+## 4. Three actions
 
-**No additional Opening Explorer calls are needed for this stat.** Step 2
-reuses the *exact same* Explorer response `outcomes()`/`coverage()` already
-fetch at that position (same FEN, same in-run cache) — it already lists
-every real reply and its frequency, which is everything needed to decide
-what to recurse into and what to hand to Stockfish. The only genuinely new
-ingredient this stat needs, that the Explorer can't provide, is the
-Stockfish evaluation itself.
+All actions are manual and independent. The study detail disables the other
+buttons while an action runs; each action has its own progress display.
 
-**Where that Stockfish evaluation comes from:** "Calculate evaluations" (§4)
-computes *both* halves of step 2 **locally in your browser**, with the same
-WASM engine (`frontend/src/engine.ts`) used for live analysis in the Study
-editor, like Lichess's own free analysis board — not just step 1's in-tree
-leaves. It walks every opponent-to-move tree node, reads that position's
-(already-cached) Explorer response to find replies not covered by your tree,
-and evaluates those resulting positions too, exactly the ones step 2 would
-otherwise need. See `explorer-cache.md`'s "biggest hidden request" section
-for the full story of why this mattered enough to build. **Live Lichess Cloud
-Eval is only ever a fallback** for a position "Calculate evaluations" hasn't
-covered yet — never evaluated at all, or the tree/settings changed since the
-last run — and whatever it fetches that way is itself persisted afterward
-(same shared cache, see below), so it's at most a one-time cost per position,
-not a recurring one.
+| Button | Work | Persistence |
+| --- | --- | --- |
+| **Update evaluations** | Discover the current frontier with `/api/explorer`, run Stockfish only for FENs absent from this browser's cache | Save each completed evaluation in browser IndexedDB |
+| **Update win probability** | Backend Explorer-only job for win/draw/loss probabilities and coverage | Merge its fields into the study's `stats` row |
+| **Update expected evaluation** | Discover/evaluate any missing frontier FENs locally, then perform the weighted tree walk locally | Synchronous `POST /api/studies/{id}/expected-eval` with only `evalCp`, `evalMisses`, and `explorerSettings`; backend saves the study summary |
 
-**Sign convention:** stored evals (`byNode`) are always kept in **White's
-point of view**, regardless of the study's side — a position's eval doesn't
-care who's studying it, so this keeps the cache source-agnostic. The two
-sources disagree on their own native convention, so each converts before
-storing/using the value: the Cloud Eval API already answers in White's POV
-directly; the engine's UCI protocol reports scores **relative to the side to
-move**, so the browser flips the sign whenever it's Black to move before
-sending the result to the backend. `eval_score` then applies one more
-side-relative flip — multiplying by `-1` for a black study — only at the
-point where a stored (White-POV) value becomes *this stat's* result, matching
-§2's "all objectives are side-relative" rule and the existing win-probability
-stat.
+Both browser actions share the same frontier discovery and evaluation code.
+An existing FEN evaluation is reused across tree edits and studies **on
+that account and device**. A new reply or changed Explorer settings can
+expose new frontier FENs; running **Update expected evaluation** evaluates
+them itself if needed, so **Update evaluations** is optional, not a
+prerequisite. Only frontier FENs, not every tree node, are analyzed. Each
+successful evaluation is persisted as soon as it finishes, so an interrupted
+run can resume without repeating completed work. If the engine yields no
+score, the position remains missing and can be retried on a later run.
 
-**Mate capping:** a forced mate can't be averaged with an ordinary centipawn
-value (there's no finite number of centipawns a mate is "worth"), so it's
-capped at `±100,000` — a value large enough to dominate any weighted average
-it appears in, standing in for "this branch is just winning/losing," without
-needing actual infinite-precision arithmetic.
+On loading the detail page, legacy server-side `evals.byNode` values on the
+study are mapped from node IDs to FENs and imported into the browser cache
+if that FEN has no local value. New evaluations do not update that study
+field. The former `POST /api/studies/{id}/evals` and
+`POST /api/eval-cache/lookup` endpoints are removed. The old global SQLite
+`cloud_eval_cache` table may remain in older databases but is not consulted
+or written (and is not created in new databases); it does not sync
+evaluations between devices or accounts.
 
-## 4. Three actions: evaluations, win probability, expected evaluation
+The browser cache is keyed by signed-in username and FEN in IndexedDB.
+It is **per account, per device/browser profile**, not synced to the backend
+or other devices. Clearing browser data requires local recomputation (apart
+from legacy `byNode` values still stored on a study). If IndexedDB is
+unavailable, including in private browsing modes that block it, results
+are held only in memory for the current page/tab visit.
 
-The Stats detail page splits recalculation into three independent actions,
-because they have genuinely different dependencies, costs, and *where they
-run*. Each has its own button and its own progress bar, deliberately styled
-the same way (a plain percentage fill, no indeterminate animation) —
-consistent visual language for "this is running," regardless of which one:
+Older study-level expected-evaluation summaries are still shown but marked
+as legacy until recalculated locally; the replacement summary records
+`evalOrigin: "local"` so it is not mistaken for a result that may have used
+the former shared FEN cache.
 
-| | Depends on | Runs | Button |
-| --- | --- | --- | --- |
-| Stockfish evals (tree positions + off-tree opponent replies) | The tree, **and** the current Opening Explorer settings (only to *discover* off-tree replies — see below) | **In your browser** (local Stockfish WASM) | **Update evaluations** |
-| Win probability, coverage | The tree **and** the current Opening Explorer settings | On the backend (needs your Lichess session) | **Update win probability** |
-| Expected evaluation | The tree, current Opening Explorer settings, **and** ideally the evaluations above | On the backend (needs your Lichess session) | **Update expected evaluation** |
+**Update win probability** calls `POST /api/studies/{id}/win-probability`,
+receives `{jobId}`, and polls `GET /api/jobs/{jobId}`. Job progress is
+in-memory and does not survive a backend restart. The UI estimates its
+total using tree size because the Explorer branching factor is not known
+in advance. **Update evaluations** shows an indeterminate discovery phase,
+then an exact count of missing FENs; **Update expected evaluation** shows
+discovery and local engine progress before saving the summary, without
+starting a backend job or polling `/api/jobs`. No server-side engine or
+Cloud Eval work is done for either evaluation action.
 
-All three buttons keep a fixed label regardless of whether the stat's ever
-been computed before — no "Calculate" vs. "Recalculate" distinction to
-track; they always just say what they do.
+The detail page's editable Explorer source, database, minimum rating, and
+speed settings affect which replies the browser discovers and weights.
+**Update win probability** and **Update expected evaluation** each send
+the selected `explorerSettings` and persist them on the study. Simply
+changing the controls or clicking **Update evaluations** does not save
+settings. Win/coverage and expected eval can be recalculated separately
+at different settings; each merges only its own metric fields rather than
+clearing the other result. Explorer responses and automatic rating buckets
+remain persistently cached on the backend (see
+[explorer-cache.md](explorer-cache.md)).
 
-**Update evaluations** does two passes, both client-side
-(`calculateEvaluationsLocally` in `stat.ts`):
+## Assumptions and limits
 
-1. **Discovery** (`findOffTreePositions`): for every tree node, and for every
-   opponent-to-move node specifically, fetch that position's Opening Explorer
-   response (via `/api/explorer` — already persistently cached, see
-   `explorer-cache.md`, so this is fast and doesn't add Lichess load) and
-   collect the FEN of every real reply that *isn't* one of your tree's
-   children. These are exactly the positions §3's "opponent played something
-   you didn't prepare for" case would otherwise need Cloud Eval for.
-2. **Evaluation**: analyze every tree position *and* every discovered
-   off-tree position with the same Stockfish WASM engine used in the Study
-   editor.
-
-The result is sent to `POST /api/studies/{id}/evals` in one request —
-`byNode` (keyed by tree node id, this study's own) and `byFen` (keyed by
-FEN, global — written straight into the shared `cloud_eval_cache` table,
-`save_evals` in `stats.py`) — a plain, fast, synchronous save, since the slow
-part already happened in the browser. Both never change for a fixed
-tree/Explorer-response pair regardless of *which* rating/speed pool you're
-studying against, so they're computed once and reused by every subsequent
-"Update expected evaluation" run, for this study and (for the off-tree half)
-any other study that happens to reach the same positions. Re-running this
-button re-analyzes everything from scratch, not an incremental diff — cheap
-to do since it's just local CPU time, no network cost either way, other than
-the already-cached Explorer lookups discovery needs — so there's rarely a
-need to, unless the tree changed.
-
-A small green **✓** next to the button means the stored evals cover *every*
-current tree position (`evalsAreCurrent` in `stat.ts` — every tree node id
-is a key in `byNode`); it disappears the moment you add a move the stored
-evals haven't seen yet, as a reminder rather than a requirement — "Update
-expected evaluation" still works either way, just with more live fallback
-calls if you skip re-running this first.
-
-**Update win probability** and **Update expected evaluation** both show the
-study's **Opening Explorer settings** (database, minimum rating, time
-controls) directly, with the same controls as the Studies editor, and both
-persist any change to them the same way (`POST .../win-probability` or
-`.../expected-eval`, each taking an optional `explorerSettings` body — not a
-one-off "preview," the same way editing them in the study editor would).
-They're genuinely separate backend jobs (`_run_win_probability_job` /
-`_run_expected_eval_job` in `stats.py`), each merging its own fields into the
-study's `stats` row without touching the other's — see "Stored shape" below
-— so either can be run without the other ever having been, and running one
-doesn't force recomputing the other. This is also why the split matters
-functionally, not just visually: win probability is always cheap and safe
-(100% Explorer-derived, see the guarantee at the top of this doc), while
-expected evaluation is the one that can still need live Cloud Eval calls —
-separating them means asking for one never risks the other's rate limit.
-
-**Update expected evaluation makes it visually obvious when evaluations
-aren't ready.** If `evals` doesn't exist yet for the study at all, the button
-renders as a warning color (amber, not the usual blue) and its caption
-switches to an explicit "haven't been calculated yet — click 'Update
-evaluations' first, or this may be slow and can hit Lichess's rate limit."
-It still works either way (falling back to live Cloud Eval per position, the
-same as before this existed) — this is a nudge, not a hard block, since a
-handful of brand-new positions after a small tree edit isn't worth forcing a
-detour for.
-
-This makes it possible to ask "how does my prep hold up against 2000+ blitz
-players vs. against masters?" — recalculating win probability and/or expected
-eval repeatedly at different settings — without ever re-analyzing the
-(unchanging) engine evals each time.
-
-**Progress bars:** all three now render identically — a plain percentage
-bar, no marching-stripes animation — but they get their percentage very
-differently, matching where each one actually runs. "Update evaluations"
-needs no server round-trip per position at all: after a brief indeterminate
-flash while discovery finds off-tree positions (there's no total to show a
-percentage of until that finishes), the browser loop itself drives an exact
-count (tree nodes + discovered off-tree positions), no polling involved. The
-other two still kick off backend background jobs
-(`POST /api/studies/{id}/win-probability` or `/expected-eval`, each
-returning `{jobId}`) that the frontend polls via `GET /api/jobs/{jobId}`
-every 400ms (`backend/app/jobs.py` is a small in-memory, per-owner job
-tracker — intentionally not persisted across restarts, since this is a
-single-user, single-process app); their real total isn't knowable up front
-(it depends on branching factors reported live by the Explorer), so the
-frontend just estimates it as the tree's node count (`stat.ts`'s
-`runProgressJob`) — a reasonable proxy, capped at 100% if the real count runs
-a little past it, giving a plain growing bar instead of a true indeterminate
-one.
-
-**Data-integrity note (Cloud Eval fallback only):** the small remaining
-Cloud-Eval-API usage inside "Update expected evaluation" still needs the
-same care a purely local engine doesn't: since a stored eval is cached
-long-term, a *real* miss (a genuine `404` — Lichess has no cloud eval for a
-position) must never be confused with a *transient* failure (rate limiting,
-a network hiccup) and baked into the cache as a wrong answer. `_fetch_eval`
-only ever caches a `404` as `None`; a `429` specifically is **never
-retried** — Lichess's own guidance is to back off a full minute after one,
-and a short retry loop
-would just risk an escalating ban — so it fails the whole job immediately
-with a clear "rate limited, try again in a minute" message instead. A plain
-server hiccup (5xx) still gets a couple of short retries, since those usually
-clear on their own.
-
-**Opening Explorer requests are cached too, persistently.** The much larger
-source of Explorer traffic — one request per opponent-to-move position in the
-tree, every single "Update win probability" or "Update expected evaluation"
-run — is backed by a persistent, cross-study cache rather than hitting
-Lichess fresh every time; the same fail-fast `429` policy applies there too.
-See **[explorer-cache.md](explorer-cache.md)** for the full writeup.
-
-## Explicit assumptions / simplifications
-
-Worth stating since these are easy to get wrong silently, and they apply to
-all three stats above (they're all the same tree walk):
-
-- **You always play your one prepared move.** The editor enforces this by
-  construction: a position where it's the studied side's move can only ever
-  have one recorded child. There's never an ambiguous "which of my own
-  alternatives would I actually pick" case for any of these calculations to
-  guess at.
-- **Leaving your own prep uses a neutral estimate, not a guess.** If the tree
-  ends on *your* move, expected score falls back to the position's overall
-  explorer statistics (not a specific continuation), and expected eval falls
-  back to that position's own cloud eval.
-- **The explorer's move list is capped** (its own default is the top ~12
-  moves per position). Extremely rare replies outside that list aren't
-  individually accounted for; in practice they're a small fraction of games
-  at any well-populated position.
-- **Ratings are current, not historical**, unless you've pinned a specific
-  threshold on the study — the "auto" default re-resolves your rating bucket
-  every time you recalculate.
-- **Local Stockfish depth is capped** (the same `SEARCH_DEPTH` as the Study
-  editor's live analysis) — deep enough to be meaningfully accurate for an
-  opening position, but it's a fixed-depth search on your own machine, not a
-  cloud engine farm's deeper analysis. The only remaining *coverage* gap
-  (as opposed to depth) is the small Cloud Eval fallback for out-of-tree
-  opponent continuations, which can still genuinely miss (`404`) on obscure
-  positions — those fall back to `0.0` and are counted in `evalMisses`.
-- **Explorer data isn't cached across studies or across time**, and per-node
-  evals aren't cached across *tree edits* — adding a move creates a node with
-  no stored eval yet, live-fetched on the next "Calculate scores" until you
-  re-run "Calculate evaluations". Within one run, positions repeated via
-  transpositions are cached for that run only.
-
-**Why these are manual buttons, not automatic:** the stats algorithm makes
-one Opening Explorer request per position in your tree where it's the
-opponent's move (plus a cloud-eval request per uncached leaf), and the evals
-algorithm makes one cloud-eval request per node in the tree — both made
-**sequentially**, since each depends on knowing which branch to expand next.
-For a tree with dozens of branches, that's dozens of sequential HTTP
-round-trips to Lichess: seconds, not milliseconds (hence the progress bars —
-see §4). Recomputing this on every page load (or after every move while
-editing) would make the app feel slow for no benefit, since a repertoire
-doesn't change from one page view to the next.
+- The studied side always plays its single prepared move. Neither calculation
+  models user mistakes or alternative choices on that turn.
+- Only Explorer-listed moves are weighted; the move list is capped (roughly
+  the top dozen), so rare omitted replies do not contribute individually.
+- When `minRating` is automatic, the current rating bucket is resolved again
+  after its backend cache expires; a fixed threshold stays pinned.
+- The engine searches to a fixed local depth, not the depth of a cloud engine
+  farm. A missing local score contributes 0 to expected evaluation and is
+  counted in `evalMisses`, not looked up elsewhere.
+- Calculations start at `startNodeId` if set and still present, otherwise the
+  tree root; see [starting-point.md](starting-point.md).
+- Recalculation is manual because Explorer lookups and local Stockfish
+  searches can take time. Backend Explorer responses have a 24-hour TTL.
 
 ## Stored shape
 
-Cached on the study row as two separate columns, matching the two buttons:
+The backend persists summary fields on the study's `stats` JSON, independently
+updated by the win/coverage job and the expected-eval POST:
 
 ```jsonc
-// stats — from "Calculate scores", depends on explorerSettings
 {
   "winProbability": 0.5276,
   "winRate": 0.3714,
   "lossProbability": 0.3162,
-  "coverage": [0.253, 0.164, 0.068, 0.053, 0.035, 0.0008],
+  "coverage": [0.253, 0.164, 0.068],
+  "winProbabilityCalculatedAt": "2026-09-23T09:12:00+00:00",
+  "nodesEvaluated": 47,
+  "explorerCalls": 22,
   "evalCp": 34.2,
   "evalMisses": 1,
-  "calculatedAt": "2026-09-23T09:12:00+00:00",
+  "evalCalculatedAt": "2026-09-23T09:14:00+00:00",
+  "evalOrigin": "local",
+  "source": "lichess",
   "database": "lichess",
   "minRating": 1600,
-  "speeds": ["blitz", "rapid", "classical"],
-  "nodesEvaluated": 47,
-  "explorerCalls": 22
-}
-
-// evals — from "Calculate evaluations" (computed in the browser), independent of explorerSettings
-{
-  "byNode": { "0": 12.0, "1": -140000.0, "2": 34.2 },
-  "calculatedAt": "2026-09-23T09:10:00+00:00",
-  "misses": 0
+  "speeds": ["blitz", "rapid", "classical"]
 }
 ```
 
-The same "Calculate evaluations" request also sends `byFen` (off-tree
-opponent replies, discovered via the current Opening Explorer settings —
-see §4) — but that part isn't stored here at all. It's global, not
-study-scoped, so it goes straight into the shared `cloud_eval_cache` table
-instead; see `explorer-cache.md`'s "Stored shape" for that one's exact
-shape.
-
-`byNode` keys are tree node ids (as strings, since JSON object keys always
-are); values are centipawns from **White's point of view** regardless of the
-study's side (the sign flip to the studied side's POV happens when `stats`
-consumes them). A capped mate value (`±100,000` for an actual checkmate on
-the board, or a distance-adjusted value near it for a "mate in N" the engine
-found without reaching it) means that node is decisive; `null` would mean a
-miss, though local Stockfish practically never produces one — it's kept for
-shape compatibility with the Cloud Eval fallback path, which can.
+These are study-level summary values, **not** a repository of position
+evaluations. Browser IndexedDB's `positions` store holds numeric cp values
+under `[username, fen]` keys. The study's legacy `evals` JSON may still
+contain `byNode` for import, but new calculations do not write it.
 
 ## Ideas for future stats
 
-Not built yet, in rough order of how naturally they extend the same
-tree-walk machinery:
+Not built yet:
 
-- **`hit` probability** — the third objective from §2: instead of an average
-  eval, "what fraction of the time does the position cross +1.0 (or a
-  threshold you pick) by the end of my prep?" Same walk as expected eval,
-  just a different leaf function (`1` if `|eval| > T`, else `0`) — cheap to
-  add once expected eval exists, and answers a genuinely different question
-  (a sharp gambit can have low expected eval but high hit probability).
-- **Weakest branch report** — instead of one aggregate expected-score number,
-  surface the specific opponent replies dragging it down most (weight ×
-  (0.5 − score) per branch, sorted descending). Turns "your score is 53%"
-  into "the score is 53% mostly because of your line against 3...Qb6."
-- **Confidence / sample size** — positions with only a handful of recorded
-  games give a noisy win/draw/loss estimate; a low-games-count badge (or a
-  confidence interval) on the coverage chart and on leaf nodes would flag
-  where the underlying data is thin, separate from where your own prep is
-  thin.
-- **Stats history over time** — `calculatedAt` is already stored per
-  recalculation; keeping a short history (instead of overwriting in place)
-  would let a study show a trend line as it's built out, or after the
-  Opening Explorer's real-world move frequencies shift over time.
-- **Prep depth, weighted by frequency** — the average ply at which prep
-  actually ends, weighted by how often real games reach that point (distinct
-  from coverage's per-move-number breakdown: a single number, "on average
-  your prep runs out around move 9").
+- **`hit` probability**: the share of lines whose end-of-prep evaluation
+  exceeds a chosen threshold, using the same expected-eval tree walk.
+- **Weakest branch report**: identify the opponent replies that contribute
+  most to a low expected score.
+- **Confidence / sample size**: flag Explorer positions with few games.
+- **Stats history**: retain earlier summaries instead of overwriting them.
+- **Frequency-weighted prep depth**: summarize when real games leave prep.

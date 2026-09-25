@@ -2,6 +2,7 @@ import { Chart } from "chart.js/auto";
 import { Chess } from "chess.js";
 
 import { Engine, type EngineLine } from "./engine";
+import { openEvaluationCache, type EvaluationCache } from "./evalCache";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerUrl,
@@ -28,8 +29,9 @@ interface StudyStats {
   winProbabilityCalculatedAt?: string;
   nodesEvaluated?: number; // set together with winProbability, by the same job
   evalCp?: number; // expected Stockfish eval (centipawns, studied side's POV) at the end of prep
-  evalMisses?: number; // how many of those leaf positions had no cached cloud eval (counted as 0)
+  evalMisses?: number; // positions without a usable local engine evaluation (counted as 0)
   evalCalculatedAt?: string;
+  evalOrigin?: "local";
   source?: "lirep" | "lichess";
   database: "lichess" | "masters";
   minRating: number | null;
@@ -37,19 +39,10 @@ interface StudyStats {
   explorerCalls?: number;
 }
 
-// Per-node Stockfish evals (White's POV), keyed by tree node id — static
-// data that doesn't depend on Opening Explorer settings, so it's computed
-// and stored separately from `stats` (see "Update evaluations" below).
-// offTreeCount is how many off-tree opponent replies were also covered by
-// the same run — not stored here (that half lives in the shared, global
-// eval cache, not this study's own record), just counted, so the "N
-// positions evaluated" summary always matches what "Update evaluations"
-// actually covers, tree and off-tree combined.
+// Older studies may still have server-side per-node evaluations. Import them
+// into this browser's FEN cache; new evaluations stay in IndexedDB.
 interface StudyEvals {
   byNode: Record<string, number | null>;
-  calculatedAt: string;
-  misses: number;
-  offTreeCount?: number;
 }
 
 interface Study {
@@ -134,8 +127,8 @@ async function runProgressJob(
   });
 }
 
-// A forced mate is capped at this "centipawn" value server-side (see
-// backend/app/stats.py) so it can be averaged with ordinary evals.
+// A forced mate is capped at this centipawn value so it can be averaged
+// with ordinary evaluations.
 const MATE_SCORE_CP = 100_000;
 
 function formatEval(cp: number): string {
@@ -152,13 +145,12 @@ function formatEval(cp: number): string {
 // non-terminal position instead.
 function terminalCp(chess: Chess): number | null {
   if (chess.isCheckmate()) return chess.turn() === "w" ? -MATE_SCORE_CP : MATE_SCORE_CP;
-  if (chess.isStalemate() || chess.isInsufficientMaterial()) return 0;
+  if (chess.isDraw()) return 0;
   return null;
 }
 
 // A "mate in N" reported by the engine (not yet on the board) gets the same
-// distance-sensitive cap the backend applies to Lichess Cloud Eval mate
-// scores, so stored evals are comparable regardless of source.
+// distance-sensitive cap used for all position evaluations.
 function mateToCappedCp(mateWhitePov: number): number {
   const magnitude = MATE_SCORE_CP - Math.abs(mateWhitePov);
   return mateWhitePov > 0 ? magnitude : -magnitude;
@@ -178,11 +170,6 @@ async function evaluatePosition(engine: Engine, chess: Chess): Promise<number | 
   return null;
 }
 
-interface RequiredEvaluations {
-  nodeIds: Set<string>;
-  offTreeFens: Set<string>;
-}
-
 // Follow the expected-evaluation tree walk and collect only the positions at
 // its frontier: prepared-side leaves, opponent nodes with no games, and
 // positions one opponent move beyond the prepared tree.
@@ -191,9 +178,9 @@ async function findRequiredEvaluations(
   startNodeId: number,
   side: "white" | "black",
   settings: ExplorerSettings,
-): Promise<RequiredEvaluations> {
-  const nodeIds = new Set<string>();
-  const offTreeFens = new Set<string>();
+  explorerCache: Map<string, ExplorerData>,
+): Promise<Set<string>> {
+  const positions = new Set<string>();
 
   async function walk(nodeId: number, chess: Chess): Promise<void> {
     if (chess.isGameOver()) return;
@@ -201,7 +188,7 @@ async function findRequiredEvaluations(
     const studiedSideToMove = (chess.turn() === "w") === (side === "white");
 
     if (studiedSideToMove) {
-      if (node.children.length === 0) nodeIds.add(String(nodeId));
+      if (node.children.length === 0) positions.add(chess.fen());
       else {
         const childId = node.children[0];
         const child = new Chess(chess.fen());
@@ -211,12 +198,10 @@ async function findRequiredEvaluations(
       return;
     }
 
-    const res = await fetch(explorerUrl(chess.fen(), settings), { credentials: "same-origin" });
-    if (!res.ok) throw new Error("failed to find required positions in Opening Explorer");
-    const data: ExplorerData = await res.json();
+    const data = await fetchExplorerPosition(chess.fen(), settings, explorerCache);
     const totalGames = data.moves.reduce((total, move) => total + move.white + move.draws + move.black, 0);
     if (totalGames === 0) {
-      nodeIds.add(String(nodeId));
+      positions.add(chess.fen());
       return;
     }
 
@@ -226,7 +211,7 @@ async function findRequiredEvaluations(
       const childId = childrenBySan.get(move.san);
       const child = new Chess(chess.fen());
       child.move(move.san);
-      if (childId === undefined) offTreeFens.add(child.fen());
+      if (childId === undefined) positions.add(child.fen());
       else await walk(childId, child);
     }
   }
@@ -234,101 +219,110 @@ async function findRequiredEvaluations(
   const start = new Chess();
   for (const san of sanPathTo(tree, startNodeId)) start.move(san);
   await walk(startNodeId, start);
-  return { nodeIds, offTreeFens };
+  return positions;
 }
 
-// Bulk-checks the shared, global, FEN-keyed eval cache (backend
-// store.cloud_eval_cache) for positions this browser hasn't necessarily seen
-// before — e.g. off-tree positions another study's "Update evaluations" run
-// (or the server's own Cloud Eval fallback) already covered. Deliberately
-// generic (just FENs in, a FEN->cp map of the ones found back out) so
-// anything else that wants to avoid recomputing a position's eval can reuse
-// it too, not just this one caller. A FEN missing from the result means
-// "nothing usable cached yet" — the caller decides what to do about that.
-async function lookupEvalCache(fens: string[]): Promise<Record<string, number>> {
-  if (fens.length === 0) return {};
-  try {
-    const res = await fetch("/api/eval-cache/lookup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ fens }),
-    });
-    if (!res.ok) return {};
-    const data: { evals: Record<string, number> } = await res.json();
-    return data.evals;
-  } catch {
-    return {}; // best-effort: worst case, this run evaluates a few positions it didn't strictly need to
-  }
+async function fetchExplorerPosition(
+  fen: string,
+  settings: ExplorerSettings,
+  cache: Map<string, ExplorerData>,
+): Promise<ExplorerData> {
+  const cached = cache.get(fen);
+  if (cached) return cached;
+  const res = await fetch(explorerUrl(fen, settings), { credentials: "same-origin" });
+  if (!res.ok) throw new Error("Opening Explorer data unavailable for this position");
+  const data: ExplorerData = await res.json();
+  cache.set(fen, data);
+  return data;
 }
 
-// Evaluate only frontier positions expected evaluation will consume. Existing
-// node evals and globally cached off-tree evals are reused; checkpoint batches
-// so leaving the page doesn't discard the whole run.
+// Evaluate only the frontier positions the expected score needs, persisting
+// each result in the browser as it completes so interrupted runs can resume.
 async function calculateEvaluationsLocally(
   tree: StudyTree,
   startNodeId: number,
   side: "white" | "black",
   settings: ExplorerSettings,
-  existingByNode: Record<string, number | null>,
+  cache: EvaluationCache,
+  explorerCache: Map<string, ExplorerData>,
   onPlan: (ready: number, required: number, work: number) => void,
   onProgress: (done: number, total: number) => void,
-  onCheckpoint: (
-    byNode: Record<string, number | null>,
-    byFen: Record<string, number | null>,
-    misses: number,
-    ready: number,
-  ) => Promise<void>,
-): Promise<{ byNode: Record<string, number | null>; byFen: Record<string, number | null>; misses: number }> {
-  const required = await findRequiredEvaluations(tree, startNodeId, side, settings);
-  const nodeIds = [...required.nodeIds];
-  const offTreeFens = [...required.offTreeFens];
-  const cachedOffTree = await lookupEvalCache(offTreeFens);
-
-  const nodeIdsToCompute = nodeIds.filter((id) => !(id in existingByNode));
-  const offTreeFensToCompute = offTreeFens.filter((fen) => !(fen in cachedOffTree));
-  const total = nodeIdsToCompute.length + offTreeFensToCompute.length;
-  const requiredTotal = nodeIds.length + offTreeFens.length;
-  const initiallyReady = requiredTotal - total;
+): Promise<Map<string, number | null>> {
+  const required = await findRequiredEvaluations(tree, startNodeId, side, settings, explorerCache);
+  const evaluated = new Map<string, number | null>();
+  const pending: string[] = [];
+  for (const fen of required) {
+    const cp = await cache.get(fen);
+    if (cp === undefined) pending.push(fen);
+    else evaluated.set(fen, cp);
+  }
+  const total = pending.length;
+  const initiallyReady = required.size - total;
   let done = 0;
-  onPlan(initiallyReady, requiredTotal, total);
+  onPlan(initiallyReady, required.size, total);
 
-  const byNode: Record<string, number | null> = { ...existingByNode };
-  const byFen: Record<string, number | null> = { ...cachedOffTree };
-  const readyCount = () =>
-    nodeIds.filter((id) => id in byNode).length + offTreeFens.filter((fen) => fen in byFen).length;
-  const missCount = () =>
-    nodeIds.filter((id) => byNode[id] === null).length + offTreeFens.filter((fen) => byFen[fen] === null).length;
-  const checkpoint = async () =>
-    onCheckpoint(byNode, byFen, missCount(), readyCount());
+  if (total === 0) return evaluated;
   const engine = new Engine();
   try {
-    for (const nodeId of nodeIdsToCompute) {
-      const chess = new Chess();
-      for (const san of sanPathTo(tree, Number(nodeId))) chess.move(san);
-      byNode[nodeId] = await evaluatePosition(engine, chess);
+    for (const fen of pending) {
+      const cp = await evaluatePosition(engine, new Chess(fen));
+      if (cp !== null) await cache.set(fen, cp);
+      evaluated.set(fen, cp);
       done += 1;
       onProgress(done, total);
-      if (done % 5 === 0) await checkpoint();
-    }
-    for (const fen of offTreeFensToCompute) {
-      byFen[fen] = await evaluatePosition(engine, new Chess(fen));
-      done += 1;
-      onProgress(done, total);
-      if (done % 5 === 0) await checkpoint();
     }
   } finally {
     engine.terminate();
   }
-  // Only keep evaluating positions that are still relevant to the current
-  // tree/Explorer response — a stale entry from a deleted branch shouldn't
-  // linger in byNode forever (byFen is global and shared, so it's left
-  // alone; other studies may still need those entries).
-  for (const id of Object.keys(byNode)) {
-    if (!(id in tree.nodes)) delete byNode[id];
+  return evaluated;
+}
+
+export async function expectedEvaluation(
+  tree: StudyTree,
+  startNodeId: number,
+  side: "white" | "black",
+  settings: ExplorerSettings,
+  evaluated: Map<string, number | null>,
+  explorerCache: Map<string, ExplorerData>,
+): Promise<number> {
+  const sign = side === "white" ? 1 : -1;
+  const valueAt = (fen: string): number => {
+    const cp = evaluated.get(fen);
+    if (cp === undefined) throw new Error("An evaluation is missing; update evaluations first");
+    return (cp ?? 0) * sign;
+  };
+
+  async function walk(nodeId: number, chess: Chess): Promise<number> {
+    const terminal = terminalCp(chess);
+    if (terminal !== null) return terminal * sign;
+    const node = tree.nodes[nodeId];
+    if ((chess.turn() === "w") === (side === "white")) {
+      if (!node.children.length) return valueAt(chess.fen());
+      const childId = node.children[0];
+      const child = new Chess(chess.fen());
+      child.move(tree.nodes[childId].san);
+      return walk(childId, child);
+    }
+
+    const data = await fetchExplorerPosition(chess.fen(), settings, explorerCache);
+    const total = data.moves.reduce((games, move) => games + move.white + move.draws + move.black, 0);
+    if (!total) return valueAt(chess.fen());
+    const childrenBySan = new Map(node.children.map((id) => [tree.nodes[id].san, id]));
+    let expected = 0;
+    for (const move of data.moves) {
+      const games = move.white + move.draws + move.black;
+      if (!games) continue;
+      const child = new Chess(chess.fen());
+      child.move(move.san);
+      const childId = childrenBySan.get(move.san);
+      expected += (games / total) * (childId === undefined ? valueAt(child.fen()) : await walk(childId, child));
+    }
+    return expected;
   }
-  const misses = missCount();
-  return { byNode, byFen, misses };
+
+  const start = new Chess();
+  for (const san of sanPathTo(tree, startNodeId)) start.move(san);
+  return walk(startNodeId, start);
 }
 
 function getStudyId(): number | null {
@@ -405,6 +399,12 @@ function nodeCountsByMove(tree: StudyTree): number[] {
     level = next;
   }
   return counts;
+}
+
+function trimTrailingCoverageZeros(coverage: number[] | undefined): number[] {
+  const displayed = [...(coverage ?? [])];
+  while (displayed.at(-1) === 0) displayed.pop();
+  return displayed;
 }
 
 // Resolves a CSS custom property to its actual computed color, since
@@ -522,19 +522,19 @@ function renderPage(
   study: Study,
   explorerDefaults: ExplorerDefaults | null,
   knowledge: number | null,
+  cache: EvaluationCache,
 ): void {
   const sideLabel = study.side === "white" ? "Playing White" : "Playing Black";
   const sidePawn = `<span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>`;
   const opponent = study.side === "white" ? "Black" : "White";
   const hasMoves = mainLineSans(study.tree).length > 0 || Object.keys(study.tree.nodes).length > 1;
   const stats = study.stats;
-  const evals = study.evals;
+  const displayedCoverage = trimTrailingCoverageZeros(stats?.coverage);
   const settings = study.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
   const tier = scoreTier(stats?.winProbability);
-  const savedEvalCount = evals ? Object.keys(evals.byNode).length + (evals.offTreeCount ?? 0) : 0;
   const startPoint = describeStartPoint(study.tree, study.startNodeId);
   const startPointNote = startPoint ? ` — from move ${startPoint} onward` : "";
 
@@ -560,12 +560,12 @@ function renderPage(
   const evalCardHtml =
     stats?.evalCp !== undefined
       ? `<div class="stat-detail__score">${formatEval(stats.evalCp)}</div>
-         <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
-         <p class="stat-card__meta">From ${study.side === "white" ? "White" : "Black"}'s point of view · as of ${formatDate(stats.evalCalculatedAt ?? "")}${
-           stats.evalMisses
-             ? `<br>${stats.evalMisses} end-of-prep position${stats.evalMisses === 1 ? "" : "s"} had no cached engine eval yet (counted as 0.00)`
-             : ""
-         }</p>`
+          <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
+          <p class="stat-card__meta">From ${study.side === "white" ? "White" : "Black"}'s point of view · as of ${formatDate(stats.evalCalculatedAt ?? "")}${
+            stats.evalMisses
+              ? `<br>${stats.evalMisses} end-of-prep position${stats.evalMisses === 1 ? "" : "s"} had no engine eval (counted as 0.00)`
+              : ""
+          }${stats.evalOrigin !== "local" ? "<br>Legacy server calculation; recalculate locally to verify." : ""}</p>`
       : `<div class="stat-detail__score stat-card__score--empty">—</div>
          <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
          <p class="stat-card__meta">Not calculated yet.</p>`;
@@ -609,18 +609,9 @@ function renderPage(
             <button id="evals-btn" class="btn btn-secondary" type="button" ${hasMoves ? "" : "disabled"}>
               Update evaluations
             </button>
-            <span id="evals-count" class="eval-count" aria-live="polite">${savedEvalCount} saved evaluations; click to check required positions</span>
+            <span id="evals-count" class="eval-count" aria-live="polite">Click to check positions cached in this browser</span>
           </div>
-          <p class="stat-card__meta">
-            ${
-              evals
-                ? (() => {
-                    const total = Object.keys(evals.byNode).length + (evals.offTreeCount ?? 0);
-                    return `${total} position${total === 1 ? "" : "s"} evaluated${evals.misses ? `, ${evals.misses} failed` : ""} · as of ${formatDate(evals.calculatedAt)}`;
-                  })()
-                : "Not calculated yet."
-            }
-          </p>
+          <p class="stat-card__meta">${cache.persistent ? "Stockfish runs locally; positions are saved on this device." : "Browser storage is unavailable; evaluations last only until this tab closes."}</p>
           <div class="progress-bar" id="evals-progress" hidden>
             <div class="progress-bar__track"><div class="progress-bar__fill" id="evals-progress-fill"></div></div>
             <span class="progress-bar__label" id="evals-progress-label"></span>
@@ -641,16 +632,10 @@ function renderPage(
         </div>
 
         <div class="stat-action">
-          <button id="eval-score-btn" class="btn ${evals ? "btn-primary" : "btn-warning"}" type="button" ${hasMoves ? "" : "disabled"}>
+          <button id="eval-score-btn" class="btn btn-primary" type="button" ${hasMoves ? "" : "disabled"}>
             Update expected evaluation
           </button>
-          <p class="stat-card__meta${evals ? "" : " stat-card__meta--warning"}">
-            ${
-              evals
-                ? "Combines Explorer data with calculated evaluations."
-                : `Calculate evaluations first. This may be slow and can hit Lichess's rate limit.`
-            }
-          </p>
+          <p class="stat-card__meta">Combines Explorer frequencies with local Stockfish; missing positions are evaluated here first.</p>
           <div class="progress-bar" id="eval-score-progress" hidden>
             <div class="progress-bar__track"><div class="progress-bar__fill" id="eval-score-progress-fill"></div></div>
             <span class="progress-bar__label" id="eval-score-progress-label"></span>
@@ -685,7 +670,7 @@ function renderPage(
       <p class="tree-hint">Share of games still following your lines after each ${opponent} reply.${startPoint ? ` Move numbers start from ${startPoint}.` : ""}</p>
       <div class="coverage-chart-wrap">
         ${
-          stats?.coverage?.length
+          displayedCoverage.length
             ? `<canvas id="coverage-chart"></canvas>`
             : `<p class="empty-state">No coverage data yet — recalculate to generate it.</p>`
         }
@@ -693,9 +678,9 @@ function renderPage(
     </div>
   `;
 
-  if (stats?.coverage?.length) {
+  if (displayedCoverage.length) {
     const canvas = document.getElementById("coverage-chart") as HTMLCanvasElement;
-    renderCoverageChart(canvas, stats.coverage, nodeCountsByMove(study.tree), opponent);
+    renderCoverageChart(canvas, displayedCoverage, nodeCountsByMove(study.tree), opponent);
   }
 
   document.getElementById("piece-badge")?.addEventListener("click", () => {
@@ -745,9 +730,7 @@ function renderPage(
     const label = document.getElementById("evals-progress-label") as HTMLElement;
     const count = document.getElementById("evals-count") as HTMLElement;
     let readyPositions = 0;
-    let initialReadyPositions = 0;
     let requiredPositions = 0;
-    let planReady = false;
 
     allActionButtons().forEach((el) => (el.disabled = true));
     btn.textContent = "Calculating…";
@@ -759,60 +742,34 @@ function renderPage(
     progress.classList.remove("progress-bar--error");
 
     try {
-      const { byNode, byFen, misses } = await calculateEvaluationsLocally(
+      const explorerCache = new Map<string, ExplorerData>();
+      await calculateEvaluationsLocally(
         study.tree,
         study.startNodeId !== null && study.startNodeId in study.tree.nodes ? study.startNodeId : study.tree.rootId,
         study.side,
         readSettingsFromDom(),
-        study.evals?.byNode ?? {},
+        cache,
+        explorerCache,
         (ready, required, work) => {
-          planReady = true;
           readyPositions = ready;
-          initialReadyPositions = ready;
           requiredPositions = required;
-          count.textContent = `${ready} / ${required} required positions ready (${required - ready} to calculate)`;
+          count.textContent = `${ready} / ${required} positions cached (${required - ready} to calculate)`;
           progress.classList.remove("progress-bar--indeterminate");
           fill.style.width = work === 0 ? "100%" : "0%";
           label.textContent = work === 0 ? "Already up to date" : `0 / ${work}`;
         },
         (done, total) => {
-          const calculated = Math.min(requiredPositions, initialReadyPositions + done);
-          count.textContent = `${calculated} / ${requiredPositions} required positions calculated (${requiredPositions - calculated} remaining)`;
-          progress.classList.remove("progress-bar--indeterminate");
-          if (total === 0) {
-            fill.style.width = "100%";
-            label.textContent = "Already up to date";
-            return;
-          }
+          readyPositions++;
+          count.textContent = `${readyPositions} / ${requiredPositions} positions ready (${requiredPositions - readyPositions} remaining)`;
           fill.style.width = `${Math.round((done / total) * 100)}%`;
           label.textContent = `${done} / ${total}`;
         },
-        async (byNode, byFen, misses, ready) => {
-          const res = await fetch(`/api/studies/${study.id}/evals`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({ byNode, byFen, misses }),
-          });
-          if (!res.ok) throw new Error("failed to save evaluation checkpoint");
-          readyPositions = ready;
-          count.textContent = `${ready} / ${requiredPositions} required positions saved (${requiredPositions - ready} remaining)`;
-        },
       );
-      count.textContent = `${requiredPositions} / ${requiredPositions} required positions calculated (0 remaining)`;
-      const res = await fetch(`/api/studies/${study.id}/evals`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ byNode, byFen, misses }),
-      });
-      if (!res.ok) throw new Error("failed to save evaluations");
-      const updated: Study = await res.json();
-      renderPage(main, updated, explorerDefaults, knowledge);
+      count.textContent = `${requiredPositions} / ${requiredPositions} positions ready on this device`;
+      btn.textContent = "Update evaluations";
+      allActionButtons().forEach((el) => (el.disabled = false));
     } catch (err) {
-      if (planReady) {
-        count.textContent = `${readyPositions} / ${requiredPositions} required positions saved (${requiredPositions - readyPositions} remaining)`;
-      }
+      if (requiredPositions) count.textContent = `${readyPositions} / ${requiredPositions} positions ready`;
       btn.textContent = "Update evaluations";
       btn.disabled = false;
       others.forEach((el) => (el.disabled = false));
@@ -848,7 +805,7 @@ function renderPage(
         fill,
         label,
       );
-      renderPage(main, updated, explorerDefaults, knowledge);
+      renderPage(main, updated, explorerDefaults, knowledge, cache);
     } catch (err) {
       btn.textContent = "Update win probability";
       btn.disabled = false;
@@ -870,25 +827,47 @@ function renderPage(
     allActionButtons().forEach((el) => (el.disabled = true));
     btn.textContent = "Calculating…";
     progress.hidden = false;
+    progress.classList.add("progress-bar--indeterminate");
     fill.style.width = "0%";
-    label.textContent = "";
+    label.textContent = "Finding required positions…";
     label.classList.remove("progress-bar__label--error");
     progress.classList.remove("progress-bar--error");
 
     try {
-      const estimatedTotal = Object.keys(study.tree.nodes).length;
-      const updated = await runProgressJob(
-        `/api/studies/${study.id}/expected-eval`,
-        { explorerSettings: readSettingsFromDom() },
-        estimatedTotal,
-        fill,
-        label,
+      const settings = readSettingsFromDom();
+      const explorerCache = new Map<string, ExplorerData>();
+      const startNodeId = study.startNodeId !== null && study.startNodeId in study.tree.nodes
+        ? study.startNodeId
+        : study.tree.rootId;
+      const positions = await calculateEvaluationsLocally(
+        study.tree, startNodeId, study.side, settings, cache, explorerCache,
+        (_ready, _required, work) => {
+          progress.classList.remove("progress-bar--indeterminate");
+          fill.style.width = work === 0 ? "100%" : "0%";
+          label.textContent = work === 0 ? "Evaluations ready" : `0 / ${work}`;
+        },
+        (done, total) => {
+          fill.style.width = `${Math.round((done / total) * 100)}%`;
+          label.textContent = `${done} / ${total} positions evaluated`;
+        },
       );
-      renderPage(main, updated, explorerDefaults, knowledge);
+      label.textContent = "Weighting Explorer replies…";
+      const evalCp = await expectedEvaluation(study.tree, startNodeId, study.side, settings, positions, explorerCache);
+      const evalMisses = [...positions.values()].filter((cp) => cp === null).length;
+      const res = await fetch(`/api/studies/${study.id}/expected-eval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ evalCp, evalMisses, explorerSettings: settings }),
+      });
+      if (!res.ok) throw new Error("Could not save expected evaluation");
+      const updated: Study = await res.json();
+      renderPage(main, updated, explorerDefaults, knowledge, cache);
     } catch (err) {
       btn.textContent = "Update expected evaluation";
       btn.disabled = false;
       others.forEach((el) => (el.disabled = false));
+      progress.classList.remove("progress-bar--indeterminate");
       label.textContent = err instanceof Error ? err.message : "Something went wrong.";
       label.classList.add("progress-bar__label--error");
       progress.classList.add("progress-bar--error");
@@ -904,7 +883,7 @@ async function init(): Promise<void> {
   const main = document.getElementById("stat-main");
   if (!main) return;
 
-  if (!me.authenticated) {
+  if (!me.authenticated || !me.username) {
     main.innerHTML = `
       <div class="empty-state">
         <p>Sign in with your Lichess account to see study stats.</p>
@@ -925,7 +904,14 @@ async function init(): Promise<void> {
     return;
   }
 
-  renderPage(main, study, explorerDefaults, knowledge);
+  const cache = await openEvaluationCache(me.username);
+  for (const [nodeId, cp] of Object.entries(study.evals?.byNode ?? {})) {
+    if (cp === null || !Number.isFinite(cp) || Math.abs(cp) > MATE_SCORE_CP || !(Number(nodeId) in study.tree.nodes)) continue;
+    const chess = new Chess();
+    for (const san of sanPathTo(study.tree, Number(nodeId))) chess.move(san);
+    if (await cache.get(chess.fen()) === undefined) await cache.set(chess.fen(), cp);
+  }
+  renderPage(main, study, explorerDefaults, knowledge, cache);
 }
 
 init();
