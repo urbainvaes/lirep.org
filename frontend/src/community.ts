@@ -64,7 +64,7 @@ function renderRow(opening: Opening, signedIn: boolean): string {
         <strong>${escapeHtml(opening.name)}</strong>
         <div class="community-sub">${opening.moves} ${opening.moves === 1 ? "move" : "moves"} · ${opening.lines} ${opening.lines === 1 ? "line" : "lines"}</div>
       </td>
-      <td>${escapeHtml(opening.owner)}</td>
+      <td><a class="community-owner" href="https://lichess.org/@/${encodeURIComponent(opening.owner)}" target="_blank" rel="noopener noreferrer">${escapeHtml(opening.owner)}</a></td>
       <td class="community-score">${opening.winProbability === null ? "—" : percent(opening.winProbability)}</td>
       <td class="community-settings">${escapeHtml(opening.winProbability === null ? (opening.reason ?? "Not ranked yet") : settingsLabel(opening))}</td>
       <td class="community-action">${action}</td>
@@ -80,7 +80,7 @@ function renderTable(openings: Opening[], signedIn: boolean, side: "white" | "bl
       <div class="community-table-wrap">
         <table class="community-table">
           <thead>
-            <tr><th>#</th><th>Opening</th><th>By</th><th>Expected score</th><th>Calculated with</th><th></th></tr>
+            <tr><th>#</th><th>Opening</th><th>By</th><th title="Win % + half of the draw %">Expected score</th><th>Calculated with</th><th></th></tr>
           </thead>
           <tbody>${group.map((o) => renderRow(o, signedIn)).join("")}</tbody>
         </table>
@@ -105,9 +105,9 @@ function render(main: HTMLElement, summary: Summary, openings: Opening[], signed
         <div>
           <h2>Opening leaderboard</h2>
           <p class="profile-subtitle">
-            Up to ten shared openings per side, best score first. The expected score is the chance of winning,
-            counting draws as half, if you always play the prepared moves and opponents reply as in the Lichess
-            Explorer. Openings without a comparable score are listed after the ranked ones.
+            Up to ten shared openings per side, best score first. The expected score is the win percentage plus half
+            of the draw percentage, if you always play the prepared moves and opponents reply as in the Lichess
+            Explorer. Openings evaluated only with the local Explorer have no comparable score and are listed after the ranked ones. Names link to Lichess profiles.
           </p>
         </div>
       </div>

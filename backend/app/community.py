@@ -66,11 +66,16 @@ def summary() -> dict:
 
 @router.get("/api/community/openings")
 def openings(request: Request) -> list[dict]:
-    """Up to LEADERBOARD_SIZE shared studies per side: the best-scoring first,
-    then (to fill the list) the ones that have no comparable score yet. Ranks
-    are per side, since White and Black openings are shown separately."""
+    """Up to LEADERBOARD_SIZE evaluated shared studies per side: the best-scoring
+    first, then the ones evaluated with the local Explorer, which have no
+    comparable score. Ranks are per side."""
     me = request.session.get("username")
-    entries = [_entry(owner, study, me) for owner, study in store.list_shared_studies()]
+    # Studies whose stats were never calculated have nothing to show: left out.
+    entries = [
+        _entry(owner, study, me)
+        for owner, study in store.list_shared_studies()
+        if (study.get("stats") or {}).get("winProbability") is not None
+    ]
     shown: list[dict] = []
     for side in ("white", "black"):
         group = [e for e in entries if e["side"] == side]
