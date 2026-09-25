@@ -445,13 +445,18 @@ function renderEditor(
     if (nodeId !== currentId) goTo(nodeId);
   }
 
+  // Resolves to the starting point when one is set (falling back to the
+  // real root if it's somehow gone — same degrade-gracefully rule the
+  // backend's stats calculations use, see starting-point.md) — used both to
+  // open the editor and for "Go to start" / Up, so that action means
+  // "back to where prep begins" rather than always the very first move.
+  function goToStart(): void {
+    goTo(startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId);
+  }
+
   board = createBoard(boardEl, onMove, boardOrientation);
   flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
-  // Opens right at the starting point when one is set (falling back to the
-  // real root if it's somehow gone — same degrade-gracefully rule the
-  // backend's stats calculations use, see starting-point.md), rather than
-  // always the very first move.
-  goTo(startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId);
+  goToStart();
 
   function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
@@ -473,7 +478,7 @@ function renderEditor(
 
   flipBoardBtn.addEventListener("click", flipBoard);
 
-  document.getElementById("start-btn")?.addEventListener("click", () => goTo(tree.rootId));
+  document.getElementById("start-btn")?.addEventListener("click", goToStart);
 
   deleteBtn.addEventListener("click", deleteCurrentMove);
 
@@ -535,7 +540,7 @@ function renderEditor(
         break;
       case "ArrowUp":
         e.preventDefault();
-        goTo(tree.rootId);
+        goToStart();
         break;
       case "ArrowDown":
         e.preventDefault();
