@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+npm-debug.log*
+
+# Environment / secrets (any .env file, anywhere; .env.example stays tracked)
+.env
+
+# Local dev database (recreated automatically by the backend on startup)
+backend/*.db
+backend/*.db-journal
+backend/*.db-wal
+backend/*.db-shm
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
