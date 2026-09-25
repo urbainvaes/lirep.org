@@ -60,33 +60,6 @@
                        (if j (substring text j) ""))
                      port))))))
 
-;; cargo needs the network to fetch crates, so they are vendored in a
-;; fixed-output derivation.  When Cargo.lock changes, build with a wrong hash
-;; and copy the "actual" hash from the error.
-(define-public lila-openingexplorer-vendor
-  (computed-file
-   "lila-openingexplorer-vendor"
-   (with-imported-modules '((guix build utils))
-     #~(begin
-         (use-modules (guix build utils) (ice-9 textual-ports))
-         (setenv "HOME" (getcwd))
-         ;; nss-certs ships hashed certificate files, not a single bundle.
-         (setenv "SSL_CERT_DIR" #$(file-append nss-certs "/etc/ssl/certs"))
-         (setenv "PATH" (string-append #$(file-append rust "/bin") ":"
-                                       #$rust:cargo "/bin:"
-                                       #$(file-append coreutils "/bin") ":"
-                                       #$(file-append bash-minimal "/bin")))
-         (copy-recursively #$%explorer-source "src-copy")
-         (with-directory-excursion "src-copy"
-           (for-each make-file-writable (find-files "." "."))
-           (#$strip-dev-dependencies)
-           (invoke "cargo" "vendor" "--versioned-dirs" #$output))))
-   #:options
-   `(#:hash-algo sha256
-     #:hash ,(base32 "1ha9zsfbbjxch61hw2wyvvprpg2dxnip5vm39wfc4ylil4srg4nc")
-     #:recursive? #t)))
-
-
 ;; The Explorer needs a newer Rust than Guix currently packages (shakmaty
 ;; requires 1.95).  Until Guix catches up, use the official binary toolchain,
 ;; patched to run on Guix.  Remove this once `rust` in Guix is >= 1.95.
@@ -158,6 +131,35 @@
     (description "The upstream rustc and cargo binary release, relocated to
 the store.  A stopgap for programs that need a newer Rust than Guix has.")
     (license (list license:expat license:asl2.0))))
+
+
+;; cargo needs the network to fetch crates, so they are vendored in a
+;; fixed-output derivation.  When Cargo.lock changes, build with a wrong hash
+;; and copy the "actual" hash from the error.
+(define-public lila-openingexplorer-vendor
+  (computed-file
+   "lila-openingexplorer-vendor"
+   (with-imported-modules '((guix build utils))
+     #~(begin
+         (use-modules (guix build utils) (ice-9 textual-ports))
+         (setenv "HOME" (getcwd))
+         ;; nss-certs ships hashed certificate files, not a single bundle.
+         (setenv "SSL_CERT_DIR" #$(file-append nss-certs "/etc/ssl/certs"))
+         ;; Vendor with the pinned toolchain, so the result does not depend on
+         ;; the Rust version of whichever Guix revision builds this.
+         (setenv "PATH" (string-append #$(file-append rust-binary "/bin") ":"
+                                       #$(file-append coreutils "/bin") ":"
+                                       #$(file-append bash-minimal "/bin")))
+         (copy-recursively #$%explorer-source "src-copy")
+         (with-directory-excursion "src-copy"
+           (for-each make-file-writable (find-files "." "."))
+           (#$strip-dev-dependencies)
+           (invoke "cargo" "vendor" "--versioned-dirs" #$output))))
+   #:options
+   `(#:hash-algo sha256
+     #:hash ,(base32 "1p0yv0ss05fd11vaa19wk87xdini48v6b1g44y7gw0f9fpdrcri2")
+     #:recursive? #t)))
+
 
 (define-public lila-openingexplorer
   (package
