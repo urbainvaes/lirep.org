@@ -48,6 +48,69 @@ def _require_owner(request: Request) -> str:
     return username
 
 
+def _validate_tree(tree: dict) -> None:
+    """Structural integrity only (not chess legality) — just enough to keep
+    every later reader (stats.py's/practice.py's _get_node, which does a
+    bare tree["nodes"][str(node_id)]) from crashing with an uncaught
+    KeyError on a malformed tree. Raises 400 rather than letting a bad
+    write silently brick the study for every future read."""
+
+    def bad(reason: str) -> None:
+        raise HTTPException(status_code=400, detail=f"invalid tree: {reason}")
+
+    nodes = tree.get("nodes")
+    root_id = tree.get("rootId")
+    next_id = tree.get("nextId")
+    if not isinstance(nodes, dict) or not nodes:
+        bad("nodes must be a non-empty object")
+    if not isinstance(root_id, int):
+        bad("rootId must be an integer")
+    if not isinstance(next_id, int):
+        bad("nextId must be an integer")
+    if str(root_id) not in nodes:
+        bad("rootId is not in nodes")
+
+    max_id = -1
+    for key, node in nodes.items():
+        if not isinstance(node, dict):
+            bad(f"node {key} is not an object")
+        node_id = node.get("id")
+        if not isinstance(node_id, int) or str(node_id) != key:
+            bad(f"node {key} has a mismatched or missing id")
+        max_id = max(max_id, node_id)
+
+        parent_id = node.get("parentId")
+        is_root = node_id == root_id
+        if is_root != (parent_id is None):
+            bad(f"node {key}: exactly the root should have parentId null")
+        if parent_id is not None:
+            if not isinstance(parent_id, int) or str(parent_id) not in nodes:
+                bad(f"node {key} has an unknown parentId")
+
+        san = node.get("san")
+        if is_root != (san is None):
+            bad(f"node {key}: exactly the root should have san null")
+        if san is not None and not isinstance(san, str):
+            bad(f"node {key} has a non-string san")
+
+        children = node.get("children")
+        if not isinstance(children, list) or any(not isinstance(c, int) for c in children):
+            bad(f"node {key} has a malformed children list")
+        for child_id in children:
+            if str(child_id) not in nodes:
+                bad(f"node {key} references unknown child {child_id}")
+            if nodes[str(child_id)].get("parentId") != node_id:
+                bad(f"node {key} and child {child_id} disagree on parentage")
+
+    for key, node in nodes.items():
+        parent_id = node.get("parentId")
+        if parent_id is not None and int(key) not in nodes[str(parent_id)].get("children", []):
+            bad(f"node {key} is missing from parent {parent_id}'s children")
+
+    if next_id <= max_id:
+        bad("nextId must be greater than every existing node id")
+
+
 def _valid_start_node_id(start_node_id: int | None, tree: dict) -> int | None:
     """A stored id that no longer exists in the tree (its subtree got
     deleted) degrades to "no override" rather than being rejected outright —
@@ -71,6 +134,7 @@ def create_study(payload: StudyIn, request: Request) -> dict:
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name required")
+    _validate_tree(payload.tree)
     start_node_id = _valid_start_node_id(payload.startNodeId, payload.tree)
     return store.create_study(
         owner, name, payload.tree, payload.explorerSettings.model_dump(), payload.side, start_node_id
@@ -108,6 +172,7 @@ def update_study(study_id: int, payload: StudyIn, request: Request) -> dict:
     if not existing:
         raise HTTPException(status_code=404, detail="not found")
 
+    _validate_tree(payload.tree)
     start_node_id = _valid_start_node_id(payload.startNodeId, payload.tree)
     study = store.update_study(
         owner, study_id, name, payload.tree, payload.explorerSettings.model_dump(), existing["side"], start_node_id
