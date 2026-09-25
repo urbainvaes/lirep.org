@@ -76,7 +76,7 @@ function renderStudyCardContent(study: StudyCardData, deletable: boolean): strin
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>
       </button>` : ""}
     </div>
-    <div class="study-card__score"><span>Expected score</span><strong>${scoreLabel}</strong></div>
+    <div class="study-card__score"><span title="Win % + half of the draw % (a win counts 1, a draw 0.5), from real games in the Explorer, if you always play your prepared moves.">Expected score</span><strong>${scoreLabel}</strong></div>
     <div class="study-card__line">${openingMovesHtml(study)}</div>
   `;
 }

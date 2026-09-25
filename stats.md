@@ -78,9 +78,11 @@ the effective starting node:
    a usable local evaluation contributes **0 cp**; `evalMisses` reports the
    number of such required positions. There is no Cloud Eval fallback.
 
-The browser uses the same Stockfish WASM engine as the Study editor, at its
-fixed `SEARCH_DEPTH`. UCI scores are relative to the side to move, so the
-browser converts them to **White's point of view** before caching `FEN -> cp`.
+The browser uses the same Stockfish WASM engine as the Study editor. Stats
+offers Quick (depth 8), Balanced (12), and Thorough (16, the default); live
+Study and Practice analysis remain at depth 16. UCI scores are relative to
+the side to move, so the browser converts them to **White's point of view**
+before caching `[FEN, depth] -> cp`.
 The weighted result is then converted to the studied side's point of view
 and displayed in pawns (`cp / 100`). Engine-reported mates use a
 distance-sensitive value near the `±100,000` cap. The cap is a finite

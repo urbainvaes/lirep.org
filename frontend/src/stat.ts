@@ -1,7 +1,7 @@
 import { Chart } from "chart.js/auto";
 import { Chess } from "chess.js";
 
-import { Engine, type EngineLine } from "./engine";
+import { DEFAULT_SEARCH_DEPTH, Engine, type EngineLine } from "./engine";
 import { openEvaluationCache, type EvaluationCache } from "./evalCache";
 import {
   DEFAULT_EXPLORER_SETTINGS,
@@ -16,6 +16,18 @@ import {
 } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { mainLineSans, sanPathTo, type StudyTree } from "./tree";
+
+const EVAL_DEPTHS = [8, 12, DEFAULT_SEARCH_DEPTH] as const;
+const EVAL_DEPTH_STORAGE_KEY = "stats-evaluation-depth";
+
+function getSavedEvalDepth(): number {
+  try {
+    const depth = Number(localStorage.getItem(EVAL_DEPTH_STORAGE_KEY));
+    return EVAL_DEPTHS.includes(depth as (typeof EVAL_DEPTHS)[number]) ? depth : DEFAULT_SEARCH_DEPTH;
+  } catch {
+    return DEFAULT_SEARCH_DEPTH;
+  }
+}
 
 // winProbability/coverage and evalCp/evalMisses are computed by two
 // independent buttons now ("Update win probability" / "Update expected
@@ -158,10 +170,10 @@ function mateToCappedCp(mateWhitePov: number): number {
 // Centipawns (White's POV), from the engine's best line at this position —
 // same conversion regardless of whether the position is a tree node or an
 // off-tree continuation, since a position's eval doesn't care which.
-async function evaluatePosition(engine: Engine, chess: Chess): Promise<number | null> {
+async function evaluatePosition(engine: Engine, chess: Chess, depth: number): Promise<number | null> {
   const terminal = terminalCp(chess);
   if (terminal !== null) return terminal;
-  const analysis = await engine.analyze(chess.fen());
+  const analysis = await engine.analyze(chess.fen(), depth);
   const best: EngineLine | undefined = analysis.lines[0];
   const sign = chess.turn() === "w" ? 1 : -1;
   if (best?.scoreMate != null) return mateToCappedCp(best.scoreMate * sign);
@@ -244,6 +256,7 @@ async function calculateEvaluationsLocally(
   settings: ExplorerSettings,
   cache: EvaluationCache,
   explorerCache: Map<string, ExplorerData>,
+  depth: number,
   onPlan: (ready: number, required: number, work: number) => void,
   onProgress: (done: number, total: number) => void,
 ): Promise<Map<string, number | null>> {
@@ -251,7 +264,7 @@ async function calculateEvaluationsLocally(
   const evaluated = new Map<string, number | null>();
   const pending: string[] = [];
   for (const fen of required) {
-    const cp = await cache.get(fen);
+    const cp = await cache.get(fen, depth);
     if (cp === undefined) pending.push(fen);
     else evaluated.set(fen, cp);
   }
@@ -264,8 +277,8 @@ async function calculateEvaluationsLocally(
   const engine = new Engine();
   try {
     for (const fen of pending) {
-      const cp = await evaluatePosition(engine, new Chess(fen));
-      if (cp !== null) await cache.set(fen, cp);
+      const cp = await evaluatePosition(engine, new Chess(fen), depth);
+      if (cp !== null) await cache.set(fen, depth, cp);
       evaluated.set(fen, cp);
       done += 1;
       onProgress(done, total);
@@ -558,7 +571,7 @@ function renderPage(
               <div class="stat-loss-probability" aria-label="Loss probability ${(stats.lossProbability * 100).toFixed(1)}%"><strong>${(stats.lossProbability * 100).toFixed(1)}%</strong></div>
             </div>
             <p class="stat-card__label">Win probability${startPointNote}</p>
-            <p class="stat-card__meta">Draws are the remaining probability. Expected score ${((stats.winProbability ?? stats.winRate + drawProbability / 2) * 100).toFixed(1)}% · ${statsSourceLabel(stats, settings.source)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
+            <p class="stat-card__meta">Draws are the remaining probability. Expected score (wins + half the draws) ${((stats.winProbability ?? stats.winRate + drawProbability / 2) * 100).toFixed(1)}% · ${statsSourceLabel(stats, settings.source)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
         })()
       : stats?.winProbability !== undefined
         ? `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
@@ -616,6 +629,14 @@ function renderPage(
       <h2 class="stat-detail__chart-title">Analysis</h2>
       <div class="stat-actions stat-actions--single">
         <div class="stat-action">
+          <label class="eval-depth-control" for="eval-depth">
+            <span>Stockfish depth</span>
+            <select id="eval-depth" aria-label="Stockfish evaluation depth">
+              <option value="8">8 · Quick</option>
+              <option value="12">12 · Balanced</option>
+              <option value="16">16 · Thorough</option>
+            </select>
+          </label>
           <div class="eval-update-row">
             <button id="evals-btn" class="btn btn-secondary" type="button" ${hasMoves ? "" : "disabled"}>
               Update evaluations
@@ -699,6 +720,16 @@ function renderPage(
     legend.hidden = !legend.hidden;
   });
 
+  const depthEl = document.getElementById("eval-depth") as HTMLSelectElement;
+  depthEl.value = String(getSavedEvalDepth());
+  depthEl.addEventListener("change", () => {
+    try {
+      localStorage.setItem(EVAL_DEPTH_STORAGE_KEY, depthEl.value);
+    } catch {
+      // Keep the selection for this page even when browser storage is blocked.
+    }
+  });
+
   const databaseEl = document.getElementById("stat-database") as HTMLSelectElement;
   const sourceEl = document.getElementById("stat-source") as HTMLSelectElement;
   const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
@@ -740,6 +771,7 @@ function renderPage(
     const fill = document.getElementById("evals-progress-fill") as HTMLElement;
     const label = document.getElementById("evals-progress-label") as HTMLElement;
     const count = document.getElementById("evals-count") as HTMLElement;
+    const depth = Number(depthEl.value);
     let readyPositions = 0;
     let requiredPositions = 0;
 
@@ -761,6 +793,7 @@ function renderPage(
         readSettingsFromDom(),
         cache,
         explorerCache,
+        depth,
         (ready, required, work) => {
           readyPositions = ready;
           requiredPositions = required;
@@ -834,6 +867,7 @@ function renderPage(
     const progress = document.getElementById("eval-score-progress") as HTMLElement;
     const fill = document.getElementById("eval-score-progress-fill") as HTMLElement;
     const label = document.getElementById("eval-score-progress-label") as HTMLElement;
+    const depth = Number(depthEl.value);
 
     allActionButtons().forEach((el) => (el.disabled = true));
     btn.textContent = "Calculating…";
@@ -851,7 +885,7 @@ function renderPage(
         ? study.startNodeId
         : study.tree.rootId;
       const positions = await calculateEvaluationsLocally(
-        study.tree, startNodeId, study.side, settings, cache, explorerCache,
+        study.tree, startNodeId, study.side, settings, cache, explorerCache, depth,
         (_ready, _required, work) => {
           progress.classList.remove("progress-bar--indeterminate");
           fill.style.width = work === 0 ? "100%" : "0%";
@@ -916,11 +950,14 @@ async function init(): Promise<void> {
   }
 
   const cache = await openEvaluationCache(me.username);
+  // Legacy server-side evaluations were produced at the previous default depth.
   for (const [nodeId, cp] of Object.entries(study.evals?.byNode ?? {})) {
     if (cp === null || !Number.isFinite(cp) || Math.abs(cp) > MATE_SCORE_CP || !(Number(nodeId) in study.tree.nodes)) continue;
     const chess = new Chess();
     for (const san of sanPathTo(study.tree, Number(nodeId))) chess.move(san);
-    if (await cache.get(chess.fen()) === undefined) await cache.set(chess.fen(), cp);
+    if (await cache.get(chess.fen(), DEFAULT_SEARCH_DEPTH) === undefined) {
+      await cache.set(chess.fen(), DEFAULT_SEARCH_DEPTH, cp);
+    }
   }
   renderPage(main, study, explorerDefaults, knowledge, cache);
 }

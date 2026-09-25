@@ -92,7 +92,7 @@ function renderProfile(
             <span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>
             <div class="profile-study-row__text">
               <strong>${escapeHtml(study.name)}</strong>
-              <span>${moveCount} ${moveCount === 1 ? "move" : "moves"} · ${lineCount} ${lineCount === 1 ? "line" : "lines"}${score === undefined ? "" : ` · ${(score * 100).toFixed(1)}% expected score`}</span>
+              <span title="Expected score = win % + half of the draw %">${moveCount} ${moveCount === 1 ? "move" : "moves"} · ${lineCount} ${lineCount === 1 ? "line" : "lines"}${score === undefined ? "" : ` · ${(score * 100).toFixed(1)}% expected score`}</span>
             </div>
           </div>
           <div class="profile-study-row__practice">

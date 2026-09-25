@@ -4,7 +4,7 @@
 // (GPLv3) for attribution.
 
 const ENGINE_URL = "/engine/stockfish-19-lite-single.js";
-const SEARCH_DEPTH = 16;
+export const DEFAULT_SEARCH_DEPTH = 16;
 export const MULTIPV = 5;
 
 // Chessground's own built-in brushes, already in a green (good) -> red (bad)
@@ -24,6 +24,7 @@ export interface EngineAnalysis {
 
 interface PendingSearch {
   fen: string;
+  depth: number;
   resolve: (result: EngineAnalysis) => void;
 }
 
@@ -33,6 +34,7 @@ export class Engine {
   private activeSearch: PendingSearch | null = null;
   private nextSearch: PendingSearch | null = null;
   private stopping = false;
+  private terminated = false;
   private linesByRank: Map<number, EngineLine> = new Map();
   private latestDepth = 0;
 
@@ -83,11 +85,16 @@ export class Engine {
     }
   };
 
-  async analyze(fen: string): Promise<EngineAnalysis> {
+  async analyze(fen: string, depth = DEFAULT_SEARCH_DEPTH): Promise<EngineAnalysis> {
+    if (this.terminated) return { lines: [], depth: 0 };
     await this.readyPromise;
     return new Promise((resolve) => {
+      if (this.terminated) {
+        resolve({ lines: [], depth: 0 });
+        return;
+      }
       if (this.nextSearch) this.nextSearch.resolve({ lines: [], depth: 0 });
-      this.nextSearch = { fen, resolve };
+      this.nextSearch = { fen, depth, resolve };
       if (this.activeSearch && !this.stopping) {
         this.stopping = true;
         this.worker.postMessage("stop");
@@ -104,10 +111,11 @@ export class Engine {
     this.nextSearch = null;
     this.activeSearch = search;
     this.worker.postMessage(`position fen ${search.fen}`);
-    this.worker.postMessage(`go depth ${SEARCH_DEPTH}`);
+    this.worker.postMessage(`go depth ${search.depth}`);
   }
 
   terminate(): void {
+    this.terminated = true;
     this.worker.terminate();
   }
 }
