@@ -486,6 +486,9 @@ function renderEditor(
     if (currentId === tree.rootId) return;
     const parentId = tree.nodes[currentId].parentId as number;
     deleteSubtree(tree, currentId);
+    for (const [id, childId] of Object.entries(lastChild)) {
+      if (!tree.nodes[Number(id)]?.children.includes(childId)) delete lastChild[Number(id)];
+    }
     // The starting point may have lived inside the subtree just removed —
     // rather than pointing at a node that no longer exists, fall back to the
     // default (the real root). See starting-point.md.
