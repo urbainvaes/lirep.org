@@ -245,19 +245,24 @@ async def explorer(
     token = request.session.get("access_token")
     if not token:
         raise HTTPException(status_code=401, detail="not authenticated")
-    username = request.session.get("username")
 
     headers = {"Authorization": f"Bearer {token}"}
+
+    # A study's minRating is always a concrete bucket now (picked once, from
+    # /api/explorer-defaults, when the study was created — see
+    # ExplorerSettings). A live per-request "my current rating" lookup here
+    # used to mean an extra Lichess account call on every single position
+    # visited, plus a whole persisted-cache-with-TTL apparatus just to keep
+    # that affordable — None only still shows up for a study saved before
+    # this existed, and just gets the same static default the picker itself
+    # falls back to, no account lookup involved.
+    min_rating = minRating if minRating is not None else _bucket_for(DEFAULT_REFERENCE_RATING)
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         if source == "lirep" and not LOCAL_LICHESS_EXPLORER_URL:
             raise HTTPException(status_code=503, detail="Lirep Explorer is not configured")
         if source == "lirep" and database == "masters":
             raise HTTPException(status_code=400, detail="Masters is only available from Lichess")
-        if database != "masters" and minRating is None:
-            min_rating = await _resolve_min_rating(client, headers, username)
-        else:
-            min_rating = minRating
 
         data, fetched_at = await fetch_explorer_cached(client, headers, fen, source, database, min_rating, speeds)
 

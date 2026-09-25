@@ -90,7 +90,7 @@
         <p>Show the study's editable settings on the detail page, including Lirep/Lichess data source. Lirep uses its local rated-game archive and has no Masters database; Lichess offers Players and Masters. Changing the controls alone does not trigger calculation. The next win-probability or expected-evaluation action sends the selected settings and saves them as the study's new settings (not a temporary preview), so subsequent views and calculations use them.</p>
         <ul>
           <li>Players or Masters database. Masters disables rating and speed controls.</li>
-          <li>For Players, select “My current rating” (stored as automatic/null) or a fixed rating threshold. Automatic mode resolves the current rating to its Explorer bucket and includes that and higher buckets. Reference rating order is Rapid, Blitz, Classical; default to 1500 if unrated.</li>
+          <li>For Players, select a fixed rating threshold; that bucket and every higher bucket are included. A new study's picker starts pre-selected at the signed-in player's own bracket (Reference rating order Rapid, Blitz, Classical; default 1500 if unrated), but it's a one-time default like any other saved setting, not a mode that keeps tracking the player's rating.</li>
           <li>Bullet, Blitz, Rapid, and Classical checkboxes; default to Blitz, Rapid, Classical, and always require at least one speed.</li>
         </ul>
       </section>

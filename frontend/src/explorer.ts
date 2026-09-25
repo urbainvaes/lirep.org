@@ -6,7 +6,11 @@ export interface ExplorerSettings {
   enabled: boolean;
   source: "lirep" | "lichess";
   database: "lichess" | "masters";
-  /** null = always use the signed-in player's current rating; a number pins a specific bucket. */
+  /** A fixed rating bucket, chosen once (defaulting to the signed-in
+   * player's own bracket, from ExplorerDefaults.defaultMinRating) rather
+   * than re-resolved on every request. Only ever null for a study saved
+   * before this existed — see ratingOptionsHtml, which treats that the
+   * same as the default bucket. */
   minRating: number | null;
   speeds: ExplorerSpeed[];
 }
@@ -46,13 +50,18 @@ export interface ExplorerData {
   fetchedAt: string;
 }
 
-export function ratingOptionsHtml(buckets: number[], selected: number | null): string {
-  const options = [`<option value="auto"${selected === null ? " selected" : ""}>My current rating</option>`];
-  for (const bucket of buckets) {
-    const label = bucket === 0 ? "Any rating" : `${bucket}+`;
-    options.push(`<option value="${bucket}"${selected === bucket ? " selected" : ""}>${label}</option>`);
-  }
-  return options.join("");
+/** `selected` is only ever null for a study saved back when "my current
+ * rating" was a standing auto-resolved mode rather than a one-time default —
+ * treated here as "whatever the current default bucket is" so the picker
+ * still shows a sensible selection instead of nothing. */
+export function ratingOptionsHtml(buckets: number[], selected: number | null, defaultBucket: number): string {
+  const effectiveSelected = selected ?? defaultBucket;
+  return buckets
+    .map((bucket) => {
+      const label = bucket === 0 ? "Any rating" : `${bucket}+`;
+      return `<option value="${bucket}"${effectiveSelected === bucket ? " selected" : ""}>${label}</option>`;
+    })
+    .join("");
 }
 
 export const SPEED_LABELS: Record<ExplorerSpeed, string> = {

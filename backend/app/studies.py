@@ -13,7 +13,9 @@ class ExplorerSettings(BaseModel):
     enabled: bool = True
     source: Literal["lirep", "lichess"] = DEFAULT_EXPLORER_SOURCE
     database: Literal["lichess", "masters"] = "lichess"
-    # None means "always use my current rating" rather than a fixed value pinned to the study.
+    # A fixed bucket, chosen once (see /api/explorer-defaults) rather than
+    # tracked as a standing "current rating" mode. Only ever None for a
+    # study saved before this existed — see explorer.py's fallback.
     minRating: int | None = None
     speeds: list[Literal["bullet", "blitz", "rapid", "classical"]] = ["blitz", "rapid", "classical"]
 

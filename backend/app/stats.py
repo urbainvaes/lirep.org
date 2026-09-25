@@ -179,10 +179,7 @@ class _Evaluator:
         `score` has already walked the same tree.
         """
         depth_mass: dict[int, float] = {}
-
         async def walk(node_id: int, depth: int, prob: float) -> None:
-            if prob < 1e-4:
-                return
             depth_mass[depth] = depth_mass.get(depth, 0.0) + prob
 
             board = chess.Board()

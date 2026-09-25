@@ -155,8 +155,9 @@ remain persistently cached on the backend (see
   models user mistakes or alternative choices on that turn.
 - Only Explorer-listed moves are weighted; the move list is capped (roughly
   the top dozen), so rare omitted replies do not contribute individually.
-- When `minRating` is automatic, the current rating bucket is resolved again
-  after its backend cache expires; a fixed threshold stays pinned.
+- `minRating` is a fixed threshold pinned to the study, chosen once from the
+  player's own bracket when the study is created (see explorer-cache.md) —
+  it doesn't track the player's rating afterward.
 - The engine searches to a fixed local depth, not the depth of a cloud engine
   farm. A missing local score contributes 0 to expected evaluation and is
   counted in `evalMisses`, not looked up elsewhere.

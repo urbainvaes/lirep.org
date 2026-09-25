@@ -510,7 +510,7 @@ function readSettingsFromDom(): ExplorerSettings {
   const source = (document.getElementById("stat-source") as HTMLSelectElement).value as ExplorerSettings["source"];
   const database = (document.getElementById("stat-database") as HTMLSelectElement).value as ExplorerSettings["database"];
   const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
-  const minRating = minRatingEl.value === "auto" ? null : Number(minRatingEl.value);
+  const minRating = Number(minRatingEl.value);
   const speeds = Array.from(
     document.querySelectorAll<HTMLInputElement>("#stat-speeds input:checked"),
   ).map((cb) => cb.value as ExplorerSpeed);
@@ -532,6 +532,7 @@ function renderPage(
   const displayedCoverage = trimTrailingCoverageZeros(stats?.coverage);
   const settings = study.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
+  const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1400;
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
   const tier = scoreTier(stats?.winProbability);
@@ -657,7 +658,7 @@ function renderPage(
               <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
             </select>
             <select id="stat-min-rating" ${settings.database === "lichess" ? "" : "disabled"}>
-              ${ratingOptionsHtml(ratingBuckets, settings.minRating)}
+              ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
             </select>
           </div>
           <div class="speed-checkboxes" id="stat-speeds">

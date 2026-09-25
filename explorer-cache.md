@@ -8,7 +8,7 @@ evaluation cache. They have different ownership and freshness rules:
 | Data | Storage and scope | Lifetime |
 | --- | --- | --- |
 | Explorer responses | Backend `explorer_cache`, shared across studies and accounts | 24-hour TTL |
-| Resolved "my current rating" bucket | Backend `rating_cache`, per username | 1-hour TTL; stale fallback on refresh failure |
+| Resolved default rating bucket (for a new study's picker) | Backend `rating_cache`, per username | 1-hour TTL; stale fallback on refresh failure |
 | Stockfish position evals | Browser IndexedDB `positions`, keyed by `[username, fen]` | Until browser data is cleared; no sync |
 
 Older databases may still contain the legacy global `cloud_eval_cache` table,
@@ -68,23 +68,28 @@ The Lirep source uses its configured local rated-game archive; Lichess
 offers Players and Masters. The same backend cache keys include the source,
 so results from one provider cannot be mistaken for another.
 
-## Automatic rating bucket
+## Rating bucket default
 
-With `minRating: null`, Players queries first resolve the signed-in player's
-rating to a bucket. Without a separate cache, even an Explorer response
-already in SQLite would require a fresh Lichess account call just to build
-its key. `_resolve_min_rating` caches that bucket in `rating_cache` by
+A study's `minRating` is a fixed bucket, chosen once and saved like any other
+Explorer setting — not a standing "my current rating" mode re-resolved on
+every request. (It used to be: `minRating: null` meant every single
+`/api/explorer` call first resolved the signed-in player's rating live. That
+was a lot of machinery — a Lichess account call potentially on every position
+visited — for a feature whose behavior wasn't even obvious from the UI, e.g.
+which of your ratings "counted" when several speeds were checked. `/api/explorer`
+now just treats a `null` from a study saved before this changed as the same
+static default the picker itself falls back to — no account lookup.)
+
+`_resolve_min_rating` still exists, narrowed to the one place a live
+resolution actually earns its keep: `/api/explorer-defaults`, which
+pre-selects a brand-new (or otherwise-untouched) study's picker at the
+player's own bracket. It still caches that bucket in `rating_cache` by
 username for `RATING_CACHE_TTL_SECONDS` (one hour), surviving backend
-restarts. It is used by `/api/explorer`, `/api/explorer-defaults`, and the
-win-probability job; browser evaluation discovery goes through
-`/api/explorer`, including its rating resolution. The synchronous
-expected-eval summary POST does not resolve ratings or query Explorer.
-
-The reference rating preference is Rapid, then Blitz, then Classical, with
-1500 as the unrated default. The chosen bucket and all higher buckets form
-the Players rating filter. If an expired bucket cannot be refreshed, the
-backend falls back to the stale value when available; a first-ever failed
-resolution cannot do so. A fixed minimum rating needs no account lookup.
+restarts, and the win-probability job falls back to it too if a study's
+saved `minRating` is still `null` from before this change. The reference
+rating preference is Rapid, then Blitz, then Classical, with 1500 as the
+unrated default. The chosen bucket and all higher buckets form the Players
+rating filter.
 
 ## Local evaluation frontier
 

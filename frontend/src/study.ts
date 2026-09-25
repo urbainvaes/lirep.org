@@ -125,8 +125,13 @@ function renderEditor(
   const settings: ExplorerSettings = existing?.explorerSettings ?? {
     ...DEFAULT_EXPLORER_SETTINGS,
     source: explorerDefaults?.defaultSource ?? DEFAULT_EXPLORER_SETTINGS.source,
+    // A brand-new study starts pinned to the signed-in player's own rating
+    // bracket, resolved once here rather than tracked as a standing "auto"
+    // mode — see ratingOptionsHtml.
+    minRating: explorerDefaults?.defaultMinRating ?? DEFAULT_EXPLORER_SETTINGS.minRating,
   };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
+  const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1400;
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
   main.innerHTML = `
@@ -200,7 +205,7 @@ function renderEditor(
                 id="explorer-min-rating"
                 ${settings.enabled && settings.database === "lichess" ? "" : "disabled"}
               >
-                ${ratingOptionsHtml(ratingBuckets, settings.minRating)}
+                ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
               </select>
             </div>
           </div>
@@ -573,7 +578,17 @@ function renderEditor(
     currentId = nodeId;
     const chess = positionAt(tree, currentId);
     updateCommentEditor();
-    lichessAnalysisLink.href = `https://lichess.org/analysis/standard/${chess.fen().replaceAll(" ", "_")}`;
+    const line = sanPathTo(tree, currentId);
+    let lineEnd = currentId;
+    let next = lastChild[lineEnd] ?? tree.nodes[lineEnd].children[0];
+    while (next !== undefined) {
+      line.push(tree.nodes[next].san as string);
+      lineEnd = next;
+      next = lastChild[lineEnd] ?? tree.nodes[lineEnd].children[0];
+    }
+    lichessAnalysisLink.href = line.length
+      ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}`
+      : "https://lichess.org/analysis";
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
@@ -839,7 +854,7 @@ function renderEditor(
   });
 
   explorerMinRatingEl.addEventListener("change", () => {
-    settings.minRating = explorerMinRatingEl.value === "auto" ? null : Number(explorerMinRatingEl.value);
+    settings.minRating = Number(explorerMinRatingEl.value);
     void updateExplorer(positionAt(tree, currentId).fen());
     scheduleAutoSave();
   });
