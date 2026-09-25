@@ -239,11 +239,13 @@ class _Evaluator:
             expected += weight * value
         return expected
 
-    async def coverage(self, tree: dict, side: Literal["white", "black"]) -> list[float]:
+    async def coverage(self, tree: dict, start_node_id: int, side: Literal["white", "black"]) -> list[float]:
         """Coverage[i] = probability a real game (sampled the same way as `score`)
-        is still following a line inside the tree after move i+1 (both colors'
-        (i+1)-th moves played). Reuses this evaluator's explorer cache, so it's
-        nearly free after `score` has already walked the same tree.
+        is still following a line inside the tree after move i+1 *from
+        start_node_id* (both colors' (i+1)-th moves played since then — see
+        starting-point.md if start_node_id isn't the tree's real root).
+        Reuses this evaluator's explorer cache, so it's nearly free after
+        `score` has already walked the same tree.
         """
         depth_mass: dict[int, float] = {}
 
@@ -283,10 +285,27 @@ class _Evaluator:
                     await walk(child_id, depth + 1, prob * weight)
                 # else: this probability mass has left the book — not tracked further.
 
-        await walk(tree["rootId"], 0, 1.0)
+        await walk(start_node_id, 0, 1.0)
+
+        # Which plies represent "right after the opponent's move" depends on
+        # who moves first *from start_node_id* — not always even plies. That
+        # was only ever true because start_node_id used to always be the
+        # tree's real root in a White study (White moves first there, so the
+        # opponent's Nth move always lands on an even ply). A custom starting
+        # point can have the opponent to move first instead (see
+        # starting-point.md) — and so can a Black study even at the real
+        # root, since White moves first there regardless of which side is
+        # being studied. Sampling fixed-parity "even plies" in that case
+        # would silently report the *studied side's* move-completion points
+        # instead of the opponent's.
+        start_board = chess.Board()
+        for san in _sans_to(tree, start_node_id):
+            start_board.push_san(san)
+        start_side_to_move = (start_board.turn == chess.WHITE) == (side == "white")
+        first_ply = 2 if start_side_to_move else 1
 
         max_ply = max(depth_mass.keys(), default=0)
-        return [depth_mass.get(ply, 0.0) for ply in range(2, max_ply + 1, 2)]
+        return [depth_mass.get(ply, 0.0) for ply in range(first_ply, max_ply + 1, 2)]
 
     async def _eval_at(self, node_id: int, fen: str, stored_evals: dict[str, float | None]) -> float | None:
         """Centipawns (White's POV) for a position that's a node in the tree:
@@ -469,6 +488,18 @@ async def _resolve_explorer_settings(
     return database, min_rating, speeds
 
 
+def _resolve_start_node_id(study: dict) -> int:
+    """The node every calculation should treat as move one — a study's
+    `startNodeId` if it's set and still exists in the current tree, else the
+    tree's real root. See starting-point.md: a stale id (its subtree got
+    deleted since it was set) degrades to the default rather than erroring,
+    the same instinct as every other fallback in this app."""
+    start_node_id = study.get("startNodeId")
+    if start_node_id is not None and str(start_node_id) in study["tree"]["nodes"]:
+        return start_node_id
+    return study["tree"]["rootId"]
+
+
 async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token: str) -> None:
     """Win probability + coverage only — purely Explorer-derived, never
     touches Stockfish/Cloud Eval (see stats.md's guarantee at the top of
@@ -480,6 +511,7 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
             jobs.fail(job_id, "study not found")
             return
         headers = {"Authorization": f"Bearer {token}"}
+        start_node_id = _resolve_start_node_id(study)
 
         resolved = await _resolve_explorer_settings(job_id, owner, study, headers)
         if resolved is None:
@@ -490,8 +522,8 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
             evaluator = _Evaluator(
                 client, headers, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
             )
-            win_probability = await evaluator.score(study["tree"], study["tree"]["rootId"], study["side"])
-            coverage = await evaluator.coverage(study["tree"], study["side"])
+            win_probability = await evaluator.score(study["tree"], start_node_id, study["side"])
+            coverage = await evaluator.coverage(study["tree"], start_node_id, study["side"])
 
         explorer_settings = study["explorerSettings"]
         stats = dict(study.get("stats") or {})
@@ -531,6 +563,7 @@ async def _run_expected_eval_job(job_id: str, owner: str, study_id: int, token: 
             jobs.fail(job_id, "study not found")
             return
         headers = {"Authorization": f"Bearer {token}"}
+        start_node_id = _resolve_start_node_id(study)
 
         resolved = await _resolve_explorer_settings(job_id, owner, study, headers)
         if resolved is None:
@@ -543,7 +576,7 @@ async def _run_expected_eval_job(job_id: str, owner: str, study_id: int, token: 
             evaluator = _Evaluator(
                 client, headers, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
             )
-            eval_cp = await evaluator.eval_score(study["tree"], study["tree"]["rootId"], study["side"], stored_evals)
+            eval_cp = await evaluator.eval_score(study["tree"], start_node_id, study["side"], stored_evals)
 
         explorer_settings = study["explorerSettings"]
         stats = dict(study.get("stats") or {})

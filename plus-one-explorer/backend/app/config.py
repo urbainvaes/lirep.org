@@ -16,7 +16,7 @@ load_dotenv()
 # read back during /auth/callback are always on the exact same origin the
 # page was loaded from — mixing "localhost" and "127.0.0.1" between the two
 # would otherwise silently drop the cookie and fail with "invalid oauth state".
-LICHESS_CLIENT_ID = os.getenv("LICHESS_CLIENT_ID", "chesster-dev")
+LICHESS_CLIENT_ID = os.getenv("LICHESS_CLIENT_ID", "lirep-dev")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173")
 REDIRECT_URI = os.getenv("REDIRECT_URI", f"{FRONTEND_URL}/auth/callback")
 

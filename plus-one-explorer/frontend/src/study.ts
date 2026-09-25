@@ -37,6 +37,9 @@ interface Study {
   explorerSettings: ExplorerSettings;
   side: "white" | "black";
   stats: StudyStats | null;
+  // null (the default) means calculations start at the tree's real root —
+  // see starting-point.md.
+  startNodeId: number | null;
 }
 
 function getStudyId(): number | null {
@@ -55,12 +58,13 @@ async function saveStudy(
   tree: StudyTree,
   explorerSettings: ExplorerSettings,
   side: "white" | "black",
+  startNodeId: number | null,
 ): Promise<Study | null> {
   const res = await fetch(id ? `/api/studies/${id}` : "/api/studies", {
     method: id ? "PUT" : "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
-    body: JSON.stringify({ name, tree, explorerSettings, side }),
+    body: JSON.stringify({ name, tree, explorerSettings, side, startNodeId }),
   });
   return res.ok ? res.json() : null;
 }
@@ -89,6 +93,18 @@ function positionAt(tree: StudyTree, nodeId: number): Chess {
   const chess = new Chess();
   for (const san of sanPathTo(tree, nodeId)) chess.move(san);
   return chess;
+}
+
+// null when there's nothing to say (no starting point set, or it's just the
+// real root) — see starting-point.md.
+function describeStartPoint(tree: StudyTree, startNodeId: number | null): string | null {
+  if (startNodeId === null || startNodeId === tree.rootId) return null;
+  const node = tree.nodes[startNodeId];
+  if (!node || node.san === null) return null;
+  const ply = sanPathTo(tree, startNodeId).length;
+  const moveNumber = Math.ceil(ply / 2);
+  const isWhite = ply % 2 === 1;
+  return `Starts after ${moveNumber}.${isWhite ? "" : ".."}${node.san}`;
 }
 
 // Legend dot colors for the move list, matching the green (best) -> red
@@ -124,6 +140,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
                  <option value="black">Playing Black</option>
                </select>`
         }
+        <span id="study-start-badge" class="study-start-badge" hidden></span>
       </div>
       <div class="study-grid">
         <div class="study-card study-card--board">
@@ -137,6 +154,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
           <div class="study-actions">
             <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
             <button id="delete-btn" class="btn btn-secondary" type="button">Delete this move</button>
+            <button id="start-point-btn" class="btn btn-secondary" type="button">Set as starting point</button>
           </div>
         </div>
 
@@ -203,6 +221,9 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
   let currentId = tree.rootId;
+  // null means "no override — calculations start at the tree's real root",
+  // the default. See starting-point.md.
+  let startNodeId: number | null = existing?.startNodeId ?? null;
   let board: Api;
   let explorerRequestId = 0;
   let engine: Engine | null = null;
@@ -345,10 +366,24 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
   }
 
   function renderTreeView(): void {
-    treeViewEl.innerHTML = renderTree(tree, currentId, currentSide());
+    treeViewEl.innerHTML = renderTree(tree, currentId, currentSide(), startNodeId);
     treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
       el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
     });
+  }
+
+  // Keeps the name-row badge and the "Set/Clear starting point" button's
+  // label in sync with `startNodeId` and wherever you're currently viewing —
+  // called after navigation and after toggling the starting point itself.
+  function updateStartPointUI(): void {
+    const badge = document.getElementById("study-start-badge") as HTMLElement;
+    const description = describeStartPoint(tree, startNodeId);
+    badge.hidden = description === null;
+    badge.textContent = description ?? "";
+
+    const btn = document.getElementById("start-point-btn") as HTMLButtonElement;
+    btn.textContent = currentId === startNodeId && startNodeId !== null ? "Clear starting point" : "Set as starting point";
+    btn.disabled = currentId === tree.rootId && startNodeId === null;
   }
 
   function goTo(nodeId: number): void {
@@ -370,6 +405,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
 
     renderTreeView();
     deleteBtn.disabled = currentId === tree.rootId;
+    updateStartPointUI();
     void updateExplorer(chess.fen());
     void updateEngine(chess);
   }
@@ -404,7 +440,40 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     if (currentId === tree.rootId) return;
     const parentId = tree.nodes[currentId].parentId as number;
     deleteSubtree(tree, currentId);
+    // The starting point may have lived inside the subtree just removed —
+    // rather than pointing at a node that no longer exists, fall back to the
+    // default (the real root). See starting-point.md.
+    if (startNodeId !== null && !(startNodeId in tree.nodes)) startNodeId = null;
     goTo(parentId);
+  });
+
+  document.getElementById("start-point-btn")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    const previous = startNodeId;
+    startNodeId = currentId === startNodeId ? null : currentId;
+    renderTreeView();
+    updateStartPointUI();
+
+    // Unlike moves and deletions (which only persist on the main Save
+    // button, matching every other pending edit), the starting point saves
+    // itself immediately — it's a small, easy-to-forget toggle, and losing
+    // it silently on the next reload would defeat the point of having it.
+    // Nothing to persist to yet for a study that's never been saved once —
+    // it'll be included in that first Save automatically.
+    if (!existing?.id) return;
+    const name = nameInput.value.trim();
+    if (!name) return; // can't save without a name; stays local until Save is used with one
+
+    btn.disabled = true;
+    const saved = await saveStudy(existing.id, name, tree, settings, currentSide(), startNodeId);
+    btn.disabled = false;
+    if (!saved) {
+      startNodeId = previous;
+      renderTreeView();
+      updateStartPointUI();
+      errorEl.textContent = "Could not save the starting point. Please try again.";
+      errorEl.hidden = false;
+    }
   });
 
   colorSelect?.addEventListener("change", renderTreeView);
@@ -494,7 +563,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
       errorEl.hidden = false;
       return;
     }
-    const saved = await saveStudy(existing?.id ?? null, name, tree, settings, currentSide());
+    const saved = await saveStudy(existing?.id ?? null, name, tree, settings, currentSide(), startNodeId);
     if (!saved) {
       errorEl.textContent = "Could not save. Please try again.";
       errorEl.hidden = false;

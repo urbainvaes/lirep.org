@@ -56,9 +56,9 @@ function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
     <div class="rating-grid">${ratingCards}</div>
 
     <section class="profile-section">
-      <h2>Chesster</h2>
+      <h2>lirep.org</h2>
       <div class="empty-state">
-        <p>Your Chesster training progress will show up here.</p>
+        <p>Your lirep.org training progress will show up here.</p>
       </div>
     </section>
   `;

@@ -56,11 +56,27 @@ body {
 }
 
 .site-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--text-strong);
   font-size: 1.1rem;
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.site-title .site-icon {
+  height: 28px;
+  width: 28px;
+  /* Source artwork is black-on-transparent; invert so the rook reads
+     against the dark header instead of disappearing into it. */
+  filter: invert(1);
+}
+
+.site-title .tld {
+  color: var(--text-dim);
+  font-weight: 400;
 }
 
 .site-nav {
@@ -326,6 +342,9 @@ body {
 }
 
 .stat-card__header h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--text-strong);
   font-size: 1.05rem;
@@ -339,21 +358,21 @@ body {
   white-space: nowrap;
 }
 
-.side-dot {
+.side-pawn {
   display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
   margin-right: 5px;
-  border: 1px solid var(--border);
+  font-size: 1.1rem;
+  line-height: 1;
+  vertical-align: -1px;
 }
 
-.side-dot--white {
-  background: #f0f0f0;
+.side-pawn--white {
+  color: #f0f0f0;
 }
 
-.side-dot--black {
-  background: #2b2b2b;
+.side-pawn--black {
+  color: #4a4a4a;
+  -webkit-text-stroke: 0.5px var(--text-dim);
 }
 
 .stat-card__score {
@@ -365,11 +384,6 @@ body {
 
 .stat-card__score--empty {
   color: var(--text-dim);
-}
-
-.stat-card__medal {
-  font-size: 1.6rem;
-  vertical-align: middle;
 }
 
 .stat-card__label {
@@ -726,6 +740,18 @@ body {
   white-space: nowrap;
 }
 
+.study-start-badge {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--panel-bg);
+  border: 1px solid #e2903f;
+  border-radius: 6px;
+  color: #e2903f;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .move-conflict {
   margin: 0;
   color: #d62929;
@@ -786,9 +812,18 @@ body {
   color: var(--primary-hover);
 }
 
+.tree-move-number {
+  color: #3fbf60;
+}
+
 .tree-move--current {
   background: var(--primary);
   color: var(--text-strong);
+}
+
+/* The study's starting point (see starting-point.md). */
+.tree-move--start-point {
+  color: #e2903f;
 }
 
 .tree-variation {

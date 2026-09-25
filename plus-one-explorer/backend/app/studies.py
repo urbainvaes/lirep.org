@@ -21,6 +21,9 @@ class StudyIn(BaseModel):
     tree: dict
     explorerSettings: ExplorerSettings = ExplorerSettings()
     side: Literal["white", "black"] = "white"
+    # None (the default) means "no override — calculations start at the
+    # tree's real root". See starting-point.md.
+    startNodeId: int | None = None
 
 
 def _require_owner(request: Request) -> str:
@@ -28,6 +31,17 @@ def _require_owner(request: Request) -> str:
     if not username:
         raise HTTPException(status_code=401, detail="not authenticated")
     return username
+
+
+def _valid_start_node_id(start_node_id: int | None, tree: dict) -> int | None:
+    """A stored id that no longer exists in the tree (its subtree got
+    deleted) degrades to "no override" rather than being rejected outright —
+    same instinct as the calculation-time fallback in stats.py."""
+    if start_node_id is None:
+        return None
+    if str(start_node_id) not in tree.get("nodes", {}):
+        return None
+    return start_node_id
 
 
 @router.get("/api/studies")
@@ -42,7 +56,10 @@ def create_study(payload: StudyIn, request: Request) -> dict:
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name required")
-    return store.create_study(owner, name, payload.tree, payload.explorerSettings.model_dump(), payload.side)
+    start_node_id = _valid_start_node_id(payload.startNodeId, payload.tree)
+    return store.create_study(
+        owner, name, payload.tree, payload.explorerSettings.model_dump(), payload.side, start_node_id
+    )
 
 
 @router.get("/api/studies/{study_id}")
@@ -68,8 +85,9 @@ def update_study(study_id: int, payload: StudyIn, request: Request) -> dict:
     if not existing:
         raise HTTPException(status_code=404, detail="not found")
 
+    start_node_id = _valid_start_node_id(payload.startNodeId, payload.tree)
     study = store.update_study(
-        owner, study_id, name, payload.tree, payload.explorerSettings.model_dump(), existing["side"]
+        owner, study_id, name, payload.tree, payload.explorerSettings.model_dump(), existing["side"], start_node_id
     )
     assert study is not None
     return study

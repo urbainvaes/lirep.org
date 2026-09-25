@@ -57,6 +57,9 @@ interface Study {
   side: "white" | "black";
   stats: StudyStats | null;
   evals: StudyEvals | null;
+  // null (the default) means every stat below is calculated from the tree's
+  // real root — see starting-point.md.
+  startNodeId: number | null;
 }
 
 interface JobStatus<T> {
@@ -333,6 +336,18 @@ function evalsAreCurrent(tree: StudyTree, evals: StudyEvals | null): boolean {
   return Object.keys(tree.nodes).every((id) => id in evals.byNode);
 }
 
+// null when there's nothing to say (no starting point set, or it's just the
+// real root) — see starting-point.md.
+function describeStartPoint(tree: StudyTree, startNodeId: number | null): string | null {
+  if (startNodeId === null || startNodeId === tree.rootId) return null;
+  const node = tree.nodes[startNodeId];
+  if (!node || node.san === null) return null;
+  const ply = sanPathTo(tree, startNodeId).length;
+  const moveNumber = Math.ceil(ply / 2);
+  const isWhite = ply % 2 === 1;
+  return `${moveNumber}.${isWhite ? "" : ".."}${node.san}`;
+}
+
 // nodeCounts[i] = how many distinct positions (branches) the tree has
 // recorded at move i+1 — i.e. how many of the opponent's replies you've
 // memorized a response to by that point, regardless of how often each is
@@ -363,7 +378,7 @@ let coverageChart: Chart | null = null;
 // Same chart type and hover behavior as lichess.org's own rating-distribution
 // chart (a Chart.js line chart with intersect:false + a generous hit radius,
 // so hovering anywhere near the line — not just exactly on a point —
-// triggers the tooltip), rebuilt with Chesster's own colors.
+// triggers the tooltip), rebuilt with lirep.org's own colors.
 function renderCoverageChart(
   canvas: HTMLCanvasElement,
   coverage: number[],
@@ -462,7 +477,7 @@ function readSettingsFromDom(): ExplorerSettings {
 
 function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerDefaults | null): void {
   const sideLabel = study.side === "white" ? "Playing White" : "Playing Black";
-  const sideDotClass = `side-dot side-dot--${study.side}`;
+  const sidePawn = `<span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>`;
   const opponent = study.side === "white" ? "Black" : "White";
   const hasMoves = mainLineSans(study.tree).length > 0 || Object.keys(study.tree.nodes).length > 1;
   const stats = study.stats;
@@ -473,27 +488,29 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
 
   const tier = scoreTier(stats?.winProbability);
   const evalsCurrent = evalsAreCurrent(study.tree, evals);
+  const startPoint = describeStartPoint(study.tree, study.startNodeId);
+  const startPointNote = startPoint ? ` — from move ${startPoint} onward` : "";
 
   const winProbCardHtml =
     stats?.winProbability !== undefined
       ? `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
-         <p class="stat-card__label">Win probability</p>
+         <p class="stat-card__label">Win probability${startPointNote}</p>
          <p class="stat-card__meta">Expected score, assuming perfect memorization<br>${statsSourceLabel(stats)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`
       : `<div class="stat-detail__score stat-card__score--empty">—</div>
-         <p class="stat-card__label">Win probability</p>
+         <p class="stat-card__label">Win probability${startPointNote}</p>
          <p class="stat-card__meta">Not calculated yet.</p>`;
 
   const evalCardHtml =
     stats?.evalCp !== undefined
       ? `<div class="stat-detail__score">${formatEval(stats.evalCp)}</div>
-         <p class="stat-card__label">Expected evaluation at the end of prep</p>
+         <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
          <p class="stat-card__meta">From ${study.side === "white" ? "White" : "Black"}'s point of view · as of ${formatDate(stats.evalCalculatedAt ?? "")}${
            stats.evalMisses
              ? `<br>${stats.evalMisses} end-of-prep position${stats.evalMisses === 1 ? "" : "s"} had no cached engine eval yet (counted as 0.00)`
              : ""
          }</p>`
       : `<div class="stat-detail__score stat-card__score--empty">—</div>
-         <p class="stat-card__label">Expected evaluation at the end of prep</p>
+         <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
          <p class="stat-card__meta">Not calculated yet.</p>`;
 
   main.innerHTML = `
@@ -506,7 +523,7 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
           </button>
           ${escapeHtml(study.name)}
         </h1>
-        <span class="stat-card__side"><span class="${sideDotClass}"></span>${sideLabel}</span>
+        <span class="stat-card__side">${sidePawn}${sideLabel}</span>
       </div>
       <div class="piece-legend" id="piece-legend" hidden>
         <p class="piece-legend__title">Score tiers, by win probability</p>
@@ -609,6 +626,11 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
         are still following a line inside this study after each of ${opponent}'s replies. Your own
         moves never reduce this — by the one-move-per-position rule, you always have exactly one
         prepared reply — so every drop here comes from an ${opponent} move you haven't covered.
+        ${
+          startPoint
+            ? `<br><strong>Move numbers below are relative to this study's starting point (${startPoint})</strong>, not the actual game's move count — "move 1" is the first ${opponent} reply after ${startPoint}.`
+            : ""
+        }
       </p>
       <div class="coverage-chart-wrap">
         ${

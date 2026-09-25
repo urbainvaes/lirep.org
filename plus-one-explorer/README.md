@@ -8,10 +8,10 @@
 
 ---
 
-## 0. Web app prototype (Chesster)
+## 0. Web app prototype (lirep.org)
 
 Ahead of the CLI-first roadmap below, a working web app already implements the
-"opening studies" idea end to end: **Chesster** — a small FastAPI backend
+"opening studies" idea end to end: **lirep.org** — a small FastAPI backend
 (`backend/`) plus a static TypeScript/Vite frontend (`frontend/`), with
 Lichess OAuth login and a real chessboard (`chessground`, the library
 lichess.org itself uses).
@@ -43,7 +43,7 @@ needed for local dev — see `backend/app/config.py`).
 | **Stats** | Expected-score card per study — see below |
 
 The board itself renders using **your actual Lichess board theme and piece
-set** (`GET /api/account/preferences`, scope `preference:read`): Chesster
+set** (`GET /api/account/preferences`, scope `preference:read`): lirep.org
 hotlinks the matching background and piece SVGs straight from lichess.org's
 own asset CDN rather than bundling every theme, so it always matches what you
 see on lichess.org. Falls back to the default brown/cburnett look if you're
@@ -81,6 +81,11 @@ would silently invalidate that whole calculation.
 - **Delete this move** removes the selected move and everything under it
   (disabled on the root — you can't delete the starting position).
   **Go to start** jumps back to the beginning.
+- **Set as starting point** marks the currently-selected move as where the
+  Stats page's calculations should begin, instead of always the real first
+  move — useful when a repertoire is really about a specific tabiya reached
+  after a few given moves. Marked with orange text in the tree; see
+  **[starting-point.md](starting-point.md)** for the full writeup.
 - **Save** persists the whole tree to `/api/studies` (SQLite-backed,
   per-Lichess-account).
 
@@ -108,7 +113,7 @@ Re-analysis happens automatically every time you navigate the tree; a stale
 in-flight search is stopped and its result discarded if you move again
 before it finishes.
 
-**Opening Explorer panel:** below the board, Chesster shows real move
+**Opening Explorer panel:** below the board, lirep.org shows real move
 statistics for whichever position you're currently viewing, pulled from
 Lichess's own opening explorer (`GET https://explorer.lichess.org/lichess` or
 `/masters`, which now requires *some* signed-in Lichess account — no special

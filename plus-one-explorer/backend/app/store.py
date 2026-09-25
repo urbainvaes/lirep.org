@@ -94,6 +94,9 @@ def init_db() -> None:
         if "evals" not in columns:
             conn.execute("ALTER TABLE studies ADD COLUMN evals TEXT")
 
+        if "start_node_id" not in columns:
+            conn.execute("ALTER TABLE studies ADD COLUMN start_node_id INTEGER")
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS explorer_cache (
@@ -140,12 +143,15 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
         "side": row["side"] or DEFAULT_SIDE,
         "stats": json.loads(row["stats"]) if row["stats"] else None,
         "evals": json.loads(row["evals"]) if row["evals"] else None,
+        # None means "no override — calculations start at the tree's real
+        # root", the default for every study. See starting-point.md.
+        "startNodeId": row["start_node_id"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
 
 
-_COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, created_at, updated_at"
+_COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, created_at, updated_at"
 
 
 def list_studies(owner: str) -> list[dict[str, Any]]:
@@ -167,12 +173,17 @@ def get_study(owner: str, study_id: int) -> dict[str, Any] | None:
 
 
 def create_study(
-    owner: str, name: str, tree: dict[str, Any], explorer_settings: dict[str, Any], side: str
+    owner: str,
+    name: str,
+    tree: dict[str, Any],
+    explorer_settings: dict[str, Any],
+    side: str,
+    start_node_id: int | None = None,
 ) -> dict[str, Any]:
     with _connect() as conn:
         cur = conn.execute(
-            "INSERT INTO studies (owner, name, tree, explorer_settings, side) VALUES (?, ?, ?, ?, ?)",
-            (owner, name, json.dumps(tree), json.dumps(explorer_settings), side),
+            "INSERT INTO studies (owner, name, tree, explorer_settings, side, start_node_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (owner, name, json.dumps(tree), json.dumps(explorer_settings), side, start_node_id),
         )
         study_id = cur.lastrowid
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
@@ -187,15 +198,16 @@ def update_study(
     tree: dict[str, Any],
     explorer_settings: dict[str, Any],
     side: str,
+    start_node_id: int | None = None,
 ) -> dict[str, Any] | None:
     with _connect() as conn:
         cur = conn.execute(
             """
             UPDATE studies
-            SET name = ?, tree = ?, explorer_settings = ?, side = ?, updated_at = datetime('now')
+            SET name = ?, tree = ?, explorer_settings = ?, side = ?, start_node_id = ?, updated_at = datetime('now')
             WHERE owner = ? AND id = ?
             """,
-            (name, json.dumps(tree), json.dumps(explorer_settings), side, owner, study_id),
+            (name, json.dumps(tree), json.dumps(explorer_settings), side, start_node_id, owner, study_id),
         )
         if cur.rowcount == 0:
             return None

@@ -72,14 +72,20 @@ export function mainLineSans(tree: StudyTree): string[] {
 
 function renderLine(
   tree: StudyTree,
-  startNodeId: number,
+  lineStartNodeId: number,
   startDepth: number,
   currentId: number,
   side: "white" | "black",
+  studyStartNodeId: number | null,
 ): string {
   let html = "";
-  let nodeId: number | undefined = startNodeId;
+  let nodeId: number | undefined = lineStartNodeId;
   let depth = startDepth;
+  // Only Black's move needs this to force a number — White's always gets one
+  // regardless (standard PGN convention: "1.e4 e5 2.Nf3 Nc6", not just
+  // "1.e4 e5 Nf3 Nc6"). Black only needs one when resuming after an
+  // interruption: the very start of a rendered line, or right after a
+  // variation was shown at this same ply.
   let needsNumber = true;
 
   while (nodeId !== undefined) {
@@ -87,16 +93,21 @@ function renderLine(
     const moveNumber = Math.floor((depth - 1) / 2) + 1;
     const isWhite = depth % 2 === 1;
     const isStudiedSide = isWhite === (side === "white");
-    const label = needsNumber ? `${moveNumber}.${isWhite ? "" : ".."} ` : "";
+    const label =
+      isWhite || needsNumber
+        ? `<span class="tree-move-number">${moveNumber}.${isWhite ? "" : ".."}</span> `
+        : "";
     const classes = ["tree-move"];
     if (isStudiedSide) classes.push("tree-move--mine");
     if (nodeId === currentId) classes.push("tree-move--current");
-    html += `<span class="${classes.join(" ")}" data-node-id="${nodeId}">${label}${escapeHtml(node.san as string)}</span> `;
+    if (nodeId === studyStartNodeId) classes.push("tree-move--start-point");
+    const title = nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
+    html += `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${label}${escapeHtml(node.san as string)}</span> `;
     needsNumber = false;
 
     const [mainChildId, ...variations]: number[] = node.children;
     for (const variationId of variations) {
-      html += `<span class="tree-variation">(${renderLine(tree, variationId, depth + 1, currentId, side)})</span> `;
+      html += `<span class="tree-variation">(${renderLine(tree, variationId, depth + 1, currentId, side, studyStartNodeId)})</span> `;
       needsNumber = true;
     }
     nodeId = mainChildId;
@@ -106,15 +117,20 @@ function renderLine(
   return html.trim();
 }
 
-export function renderTree(tree: StudyTree, currentId: number, side: "white" | "black"): string {
+export function renderTree(
+  tree: StudyTree,
+  currentId: number,
+  side: "white" | "black",
+  startNodeId: number | null = null,
+): string {
   const root = tree.nodes[tree.rootId];
   if (root.children.length === 0) {
     return '<span class="tree-empty">No moves yet — play them on the board.</span>';
   }
   const [mainChildId, ...variations] = root.children;
-  let html = renderLine(tree, mainChildId, 1, currentId, side);
+  let html = renderLine(tree, mainChildId, 1, currentId, side, startNodeId);
   for (const variationId of variations) {
-    html += ` <span class="tree-variation">(${renderLine(tree, variationId, 1, currentId, side)})</span>`;
+    html += ` <span class="tree-variation">(${renderLine(tree, variationId, 1, currentId, side, startNodeId)})</span>`;
   }
   return html;
 }

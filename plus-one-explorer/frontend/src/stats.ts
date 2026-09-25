@@ -58,26 +58,43 @@ function statsSourceLabel(stats: StudyStats): string {
   return stats.database === "masters" ? "Masters" : `Players ${stats.minRating ?? "?"}+`;
 }
 
-// Gamification tiers for the expected score. 50% is breakeven for any
+// Gamification tiers for the expected score, shown as a colored chess piece
+// (see .piece-badge) — kept in sync with the same tiers/colors as the Stats
+// detail page (stat.ts's scoreTier/pieceBadgeHtml). 50% is breakeven for any
 // opening, so these mark increasingly meaningful practical edges above it.
-function medalFor(winProbability: number): string {
+type ScoreTier = "gold" | "silver" | "bronze" | "none";
+
+const TIER_LABELS: Record<ScoreTier, string> = {
+  gold: "Gold — 60% or higher",
+  silver: "Silver — 55% or higher",
+  bronze: "Bronze — 50% or higher",
+  none: "Below 50% — behind on average",
+};
+
+function scoreTier(winProbability: number | undefined): ScoreTier {
+  if (winProbability === undefined) return "none";
   const pct = winProbability * 100;
-  if (pct >= 60) return "🥇";
-  if (pct >= 55) return "🥈";
-  if (pct >= 50) return "🥉";
-  return "";
+  if (pct >= 60) return "gold";
+  if (pct >= 55) return "silver";
+  if (pct >= 50) return "bronze";
+  return "none";
+}
+
+function pieceBadgeHtml(tier: ScoreTier): string {
+  return `<span class="piece-badge piece-badge--${tier} piece-badge--sm" title="${TIER_LABELS[tier]}">♚</span>`;
 }
 
 function statCard(study: Study): string {
   studiesById.set(study.id, study);
 
   const sideLabel = study.side === "white" ? "Playing White" : "Playing Black";
-  const sideDotClass = `side-dot side-dot--${study.side}`;
+  const sidePawn = `<span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>`;
   const hasMoves = mainLineSans(study.tree).length > 0 || Object.keys(study.tree.nodes).length > 1;
+  const tier = scoreTier(study.stats?.winProbability);
 
   const scoreHtml =
     study.stats?.winProbability !== undefined
-      ? `<div class="stat-card__score">${(study.stats.winProbability * 100).toFixed(1)}% <span class="stat-card__medal">${medalFor(study.stats.winProbability)}</span></div>`
+      ? `<div class="stat-card__score">${(study.stats.winProbability * 100).toFixed(1)}%</div>`
       : `<div class="stat-card__score stat-card__score--empty">—</div>`;
 
   const evalHtml =
@@ -96,8 +113,8 @@ function statCard(study: Study): string {
   return `
     <div class="stat-card" data-study-id="${study.id}" ${study.stats ? 'tabindex="0" role="button"' : ""}>
       <div class="stat-card__header">
-        <h3>${escapeHtml(study.name)}</h3>
-        <span class="stat-card__side"><span class="${sideDotClass}"></span>${sideLabel}</span>
+        <h3>${pieceBadgeHtml(tier)}${escapeHtml(study.name)}</h3>
+        <span class="stat-card__side">${sidePawn}${sideLabel}</span>
       </div>
       ${scoreHtml}
       <p class="stat-card__label">Expected score, assuming perfect memorization</p>

@@ -8,7 +8,7 @@ from .stats import router as stats_router
 from .store import init_db
 from .studies import router as studies_router
 
-app = FastAPI(title="Chesster")
+app = FastAPI(title="lirep.org")
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=False)
 app.include_router(auth_router)
 app.include_router(studies_router)
