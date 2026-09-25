@@ -31,13 +31,16 @@ const percent = (value: number): string => `${(value * 100).toFixed(1)}%`;
 
 // The Explorer settings the score was calculated with: win probability only
 // means something next to the rating band and time controls behind it.
+// Returns HTML: "Lirep" and "Lichess" link to the docs that say what their data is.
 function settingsLabel(opening: Opening): string {
   const database = opening.source === "lirep"
-    ? `Lirep (local) · ${LIREP_DATASET}`
-    : opening.database === "masters" ? "Masters games" : "Lichess games";
+    ? `<a class="source-lirep" href="/doc/stats.html#explorer-settings" title="${escapeHtml(LIREP_DATASET)}">Lirep</a>`
+    : opening.database === "masters"
+      ? "Masters games"
+      : `<a class="source-lichess" href="/doc/stats.html#explorer-settings" title="Lichess's full Explorer, all Lichess players' games">Lichess</a>`;
   const rating = opening.database === "masters" ? "" : opening.minRating ? `${opening.minRating}+ · ` : "all ratings · ";
   const speeds = opening.database === "masters" || opening.speeds.length === 0 ? "" : opening.speeds.join(", ");
-  return `${database}${rating || speeds ? " · " : ""}${rating}${speeds}`.replace(/ · $/, "");
+  return `${database}${rating || speeds ? " · " : ""}${rating}${escapeHtml(speeds)}`.replace(/ · $/, "");
 }
 
 function renderStats(summary: Summary): string {
@@ -71,7 +74,7 @@ function renderRow(opening: Opening, signedIn: boolean): string {
       </td>
       <td><a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">${escapeHtml(opening.owner)}</a></td>
       <td class="community-score">${opening.winProbability === null ? "—" : percent(opening.winProbability)}</td>
-      <td class="community-settings">${escapeHtml(opening.winProbability === null ? (opening.reason ?? "Not ranked yet") : settingsLabel(opening))}</td>
+      <td class="community-settings">${opening.winProbability === null ? escapeHtml(opening.reason ?? "Not ranked yet") : settingsLabel(opening)}</td>
       <td class="community-action">${action}</td>
     </tr>
   `;
@@ -117,7 +120,8 @@ function render(main: HTMLElement, summary: Summary, openings: Opening[], signed
           <p class="profile-subtitle">
             Up to ten shared openings per side, best score first. The expected score is the win percentage plus half
             of the draw percentage, if you always play the prepared moves and opponents reply as in the Explorer.
-            Only openings evaluated with Lichess's Explorer are listed. Names open their Lirep profiles.
+            Only openings evaluated with Lichess's Explorer, on all Lichess players' games or on Masters games, are
+            listed; scores calculated from one particular player's games are left out. Names open their Lirep profiles.
           </p>
         </div>
       </div>

@@ -33,6 +33,7 @@
   --primary-hover: #4aa0f0;
   --good: #3fbf60;
   --warn: #e0a53f;
+  --lirep: #ef8a3c;
   --info: #8dbbd8;
   --bad: #d62929;
   --bad-soft: #e05252;
@@ -59,6 +60,7 @@
   --primary-hover: #1565b3;
   --good: #1d8a3a;
   --warn: #a5680f;
+  --lirep: #c0570f;
   --info: #2a6f99;
   --bad: #c42323;
   --bad-soft: #c93a3a;
@@ -2804,4 +2806,25 @@ body {
 .landing__feature p {
   margin: 0;
   line-height: 1.5;
+}
+
+/* "Lirep" as an Explorer source: orange, linking to what its data is. */
+.source-lirep {
+  color: var(--lirep);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.source-lirep:hover {
+  text-decoration: underline;
+}
+
+.source-lichess {
+  color: var(--good);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.source-lichess:hover {
+  text-decoration: underline;
 }

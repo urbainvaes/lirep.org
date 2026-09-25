@@ -96,14 +96,27 @@
         <p>Each detail-page action runs independently and updates its own result/timestamp without clearing the other. All three action buttons are disabled while any one runs. Only the win-probability action starts a backend job: poll <code>GET /api/jobs/{jobId}</code> about every 400 ms, estimating progress from tree size because the actual total is unknown. The two local actions show discovery and then exact engine-work progress. On failure, show the message beside the relevant bar and re-enable the actions.</p>
       </section>
 
-      <section>
+      <section id="explorer-settings">
         <h2>Explorer settings</h2>
-        <p>Show the study's editable settings on the detail page, including Lirep/Lichess data source. Lirep uses its local rated-game archive and has no Masters database; Lichess offers Players and Masters. Changing the controls alone does not trigger calculation. The next win-probability or expected-evaluation action sends the selected settings and saves them as the study's new settings (not a temporary preview), so subsequent views and calculations use them.</p>
+        <p>Each study saves its own Explorer settings, shown and editable on its Stats page and in the study page's Explorer panel. Win probability, coverage and expected evaluation are all calculated from the Explorer data these settings select, and the community leaderboard shows, next to each score, the settings it was calculated with.</p>
+        <h3>Data source</h3>
         <ul>
-          <li>Players, Masters or Player database (one named player's games as the studied side). Masters disables rating and speed controls; Player disables only the rating control.</li>
+          <li><strong>Lirep</strong>: Lirep's own copy of Lichess's open-source opening explorer, seeded with games from Lichess's public database (released under CC0). It currently holds the rated standard games from February and March 2016, about 10.7 million games. It has no rate limit, its responses are not cached because they never change, and it has no Masters database. The data is a subset: two months of mostly 2016-era play, so move frequencies may differ from today's. Lirep is offered only when the server has its local explorer configured.</li>
+          <li><strong>Lichess</strong>: Lichess's hosted opening explorer, with its full and up-to-date databases. It is rate-limited, so Lirep caches its responses for 30 days (24 hours for the Player database), shared across studies and accounts; on an HTTP 429, wait a minute before retrying. It requires Lichess sign-in.</li>
+        </ul>
+        <h3>Database</h3>
+        <ul>
+          <li><strong>Players</strong>: games between Lichess players, filtered by rating and speed. Available from both sources.</li>
+          <li><strong>Masters</strong>: over-the-board games by strong players (rated 2200 FIDE and above). Only from Lichess; it disables the rating and speed controls, which do not filter it.</li>
+          <li><strong>Player</strong>: one named player's games as the studied side (like the Player tab of Lichess's explorer), defaulting to the signed-in account. Always queried from Lichess, whatever the source setting; it disables only the rating control. Scores calculated from it are not ranked on the community leaderboard, since they describe one player rather than the whole pool.</li>
+        </ul>
+        <h3>Rating and speed</h3>
+        <ul>
           <li>For Players, select a fixed rating threshold; that bucket and every higher bucket are included. A new study's picker starts pre-selected at the signed-in player's own bracket (Reference rating order Rapid, Blitz, Classical; default 1500 if unrated), but it's a one-time default like any other saved setting, not a mode that keeps tracking the player's rating.</li>
           <li>Bullet, Blitz, Rapid, and Classical checkboxes; default to Blitz, Rapid, Classical, and always require at least one speed.</li>
         </ul>
+        <h3>When settings take effect</h3>
+        <p>Changing the controls on the Stats page alone does not trigger calculation. The next win-probability or expected-evaluation action sends the selected settings and saves them as the study's new settings (not a temporary preview), so subsequent views and calculations use them.</p>
       </section>
 
       <section>
