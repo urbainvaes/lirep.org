@@ -2,6 +2,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from .auth import ACCOUNT_URL
+from .config import HTTP_TIMEOUT
 
 LICHESS_EXPLORER_URL = "https://explorer.lichess.org/lichess"
 MASTERS_EXPLORER_URL = "https://explorer.lichess.org/masters"
@@ -97,7 +98,7 @@ async def explorer_defaults(request: Request) -> dict:
     token = request.session.get("access_token")
     default_min_rating = _bucket_for(DEFAULT_REFERENCE_RATING)
     if token:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             account_resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {token}"})
         if account_resp.status_code == 200:
             default_min_rating = _bucket_for(_reference_rating(account_resp.json().get("perfs", {})))
@@ -124,7 +125,7 @@ async def explorer(
     headers = {"Authorization": f"Bearer {token}"}
 
     min_rating: int | None = None
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         if database != "masters" and minRating is None:
             account_resp = await client.get(ACCOUNT_URL, headers=headers)
             if account_resp.status_code != 200:

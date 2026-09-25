@@ -24,3 +24,8 @@ REDIRECT_URI = os.getenv("REDIRECT_URI", f"{FRONTEND_URL}/auth/callback")
 # dev (it just means sessions reset when the server restarts) but a stable
 # SESSION_SECRET should be set via .env for anything longer-lived.
 SESSION_SECRET = os.getenv("SESSION_SECRET") or secrets.token_hex(32)
+
+# httpx's own default is 5s across connect/read/write/pool, which is tight
+# enough that a brief network blip can fail an otherwise-fine login. Used for
+# every httpx.AsyncClient() that talks to lichess.org.
+HTTP_TIMEOUT = 10.0

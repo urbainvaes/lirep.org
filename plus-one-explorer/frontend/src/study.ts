@@ -17,7 +17,7 @@ import {
   type ExplorerSpeed,
 } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { addMove, createEmptyTree, deleteSubtree, renderTree, sanPathTo, type StudyTree } from "./tree";
+import { addMove, createEmptyTree, deleteSubtree, pathTo, renderTree, sanPathTo, type StudyTree } from "./tree";
 
 interface StudyStats {
   winProbability: number;
@@ -143,10 +143,14 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
           placeholder="Name this study"
           value="${existing ? escapeHtml(existing.name) : ""}"
         />
-        <select id="study-color" class="study-color-select" title="Which side is this repertoire for?">
-          <option value="white" ${(existing?.side ?? "white") === "white" ? "selected" : ""}>Playing White</option>
-          <option value="black" ${existing?.side === "black" ? "selected" : ""}>Playing Black</option>
-        </select>
+        ${
+          existing
+            ? `<span class="study-color-badge">${existing.side === "white" ? "Playing White" : "Playing Black"}</span>`
+            : `<select id="study-color" class="study-color-select" title="Which side is this repertoire for? This can't be changed after saving.">
+                 <option value="white">Playing White</option>
+                 <option value="black">Playing Black</option>
+               </select>`
+        }
       </div>
       <div class="study-grid">
         <div class="study-card study-card--board">
@@ -156,6 +160,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
         <div class="study-card study-card--moves">
           <div id="tree-view" class="tree-view"></div>
           <p class="tree-hint">Click a move to jump there. Play a different move from any point to start a variation.</p>
+          <p id="move-conflict" class="move-conflict" hidden></p>
           <div class="study-actions">
             <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
             <button id="delete-btn" class="btn btn-secondary" type="button">Delete this move</button>
@@ -218,9 +223,10 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const nameInput = document.getElementById("study-name") as HTMLInputElement;
-  const colorSelect = document.getElementById("study-color") as HTMLSelectElement;
+  const colorSelect = document.getElementById("study-color") as HTMLSelectElement | null;
   const errorEl = document.getElementById("study-error") as HTMLElement;
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
+  const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
   let currentId = tree.rootId;
@@ -228,10 +234,44 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
   let explorerRequestId = 0;
   let engine: Engine | null = null;
 
+  // Remembers, per node, which child was last navigated into from it — so
+  // arrow-key "forward"/"end of line" continue along whichever branch you're
+  // currently viewing (e.g. a variation you clicked into) rather than always
+  // jumping back to the tree's main line, matching Lichess's own behavior.
+  const lastChild: Record<number, number> = {};
+
+  function currentSide(): "white" | "black" {
+    return colorSelect ? (colorSelect.value as "white" | "black") : (existing?.side ?? "white");
+  }
+
+  // Enforces "only one reply for the studied side at any position" (the
+  // opponent can still branch freely). Returns the SAN of the move already
+  // recorded there if `san` would violate that, or null if the move is fine
+  // (a fresh position, the opponent's move, or replaying the existing move).
+  function conflictingMove(nodeId: number, san: string, moveColor: "w" | "b"): string | null {
+    const isStudiedSide = (moveColor === "w") === (currentSide() === "white");
+    if (!isStudiedSide) return null;
+    const node = tree.nodes[nodeId];
+    if (node.children.length === 0) return null;
+    if (node.children.some((childId) => tree.nodes[childId].san === san)) return null;
+    return tree.nodes[node.children[0]].san;
+  }
+
+  function reportConflict(existingSan: string): void {
+    moveConflictEl.textContent = `You already have a move here (${existingSan}). Delete it first to replace it.`;
+    moveConflictEl.hidden = false;
+  }
+
   function playSan(san: string): void {
     const chess = positionAt(tree, currentId);
     const move = chess.move(san);
     if (!move) return;
+    const conflict = conflictingMove(currentId, move.san, move.color);
+    if (conflict) {
+      goTo(currentId);
+      reportConflict(conflict);
+      return;
+    }
     goTo(addMove(tree, currentId, move.san));
   }
 
@@ -239,6 +279,12 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     const chess = positionAt(tree, currentId);
     const move = chess.move({ from: orig, to: dest, promotion: "q" });
     if (!move) return;
+    const conflict = conflictingMove(currentId, move.san, move.color);
+    if (conflict) {
+      goTo(currentId); // snap the piece back — chessground already moved it visually
+      reportConflict(conflict);
+      return;
+    }
     goTo(addMove(tree, currentId, move.san));
   }
 
@@ -270,6 +316,12 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     const chess = positionAt(tree, currentId);
     const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
     if (!move) return;
+    const conflict = conflictingMove(currentId, move.san, move.color);
+    if (conflict) {
+      goTo(currentId);
+      reportConflict(conflict);
+      return;
+    }
     goTo(addMove(tree, currentId, move.san));
   }
 
@@ -319,7 +371,22 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     });
   }
 
+  function renderTreeView(): void {
+    treeViewEl.innerHTML = renderTree(tree, currentId, currentSide());
+    treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
+      el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
+    });
+  }
+
   function goTo(nodeId: number): void {
+    moveConflictEl.hidden = true;
+
+    // Record the path taken so arrow-key navigation can follow it later.
+    const path = pathTo(tree, nodeId);
+    for (let i = 0; i < path.length - 1; i++) {
+      lastChild[path[i].id] = path[i + 1].id;
+    }
+
     currentId = nodeId;
     const chess = positionAt(tree, currentId);
     board.set({
@@ -328,13 +395,31 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
       movable: { color: toColor(chess), dests: computeDests(chess) },
     });
 
-    treeViewEl.innerHTML = renderTree(tree, currentId);
-    treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
-      el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
-    });
+    renderTreeView();
     deleteBtn.disabled = currentId === tree.rootId;
     void updateExplorer(chess.fen());
     void updateEngine(chess);
+  }
+
+  function stepBack(): void {
+    const parentId = tree.nodes[currentId].parentId;
+    if (parentId !== null) goTo(parentId);
+  }
+
+  function stepForward(): void {
+    const node = tree.nodes[currentId];
+    const next = lastChild[currentId] ?? node.children[0];
+    if (next !== undefined) goTo(next);
+  }
+
+  function goToLineEnd(): void {
+    let nodeId = currentId;
+    let next = lastChild[nodeId] ?? tree.nodes[nodeId].children[0];
+    while (next !== undefined) {
+      nodeId = next;
+      next = lastChild[nodeId] ?? tree.nodes[nodeId].children[0];
+    }
+    if (nodeId !== currentId) goTo(nodeId);
   }
 
   board = createBoard(boardEl, onMove);
@@ -347,6 +432,35 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     const parentId = tree.nodes[currentId].parentId as number;
     deleteSubtree(tree, currentId);
     goTo(parentId);
+  });
+
+  colorSelect?.addEventListener("change", renderTreeView);
+
+  // Lichess-style keyboard navigation: Left/Right step through the line
+  // you're currently viewing, Up jumps to the start, Down to its end.
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement;
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+
+    switch (e.key) {
+      case "ArrowLeft":
+        e.preventDefault();
+        stepBack();
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        stepForward();
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        goTo(tree.rootId);
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        goToLineEnd();
+        break;
+    }
   });
 
   function setSpeedControlsDisabled(disabled: boolean): void {
@@ -407,8 +521,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
       errorEl.hidden = false;
       return;
     }
-    const side = colorSelect.value as "white" | "black";
-    const saved = await saveStudy(existing?.id ?? null, name, tree, settings, side);
+    const saved = await saveStudy(existing?.id ?? null, name, tree, settings, currentSide());
     if (!saved) {
       errorEl.textContent = "Could not save. Please try again.";
       errorEl.hidden = false;

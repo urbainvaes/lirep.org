@@ -70,7 +70,13 @@ export function mainLineSans(tree: StudyTree): string[] {
   return sans;
 }
 
-function renderLine(tree: StudyTree, startNodeId: number, startDepth: number, currentId: number): string {
+function renderLine(
+  tree: StudyTree,
+  startNodeId: number,
+  startDepth: number,
+  currentId: number,
+  side: "white" | "black",
+): string {
   let html = "";
   let nodeId: number | undefined = startNodeId;
   let depth = startDepth;
@@ -80,14 +86,17 @@ function renderLine(tree: StudyTree, startNodeId: number, startDepth: number, cu
     const node: TreeNode = tree.nodes[nodeId];
     const moveNumber = Math.floor((depth - 1) / 2) + 1;
     const isWhite = depth % 2 === 1;
+    const isStudiedSide = isWhite === (side === "white");
     const label = needsNumber ? `${moveNumber}.${isWhite ? "" : ".."} ` : "";
-    const cls = nodeId === currentId ? "tree-move tree-move--current" : "tree-move";
-    html += `<span class="${cls}" data-node-id="${nodeId}">${label}${escapeHtml(node.san as string)}</span> `;
+    const classes = ["tree-move"];
+    if (isStudiedSide) classes.push("tree-move--mine");
+    if (nodeId === currentId) classes.push("tree-move--current");
+    html += `<span class="${classes.join(" ")}" data-node-id="${nodeId}">${label}${escapeHtml(node.san as string)}</span> `;
     needsNumber = false;
 
     const [mainChildId, ...variations]: number[] = node.children;
     for (const variationId of variations) {
-      html += `<span class="tree-variation">(${renderLine(tree, variationId, depth + 1, currentId)})</span> `;
+      html += `<span class="tree-variation">(${renderLine(tree, variationId, depth + 1, currentId, side)})</span> `;
       needsNumber = true;
     }
     nodeId = mainChildId;
@@ -97,15 +106,15 @@ function renderLine(tree: StudyTree, startNodeId: number, startDepth: number, cu
   return html.trim();
 }
 
-export function renderTree(tree: StudyTree, currentId: number): string {
+export function renderTree(tree: StudyTree, currentId: number, side: "white" | "black"): string {
   const root = tree.nodes[tree.rootId];
   if (root.children.length === 0) {
     return '<span class="tree-empty">No moves yet — play them on the board.</span>';
   }
   const [mainChildId, ...variations] = root.children;
-  let html = renderLine(tree, mainChildId, 1, currentId);
+  let html = renderLine(tree, mainChildId, 1, currentId, side);
   for (const variationId of variations) {
-    html += ` <span class="tree-variation">(${renderLine(tree, variationId, 1, currentId)})</span>`;
+    html += ` <span class="tree-variation">(${renderLine(tree, variationId, 1, currentId, side)})</span>`;
   }
   return html;
 }

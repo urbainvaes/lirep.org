@@ -297,6 +297,17 @@ body {
   padding: 16px;
 }
 
+.stat-card[role="button"] {
+  cursor: pointer;
+  transition: border-color 0.15s ease-in-out;
+}
+
+.stat-card[role="button"]:hover,
+.stat-card[role="button"]:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+
 .stat-card__header {
   display: flex;
   justify-content: space-between;
@@ -312,9 +323,28 @@ body {
 }
 
 .stat-card__side {
+  display: inline-flex;
+  align-items: center;
   color: var(--text-dim);
   font-size: 0.75rem;
   white-space: nowrap;
+}
+
+.side-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  border: 1px solid var(--border);
+}
+
+.side-dot--white {
+  background: #f0f0f0;
+}
+
+.side-dot--black {
+  background: #2b2b2b;
 }
 
 .stat-card__score {
@@ -326,6 +356,11 @@ body {
 
 .stat-card__score--empty {
   color: var(--text-dim);
+}
+
+.stat-card__medal {
+  font-size: 1.6rem;
+  vertical-align: middle;
 }
 
 .stat-card__label {
@@ -343,6 +378,49 @@ body {
 
 .stat-card__recalc {
   width: 100%;
+}
+
+.stat-page {
+  max-width: 720px;
+  margin-top: 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.stat-page__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.stat-page__header h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.4rem;
+}
+
+.stat-detail__score {
+  color: var(--primary);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-top: 16px;
+}
+
+.stat-detail__chart-title {
+  margin: 28px 0 4px;
+  color: var(--text-strong);
+  font-size: 1.1rem;
+}
+
+.coverage-chart-wrap {
+  position: relative;
+  height: 320px;
+  margin-top: 8px;
 }
 
 .study-editor {
@@ -377,6 +455,24 @@ body {
   border-radius: 6px;
   color: var(--text-strong);
   font-size: 0.9rem;
+}
+
+.study-color-badge {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.move-conflict {
+  margin: 0;
+  color: #d62929;
+  font-size: 0.8rem;
 }
 
 .study-grid {
@@ -427,6 +523,10 @@ body {
 
 .tree-move:hover {
   background: var(--border);
+}
+
+.tree-move--mine {
+  color: var(--primary-hover);
 }
 
 .tree-move--current {

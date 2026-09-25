@@ -56,17 +56,25 @@ line. It's modeled as a flat map of nodes (`{id, san, parentId, children}`)
 rather than a single move list, so a study can hold a main line plus any
 number of side variations — exactly like a real PGN with variations.
 
-Each study also has a **side** (Playing White / Playing Black), picked next to
-the name field. This didn't matter for editing alone, but it's required for
-the Stats tab below to know whose moves are "book" and whose are the
-opponent's.
+Each study also has a **side** (Playing White / Playing Black), chosen **only
+when first creating the study** — the picker is a `<select>` on a brand-new
+study, but a plain read-only badge once it exists (enforced server-side too:
+`PUT /api/studies/{id}` always keeps the study's original `side`, ignoring
+whatever the client sends). It's needed for the Stats tab below to know whose
+moves are "book" and whose are the opponent's, and changing it after the fact
+would silently invalidate that whole calculation.
 
 **Editing (`study.html`):**
 - Play moves directly on the board. Playing a move appends it as a child of
   wherever you currently are in the tree.
 - If you replay a move that's already there, it just navigates into that
   existing branch instead of duplicating it; playing something new creates a
-  fresh variation.
+  fresh variation — **except for the studied side's own moves**, where only
+  one reply is ever allowed at a given position (the opponent can still
+  branch freely). Trying to play a second, different move of your own there
+  is rejected with a message telling you to delete the existing one first —
+  this keeps "perfect memorization" in the Stats tab meaningful: there's
+  always exactly one thing you'd play, never an ambiguous choice.
 - The move list next to the board is a clickable PGN-style tree: the main
   line reads left to right, and any variation appears in parentheses. Click
   any move (mainline or variation) to jump the board there.
@@ -172,11 +180,11 @@ study's tree from the root:
 
 **Explicit assumptions / simplifications, since this is easy to get wrong
 silently:**
-- **You always play your main line.** If a node where it's your move has
-  more than one prepared child (you recorded alternatives for yourself, not
-  just for the opponent), only the *first* child is used — exactly as
-  "mainline" is defined elsewhere in this tool. The calculation can't guess
-  which one you'd actually pick over the board.
+- **You always play your one prepared move.** The editor enforces this by
+  construction (see "Editing" above): a position where it's the studied
+  side's move can only ever have one recorded child. There's never an
+  ambiguous "which of my own alternatives would I actually pick" case for
+  this calculation to guess at.
 - **Leaving your own prep uses a neutral estimate, not a guess.** If the
   tree ends on *your* move (you haven't decided how to continue), the score
   there falls back to the position's overall explorer statistics — i.e. what

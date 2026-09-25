@@ -21,6 +21,7 @@ export default defineConfig({
         studies: resolve(__dirname, "studies.html"),
         study: resolve(__dirname, "study.html"),
         stats: resolve(__dirname, "stats.html"),
+        stat: resolve(__dirname, "stat.html"),
       },
     },
   },

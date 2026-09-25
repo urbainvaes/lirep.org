@@ -3,6 +3,9 @@ import { mainLineSans, type StudyTree } from "./tree";
 
 interface StudyStats {
   winProbability: number;
+  // Optional: stats computed before this field existed won't have it —
+  // "Recalculate" fills it in.
+  coverage?: number[]; // coverage[i] = fraction of games still in-book after move i+1
   calculatedAt: string;
   database: "lichess" | "masters";
   minRating: number | null;
@@ -17,6 +20,8 @@ interface Study {
   side: "white" | "black";
   stats: StudyStats | null;
 }
+
+const studiesById = new Map<number, Study>();
 
 function renderSignedOut(grid: HTMLElement): void {
   grid.innerHTML = `
@@ -38,12 +43,25 @@ function statsSourceLabel(stats: StudyStats): string {
   return stats.database === "masters" ? "Masters" : `Players ${stats.minRating ?? "?"}+`;
 }
 
+// Gamification tiers for the expected score. 50% is breakeven for any
+// opening, so these mark increasingly meaningful practical edges above it.
+function medalFor(winProbability: number): string {
+  const pct = winProbability * 100;
+  if (pct >= 60) return "🥇";
+  if (pct >= 55) return "🥈";
+  if (pct >= 50) return "🥉";
+  return "";
+}
+
 function statCard(study: Study): string {
+  studiesById.set(study.id, study);
+
   const sideLabel = study.side === "white" ? "Playing White" : "Playing Black";
+  const sideDotClass = `side-dot side-dot--${study.side}`;
   const hasMoves = mainLineSans(study.tree).length > 0 || Object.keys(study.tree.nodes).length > 1;
 
   const scoreHtml = study.stats
-    ? `<div class="stat-card__score">${(study.stats.winProbability * 100).toFixed(1)}%</div>`
+    ? `<div class="stat-card__score">${(study.stats.winProbability * 100).toFixed(1)}% <span class="stat-card__medal">${medalFor(study.stats.winProbability)}</span></div>`
     : `<div class="stat-card__score stat-card__score--empty">—</div>`;
 
   const metaHtml = study.stats
@@ -54,10 +72,10 @@ function statCard(study: Study): string {
     : `<p class="stat-card__meta">Not calculated yet.</p>`;
 
   return `
-    <div class="stat-card" data-study-id="${study.id}">
+    <div class="stat-card" data-study-id="${study.id}" ${study.stats ? 'tabindex="0" role="button"' : ""}>
       <div class="stat-card__header">
         <h3>${escapeHtml(study.name)}</h3>
-        <span class="stat-card__side">${sideLabel}</span>
+        <span class="stat-card__side"><span class="${sideDotClass}"></span>${sideLabel}</span>
       </div>
       ${scoreHtml}
       <p class="stat-card__label">Expected score, assuming perfect memorization</p>
@@ -98,13 +116,31 @@ async function recalculate(studyId: number, btn: HTMLButtonElement, card: HTMLEl
   }
 }
 
+function openDetail(studyId: number): void {
+  window.location.href = `/stat.html?id=${studyId}`;
+}
+
 function attachCardHandlers(grid: HTMLElement): void {
   grid.querySelectorAll<HTMLButtonElement>(".stat-card__recalc").forEach((btn) => {
-    btn.onclick = () => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
       const card = btn.closest(".stat-card") as HTMLElement;
       const studyId = Number(btn.dataset.studyId);
       void recalculate(studyId, btn, card);
     };
+  });
+
+  grid.querySelectorAll<HTMLElement>(".stat-card").forEach((card) => {
+    const studyId = Number(card.dataset.studyId);
+    const study = studiesById.get(studyId);
+    if (!study?.stats) return; // nothing to show yet
+    card.addEventListener("click", () => openDetail(studyId));
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openDetail(studyId);
+      }
+    });
   });
 }
 

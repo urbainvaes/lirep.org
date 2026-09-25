@@ -7,7 +7,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from .config import FRONTEND_URL, LICHESS_CLIENT_ID, REDIRECT_URI
+from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, REDIRECT_URI
 
 AUTHORIZE_URL = "https://lichess.org/oauth"
 TOKEN_URL = "https://lichess.org/api/token"
@@ -73,7 +73,7 @@ async def callback(
     if not expected_state or state != expected_state or not verifier:
         raise HTTPException(status_code=400, detail="invalid oauth state")
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         token_resp = await client.post(
             TOKEN_URL,
             data={
@@ -89,7 +89,7 @@ async def callback(
 
     access_token = token_resp.json()["access_token"]
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         account_resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {access_token}"})
     if account_resp.status_code != 200:
         raise HTTPException(status_code=502, detail="lichess account fetch failed")
@@ -104,7 +104,7 @@ async def logout(request: Request) -> RedirectResponse:
     token = request.session.pop("access_token", None)
     request.session.clear()
     if token:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             await client.delete(TOKEN_URL, headers={"Authorization": f"Bearer {token}"})
     return RedirectResponse(FRONTEND_URL)
 
@@ -115,7 +115,7 @@ async def me(request: Request) -> dict:
     if not token:
         return {"authenticated": False}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {token}"})
     if resp.status_code != 200:
         return {"authenticated": False}
@@ -133,7 +133,7 @@ async def profile(request: Request) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="not authenticated")
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {token}"})
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail="lichess account fetch failed")
@@ -162,7 +162,7 @@ async def board_theme(request: Request) -> dict:
     if not token:
         return DEFAULT_BOARD_THEME
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         resp = await client.get(PREFERENCES_URL, headers={"Authorization": f"Bearer {token}"})
     if resp.status_code != 200:
         # Most commonly: an older session without the preference:read scope.

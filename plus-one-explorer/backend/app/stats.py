@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from . import store
 from .auth import ACCOUNT_URL
+from .config import HTTP_TIMEOUT
 from .explorer import (
     DEFAULT_SPEEDS,
     LICHESS_EXPLORER_URL,
@@ -155,6 +156,55 @@ class _Evaluator:
             expected += weight * value
         return expected
 
+    async def coverage(self, tree: dict, side: Literal["white", "black"]) -> list[float]:
+        """Coverage[i] = probability a real game (sampled the same way as `score`)
+        is still following a line inside the tree after move i+1 (both colors'
+        (i+1)-th moves played). Reuses this evaluator's explorer cache, so it's
+        nearly free after `score` has already walked the same tree.
+        """
+        depth_mass: dict[int, float] = {}
+
+        async def walk(node_id: int, depth: int, prob: float) -> None:
+            if prob < 1e-4:
+                return
+            depth_mass[depth] = depth_mass.get(depth, 0.0) + prob
+
+            board = chess.Board()
+            for san in _sans_to(tree, node_id):
+                board.push_san(san)
+            if board.outcome() is not None:
+                return
+
+            studied_side_to_move = (board.turn == chess.WHITE) == (side == "white")
+            node = _get_node(tree, node_id)
+
+            if studied_side_to_move:
+                if not node["children"]:
+                    return
+                await walk(node["children"][0], depth + 1, prob)
+                return
+
+            data = await self._fetch(board.fen())
+            moves = data.get("moves", [])
+            total_games = sum(m["white"] + m["draws"] + m["black"] for m in moves)
+            if total_games == 0:
+                return
+            children_by_san = {_get_node(tree, child_id)["san"]: child_id for child_id in node["children"]}
+            for move in moves:
+                games = move["white"] + move["draws"] + move["black"]
+                if games == 0:
+                    continue
+                weight = games / total_games
+                child_id = children_by_san.get(move["san"])
+                if child_id is not None:
+                    await walk(child_id, depth + 1, prob * weight)
+                # else: this probability mass has left the book — not tracked further.
+
+        await walk(tree["rootId"], 0, 1.0)
+
+        max_ply = max(depth_mass.keys(), default=0)
+        return [depth_mass.get(ply, 0.0) for ply in range(2, max_ply + 1, 2)]
+
 
 @router.post("/api/studies/{study_id}/stats")
 async def recalculate_stats(study_id: int, request: Request) -> dict:
@@ -174,7 +224,7 @@ async def recalculate_stats(study_id: int, request: Request) -> dict:
 
     min_rating = explorer_settings.get("minRating")
     if database == "lichess" and min_rating is None:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             account_resp = await client.get(ACCOUNT_URL, headers=headers)
         if account_resp.status_code != 200:
             raise HTTPException(status_code=502, detail="lichess account fetch failed")
@@ -183,9 +233,11 @@ async def recalculate_stats(study_id: int, request: Request) -> dict:
     async with httpx.AsyncClient(timeout=20.0) as client:
         evaluator = _Evaluator(client, headers, database, min_rating, speeds)
         win_probability = await evaluator.score(study["tree"], study["tree"]["rootId"], study["side"])
+        coverage = await evaluator.coverage(study["tree"], study["side"])
 
     stats = {
         "winProbability": win_probability,
+        "coverage": coverage,
         "calculatedAt": datetime.now(UTC).isoformat(),
         "database": database,
         "minRating": min_rating,

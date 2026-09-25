@@ -60,9 +60,16 @@ def update_study(study_id: int, payload: StudyIn, request: Request) -> dict:
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name required")
-    study = store.update_study(
-        owner, study_id, name, payload.tree, payload.explorerSettings.model_dump(), payload.side
-    )
-    if not study:
+
+    # Side is chosen once at creation and can't change afterwards (the tree's
+    # one-move-per-studied-side rule and the Stats calculation both assume a
+    # fixed side) — so a PUT can never alter it, no matter what's sent.
+    existing = store.get_study(owner, study_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="not found")
+
+    study = store.update_study(
+        owner, study_id, name, payload.tree, payload.explorerSettings.model_dump(), existing["side"]
+    )
+    assert study is not None
     return study
