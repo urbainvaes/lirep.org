@@ -51,12 +51,17 @@ function getStudyId(): number | null {
 
 async function loadStudy(id: number): Promise<Study | null> {
   const res = await fetch(`/api/studies/${id}`, { credentials: "same-origin" });
-  return res.ok ? res.json() : null;
+  // Only a real 404 means "no such study" — any other failure (expired
+  // session, a 500) is a transient error, not an empty state, so it's
+  // thrown instead and caught by init()'s try/catch with its own message.
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`failed to load study (${res.status})`);
+  return res.json();
 }
 
 async function loadQueue(id: number): Promise<number[]> {
   const res = await fetch(`/api/studies/${id}/practice/queue`, { credentials: "same-origin" });
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error(`failed to load practice queue (${res.status})`);
   const data = await res.json();
   return data.nodeIds as number[];
 }
@@ -350,7 +355,15 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     promptEl.textContent = "Nice work — loading more…";
     progressEl.textContent = "Round complete";
 
-    const nodeIds = await loadQueue(study.id);
+    let nodeIds: number[];
+    try {
+      nodeIds = await loadQueue(study.id);
+    } catch {
+      promptEl.className = "practice-prompt practice-prompt--incorrect";
+      promptEl.textContent = "Could not load the next round — check your connection and reload.";
+      progressEl.textContent = "";
+      return;
+    }
     const nextSteps = buildSteps(tree, startNodeId, new Set(nodeIds));
     if (nextSteps.length === 0) {
       await stop();
