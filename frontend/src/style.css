@@ -2750,3 +2750,69 @@ body {
 .tool-table td:first-child {
   min-width: 190px;
 }
+
+.landing {
+  display: grid;
+  gap: 40px;
+}
+
+.landing__hero {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.landing__hero h1 {
+  margin: 0 0 16px;
+  color: var(--text-strong);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  line-height: 1.2;
+}
+
+.landing__pitch {
+  margin: 0 0 28px;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.landing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.landing__cta {
+  padding: 10px 20px;
+  font-size: 1rem;
+}
+
+.landing__note {
+  margin: 16px 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.landing__features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.landing__feature {
+  padding: 20px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.landing__feature h2 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 1.05rem;
+}
+
+.landing__feature p {
+  margin: 0;
+  line-height: 1.5;
+}
