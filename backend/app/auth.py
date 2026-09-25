@@ -8,8 +8,8 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, REDIRECT_URI
-from .store import register_user, touch_user
+from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, MAX_USERS, REDIRECT_URI
+from .store import register_user, register_user_limited, touch_user
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +156,20 @@ async def callback(
         )
 
     account = account_resp.json()
+    if register_user_limited(account["username"], MAX_USERS) is None:
+        # Beta is full: nothing is kept (no session), and the token is revoked.
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                await client.delete(TOKEN_URL, headers={"Authorization": f"Bearer {access_token}"})
+        except httpx.HTTPError:
+            pass
+        return _sign_in_error(
+            f"lirep.org is in a closed beta limited to {MAX_USERS} users, and all places are taken. "
+            "Please come back later."
+        )
     request.session["access_token"] = access_token
     request.session["username"] = account["username"]
     request.session["title"] = account.get("title")
-    register_user(account["username"])
     touch_user(account["username"])
     return RedirectResponse(FRONTEND_URL)
 
@@ -183,6 +193,11 @@ async def logout(request: Request) -> RedirectResponse:
 async def me(request: Request) -> dict:
     username = request.session.get("username")
     if not username or not request.session.get("access_token"):
+        return {"authenticated": False}
+    # A session that predates the user table could belong to someone who is
+    # not registered; they only stay signed in if there is still room.
+    if register_user_limited(username, MAX_USERS) is None:
+        request.session.clear()
         return {"authenticated": False}
     # Every page asks /api/me on load, which makes it a cheap "was seen" signal.
     touch_user(username)

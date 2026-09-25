@@ -47,3 +47,8 @@ HTTP_TIMEOUT = 10.0
 # Optional local Lichess Explorer base URL, e.g. http://127.0.0.1:9002.
 LOCAL_LICHESS_EXPLORER_URL = os.getenv("LOCAL_LICHESS_EXPLORER_URL", "").rstrip("/")
 DEFAULT_EXPLORER_SOURCE = "lirep" if LOCAL_LICHESS_EXPLORER_URL else "lichess"
+
+# Beta limit: how many different users may have an account on this server.
+# People already registered can always sign in; once the limit is reached,
+# new sign-ins are turned away. 0 means no limit.
+MAX_USERS = int(os.getenv("MAX_USERS", "100"))

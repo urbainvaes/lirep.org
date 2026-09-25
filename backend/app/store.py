@@ -222,6 +222,23 @@ def register_user(username: str) -> int:
     return int(row["id"])
 
 
+def register_user_limited(username: str, limit: int) -> int | None:
+    """Like register_user, but a *new* user is refused (None) once `limit`
+    users exist (0 = no limit). Users already registered always get their
+    number back. The check and the insert share one write transaction, so two
+    simultaneous first sign-ins cannot both take the last place."""
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if row is None:
+            if limit and conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] >= limit:
+                return None
+            conn.execute("INSERT INTO users (username) VALUES (?)", (username,))
+            row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
 def touch_user(username: str) -> None:
     """Records that the user was seen now (at most once an hour), for the
     Community page's "active this week" count. Registers them if needed."""
