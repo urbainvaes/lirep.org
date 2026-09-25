@@ -18,11 +18,12 @@ def _count_moves_and_lines(tree: dict) -> tuple[int, int]:
     return moves, lines
 
 
-def _entry(owner: str, study: dict, me: str | None) -> dict:
+def _entry(owner: str, study: dict, me: str | None, include_lirep: bool = False) -> dict:
     """A leaderboard row. Only win probabilities calculated from Lichess's own
     Explorer are comparable, so only those get a score and a rank; the rest are
     listed with the reason they are not ranked yet. Each scored row carries the
-    settings that produced it."""
+    settings that produced it. With include_lirep, scores calculated with the
+    local Lirep Explorer (a one-month, 2016 sample) are ranked too."""
     stats = study.get("stats") or {}
     settings = study["explorerSettings"]
     probability = stats.get("winProbability")
@@ -32,7 +33,7 @@ def _entry(owner: str, study: dict, me: str | None) -> dict:
     reason = None
     if probability is None:
         reason = "Stats not calculated yet"
-    elif source != "lichess":
+    elif source != "lichess" and not include_lirep:
         reason = "Calculated with the local Explorer, not Lichess's"
         probability = None
     elif (stats.get("database") or settings.get("database")) == "player":
@@ -46,6 +47,7 @@ def _entry(owner: str, study: dict, me: str | None) -> dict:
         "mine": me is not None and owner.lower() == me.lower(),
         "winProbability": probability,
         "reason": reason,
+        "source": source,
         "database": stats.get("database") or settings.get("database"),
         "minRating": stats.get("minRating", settings.get("minRating")),
         "speeds": stats.get("speeds") or settings.get("speeds") or [],
@@ -68,28 +70,22 @@ def summary() -> dict:
 
 
 @router.get("/api/community/openings")
-def openings(request: Request) -> list[dict]:
-    """Up to LEADERBOARD_SIZE evaluated shared studies per side: the best-scoring
-    first, then the ones evaluated with the local Explorer, which have no
-    comparable score. Ranks are per side."""
+def openings(request: Request, includeLirep: bool = False) -> list[dict]:
+    """Up to LEADERBOARD_SIZE ranked studies per side, best score first. Only
+    studies with a comparable score appear: win probabilities calculated with
+    Lichess's Explorer, plus (with includeLirep) those calculated with the
+    local Lirep Explorer. Everything else is left out. Ranks are per side."""
     me = request.session.get("username")
-    # Studies whose stats were never calculated have nothing to show: left out.
-    entries = [
-        _entry(owner, study, me)
-        for owner, study in store.list_shared_studies()
-        if (study.get("stats") or {}).get("winProbability") is not None
-    ]
+    entries = [_entry(owner, study, me, includeLirep) for owner, study in store.list_shared_studies()]
     shown: list[dict] = []
     for side in ("white", "black"):
-        group = [e for e in entries if e["side"] == side]
-        ranked = sorted((e for e in group if e["winProbability"] is not None),
-                        key=lambda e: e["winProbability"], reverse=True)
-        unranked = sorted((e for e in group if e["winProbability"] is None), key=lambda e: e["id"])
-        rank = 0
-        for entry in (ranked + unranked)[:LEADERBOARD_SIZE]:
-            if entry["winProbability"] is not None:
-                rank += 1
-                entry["rank"] = rank
+        ranked = sorted(
+            (e for e in entries if e["side"] == side and e["winProbability"] is not None),
+            key=lambda e: e["winProbability"],
+            reverse=True,
+        )
+        for rank, entry in enumerate(ranked[:LEADERBOARD_SIZE], start=1):
+            entry["rank"] = rank
             shown.append(entry)
     return shown
 

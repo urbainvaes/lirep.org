@@ -17,6 +17,7 @@ interface Opening {
   mine: boolean;
   winProbability: number | null;
   reason: string | null;
+  source: "lichess" | "lirep" | null;
   database: "lichess" | "masters" | null;
   minRating: number | null;
   speeds: string[];
@@ -30,7 +31,9 @@ const percent = (value: number): string => `${(value * 100).toFixed(1)}%`;
 // The Explorer settings the score was calculated with: win probability only
 // means something next to the rating band and time controls behind it.
 function settingsLabel(opening: Opening): string {
-  const database = opening.database === "masters" ? "Masters games" : "Lichess games";
+  const database = opening.source === "lirep"
+    ? "Lirep (local, Mar 2016 games)"
+    : opening.database === "masters" ? "Masters games" : "Lichess games";
   const rating = opening.database === "masters" ? "" : opening.minRating ? `${opening.minRating}+ · ` : "all ratings · ";
   const speeds = opening.database === "masters" || opening.speeds.length === 0 ? "" : opening.speeds.join(", ");
   return `${database}${rating || speeds ? " · " : ""}${rating}${speeds}`.replace(/ · $/, "");
@@ -85,7 +88,7 @@ function renderTable(openings: Opening[], signedIn: boolean, side: "white" | "bl
           <tbody>${group.map((o) => renderRow(o, signedIn)).join("")}</tbody>
         </table>
       </div>`
-    : `<div class="empty-state"><p>No shared openings for ${side === "white" ? "White" : "Black"} yet.</p></div>`;
+    : `<div class="empty-state"><p>No evaluated openings for ${side === "white" ? "White" : "Black"} yet.</p></div>`;
   return `
     <section class="opening-group">
       <h2>${title}</h2>
@@ -94,9 +97,13 @@ function renderTable(openings: Opening[], signedIn: boolean, side: "white" | "bl
   `;
 }
 
+const LIREP_HELP =
+  "Lirep is this site's own Explorer: only games from March 2016 (about 5.8 million rated games), a much smaller " +
+  "and older sample than Lichess's full database. Scores calculated with it are less reliable and not comparable " +
+  "with Lichess scores, so they are left out of the leaderboard unless you include them here.";
+
 function render(main: HTMLElement, summary: Summary, openings: Opening[], signedIn: boolean): void {
   main.innerHTML = `
-    <h1 class="page-title">Community</h1>
     <p class="doc-intro">What people are preparing on lirep.org.</p>
     ${renderStats(summary)}
 
@@ -106,17 +113,27 @@ function render(main: HTMLElement, summary: Summary, openings: Opening[], signed
           <h2>Opening leaderboard</h2>
           <p class="profile-subtitle">
             Up to ten shared openings per side, best score first. The expected score is the win percentage plus half
-            of the draw percentage, if you always play the prepared moves and opponents reply as in the Lichess
-            Explorer. Openings evaluated only with the local Explorer have no comparable score and are listed after the ranked ones. Names link to Lichess profiles.
+            of the draw percentage, if you always play the prepared moves and opponents reply as in the Explorer.
+            Only openings evaluated with Lichess's Explorer are listed. Names link to Lichess profiles.
           </p>
         </div>
       </div>
       <p class="community-note">
-        Scores come only from the hosted Lichess Explorer, with the rating band and time controls shown on each row,
-        so compare rows with the same settings. Studies are shared by default; authors can switch sharing off for any study on its page.
+        Scores come from the hosted Lichess Explorer, with the rating band and time controls shown on each row, so
+        compare rows with the same settings. Studies are shared by default; authors can switch sharing off for any
+        study on its page.
       </p>
+      <div class="community-options">
+        <label class="community-toggle">
+          <input type="checkbox" id="include-lirep" />
+          Include Lirep evaluations
+        </label>
+        <button id="lirep-help-btn" class="community-help" type="button" title="${LIREP_HELP}"
+          aria-label="What are Lirep evaluations?" aria-expanded="false" aria-controls="lirep-help">?</button>
+      </div>
+      <p id="lirep-help" class="community-note community-help-text" hidden>${LIREP_HELP}</p>
       <div id="community-message" class="community-message" role="status" aria-live="polite" hidden></div>
-      <div class="opening-groups">
+      <div id="community-tables" class="opening-groups">
         ${renderTable(openings, signedIn, "white")}
         ${renderTable(openings, signedIn, "black")}
       </div>
@@ -124,25 +141,57 @@ function render(main: HTMLElement, summary: Summary, openings: Opening[], signed
   `;
 
   const message = main.querySelector<HTMLElement>("#community-message")!;
-  main.querySelectorAll<HTMLButtonElement>("[data-import]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      try {
-        const res = await fetch(`/api/community/import/${button.dataset.import}`, {
-          method: "POST",
-          credentials: "same-origin",
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const study = await res.json();
-        message.hidden = false;
-        message.innerHTML = `Imported “${escapeHtml(study.name)}” into your studies. <a href="/study.html?id=${study.id}">Open it</a>`;
-        button.textContent = "Imported";
-      } catch {
-        button.disabled = false;
-        message.hidden = false;
-        message.textContent = "Could not import this opening. Please try again.";
-      }
+  const tables = main.querySelector<HTMLElement>("#community-tables")!;
+
+  function bindImports(): void {
+    tables.querySelectorAll<HTMLButtonElement>("[data-import]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const res = await fetch(`/api/community/import/${button.dataset.import}`, {
+            method: "POST",
+            credentials: "same-origin",
+          });
+          if (!res.ok) throw new Error(String(res.status));
+          const study = await res.json();
+          message.hidden = false;
+          message.innerHTML = `Imported “${escapeHtml(study.name)}” into your studies. <a href="/study.html?id=${study.id}">Open it</a>`;
+          button.textContent = "Imported";
+        } catch {
+          button.disabled = false;
+          message.hidden = false;
+          message.textContent = "Could not import this opening. Please try again.";
+        }
+      });
     });
+  }
+  bindImports();
+
+  const helpButton = main.querySelector<HTMLButtonElement>("#lirep-help-btn")!;
+  const helpText = main.querySelector<HTMLElement>("#lirep-help")!;
+  helpButton.addEventListener("click", () => {
+    helpText.hidden = !helpText.hidden;
+    helpButton.setAttribute("aria-expanded", String(!helpText.hidden));
+  });
+
+  const includeLirep = main.querySelector<HTMLInputElement>("#include-lirep")!;
+  includeLirep.addEventListener("change", async () => {
+    includeLirep.disabled = true;
+    try {
+      const res = await fetch(`/api/community/openings?includeLirep=${includeLirep.checked}`, {
+        credentials: "same-origin",
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const fresh: Opening[] = await res.json();
+      tables.innerHTML = renderTable(fresh, signedIn, "white") + renderTable(fresh, signedIn, "black");
+      bindImports();
+    } catch {
+      includeLirep.checked = !includeLirep.checked;
+      message.hidden = false;
+      message.textContent = "Could not update the leaderboard. Please try again.";
+    } finally {
+      includeLirep.disabled = false;
+    }
   });
 }
 
