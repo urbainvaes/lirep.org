@@ -49,6 +49,21 @@ win/coverage job also has an in-run FEN map to avoid even SQLite lookups on
 transpositions. Each browser calculation reuses Explorer responses in an
 in-memory map for its discovery and, for expected eval, weighting passes.
 
+Expired rows are removed at backend startup and during a throttled cleanup
+(after an hour or 1,000 cache writes, whichever comes first). Cleanup also
+enforces `EXPLORER_CACHE_MAX_BYTES` (512 MiB of raw keys and responses),
+evicting the oldest entries first when needed. The fetched-at index makes
+expiry checks and oldest-first eviction efficient. The size cap is checked
+during cleanup rather than on every request; SQLite may keep freed pages in
+its file for reuse instead of immediately shrinking the file on disk.
+
+Simultaneous requests for the same uncached key share one in-flight fetch
+and receive the same response or error. A failed fetch is not cached;
+cancelling one waiter does not cancel the task for others. If the initiating
+request closes its HTTP client while other callers still wait, the task
+retries with its own client. Separate backend worker processes do not share
+in-flight tasks, but still share SQLite.
+
 The Lirep source uses its configured local rated-game archive; Lichess
 offers Players and Masters. The same backend cache keys include the source,
 so results from one provider cannot be mistaken for another.
@@ -145,6 +160,7 @@ SQLite data across restarts even though engine evaluations do not.
 // Example: ["ExampleUser", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"] -> 18
 ```
 
-The SQLite caches have no size cap or automatic row eviction beyond expiry
-on reads for Explorer and rating entries. Backend `/api/jobs` progress is
-in-memory rather than part of either persisted cache.
+The Explorer cache has expiry cleanup and a 512 MiB raw-payload limit;
+`rating_cache` remains small (one row per username) and checks its one-hour
+TTL on reads. Backend `/api/jobs` progress is in-memory rather than part of
+either persisted cache.

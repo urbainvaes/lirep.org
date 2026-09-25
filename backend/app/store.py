@@ -1,8 +1,9 @@
 import json
 import sqlite3
-from datetime import UTC, datetime
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .config import DEFAULT_EXPLORER_SOURCE
 
@@ -22,6 +23,12 @@ DEFAULT_SIDE = "white"
 # across every study and user, keyed by provider and query (fen + database +
 # ratings + speeds), not tied to any one study.
 EXPLORER_CACHE_TTL_SECONDS = 24 * 60 * 60
+EXPLORER_CACHE_MAX_BYTES = 512 * 1024 * 1024
+EXPLORER_CACHE_CLEANUP_INTERVAL_SECONDS = 60 * 60
+EXPLORER_CACHE_CLEANUP_WRITE_INTERVAL = 1000
+
+_last_explorer_cache_cleanup: datetime | None = None
+_explorer_cache_writes_since_cleanup = 0
 
 # How long a resolved "my current rating" bucket is trusted before
 # re-checking Lichess. Persisted (not in-memory) specifically so a backend
@@ -30,10 +37,15 @@ EXPLORER_CACHE_TTL_SECONDS = 24 * 60 * 60
 RATING_CACHE_TTL_SECONDS = 60 * 60
 
 
-def _connect() -> sqlite3.Connection:
+@contextmanager
+def _connect() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def _tree_from_moves(moves: list[str]) -> dict[str, Any]:
@@ -104,6 +116,7 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute("CREATE INDEX IF NOT EXISTS explorer_cache_fetched_at ON explorer_cache(fetched_at)")
 
         conn.execute(
             """
@@ -128,6 +141,8 @@ def init_db() -> None:
             )
             """
         )
+
+    prune_explorer_cache()
 
 
 def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
@@ -282,6 +297,7 @@ def get_explorer_cache(cache_key: str) -> dict[str, Any] | None:
 
 
 def set_explorer_cache(cache_key: str, response: dict[str, Any], fetched_at: str) -> None:
+    global _explorer_cache_writes_since_cleanup
     with _connect() as conn:
         conn.execute(
             """
@@ -290,6 +306,39 @@ def set_explorer_cache(cache_key: str, response: dict[str, Any], fetched_at: str
             """,
             (cache_key, json.dumps(response), fetched_at),
         )
+    _explorer_cache_writes_since_cleanup += 1
+    now = datetime.now(UTC)
+    if (
+        _last_explorer_cache_cleanup is None
+        or (now - _last_explorer_cache_cleanup).total_seconds() >= EXPLORER_CACHE_CLEANUP_INTERVAL_SECONDS
+        or _explorer_cache_writes_since_cleanup >= EXPLORER_CACHE_CLEANUP_WRITE_INTERVAL
+    ):
+        prune_explorer_cache(now)
+
+
+def prune_explorer_cache(now: datetime | None = None) -> None:
+    global _last_explorer_cache_cleanup, _explorer_cache_writes_since_cleanup
+    now = now or datetime.now(UTC)
+    cutoff = (now - timedelta(seconds=EXPLORER_CACHE_TTL_SECONDS)).isoformat()
+    with _connect() as conn:
+        conn.execute("DELETE FROM explorer_cache WHERE fetched_at < ?", (cutoff,))
+        total = conn.execute(
+            "SELECT coalesce(sum(length(cache_key) + length(response)), 0) FROM explorer_cache"
+        ).fetchone()[0]
+        if total > EXPLORER_CACHE_MAX_BYTES:
+            oldest = conn.execute(
+                "SELECT cache_key, length(cache_key) + length(response) AS size "
+                "FROM explorer_cache ORDER BY fetched_at, cache_key"
+            )
+            to_delete = []
+            for row in oldest:
+                to_delete.append((row["cache_key"],))
+                total -= row["size"]
+                if total <= EXPLORER_CACHE_MAX_BYTES:
+                    break
+            conn.executemany("DELETE FROM explorer_cache WHERE cache_key = ?", to_delete)
+    _last_explorer_cache_cleanup = now
+    _explorer_cache_writes_since_cleanup = 0
 
 
 def get_rating_cache(username: str, *, allow_stale: bool = False) -> int | None:

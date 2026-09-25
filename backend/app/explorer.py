@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -27,6 +28,7 @@ REFERENCE_SPEEDS = ("rapid", "blitz", "classical")
 DEFAULT_REFERENCE_RATING = 1500
 
 router = APIRouter()
+_inflight_explorer: dict[str, asyncio.Task[tuple[dict, str]]] = {}
 
 
 def _reference_rating(perfs: dict) -> int:
@@ -178,10 +180,34 @@ async def fetch_explorer_cached(
     if cached is not None:
         return cached["response"], cached["fetchedAt"]
 
-    data = await fetch_explorer(client, headers, fen, source, database, min_rating, speeds)
-    fetched_at = datetime.now(UTC).isoformat()
-    store.set_explorer_cache(cache_key, data, fetched_at)
-    return data, fetched_at
+    pending = _inflight_explorer.get(cache_key)
+    if pending is None:
+        async def fetch_and_cache() -> tuple[dict, str]:
+            try:
+                data = await fetch_explorer(client, headers, fen, source, database, min_rating, speeds)
+            except (httpx.RequestError, RuntimeError):
+                if not client.is_closed:
+                    raise
+                # The initiating request can disconnect while another caller
+                # still awaits its fetch; retry with an independently owned client.
+                async with httpx.AsyncClient(timeout=client.timeout) as replacement:
+                    data = await fetch_explorer(replacement, headers, fen, source, database, min_rating, speeds)
+            fetched_at = datetime.now(UTC).isoformat()
+            store.set_explorer_cache(cache_key, data, fetched_at)
+            return data, fetched_at
+
+        pending = asyncio.create_task(fetch_and_cache())
+        _inflight_explorer[cache_key] = pending
+
+        def clear_pending(done: asyncio.Task[tuple[dict, str]]) -> None:
+            if _inflight_explorer.get(cache_key) is done:
+                del _inflight_explorer[cache_key]
+            if not done.cancelled():
+                done.exception()  # Consume failures if all waiting requests were cancelled.
+
+        pending.add_done_callback(clear_pending)
+
+    return await asyncio.shield(pending)
 
 
 @router.get("/api/explorer-defaults")
