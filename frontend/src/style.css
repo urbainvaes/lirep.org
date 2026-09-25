@@ -1325,16 +1325,34 @@ body {
   font-size: 0.85rem;
 }
 
-.study-save-row {
+.study-footer {
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
 }
 
-.study-error {
-  margin-top: 12px;
+.study-save-status {
+  flex: 1;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.study-save-status--error {
   color: #d62929;
-  text-align: right;
+}
+
+.btn-danger {
+  background: #7e2424;
+  color: var(--text-strong);
+}
+
+.btn-danger:hover {
+  background: #a02d2d;
 }
 
 .error-page {

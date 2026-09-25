@@ -208,11 +208,12 @@ function renderEditor(
         </div>
       </div>
 
-      <div class="study-save-row">
-        <a class="btn btn-secondary" href="/studies.html">Cancel</a>
-        <button id="save-btn" class="btn btn-primary" type="button">Save</button>
-      </div>
-      <p id="study-error" class="study-error" hidden></p>
+        <div class="study-footer">
+          <p id="study-save-status" class="study-save-status" role="status" aria-live="polite">
+            ${existing ? "Changes save automatically." : "Name this study to start auto-saving."}
+          </p>
+          <button id="delete-study-btn" class="btn btn-danger" type="button" ${existing ? "" : "hidden"}>Delete study</button>
+        </div>
     </div>
   `;
 
@@ -229,13 +230,23 @@ function renderEditor(
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const nameInput = document.getElementById("study-name") as HTMLInputElement;
   const colorSelect = document.getElementById("study-color") as HTMLSelectElement | null;
-  const errorEl = document.getElementById("study-error") as HTMLElement;
+  const saveStatusEl = document.getElementById("study-save-status") as HTMLElement;
+  const deleteStudyBtn = document.getElementById("delete-study-btn") as HTMLButtonElement;
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
   const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
   const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
+  let studyId = existing?.id ?? null;
+  let savedName = existing?.name ?? "";
+  let saveTimer: number | null = null;
+  let saveInProgress = false;
+  let saveAgain = false;
+  let deleting = false;
+  let editVersion = 0;
+  let savedVersion = 0;
+  let navigating = false;
   let currentId = tree.rootId;
   // null means "no override — calculations start at the tree's real root",
   // the default. See starting-point.md.
@@ -255,6 +266,115 @@ function renderEditor(
 
   function currentSide(): "white" | "black" {
     return colorSelect ? (colorSelect.value as "white" | "black") : (existing?.side ?? "white");
+  }
+
+  function setSaveStatus(message: string, failed = false): void {
+    saveStatusEl.textContent = message;
+    saveStatusEl.classList.toggle("study-save-status--error", failed);
+  }
+
+  function scheduleAutoSave(delay = 250): void {
+    if (deleting) return;
+    editVersion++;
+    if (saveTimer !== null) window.clearTimeout(saveTimer);
+    if (!nameInput.value.trim()) {
+      setSaveStatus(
+        studyId === null
+          ? "Enter a name to start auto-saving."
+          : "A name is required; other edits will save with the current name.",
+      );
+      if (studyId === null) return;
+    }
+    if (nameInput.value.trim()) setSaveStatus("Unsaved changes…");
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      void persistStudy();
+    }, delay);
+  }
+
+  async function persistStudy(): Promise<void> {
+    if (deleting) return;
+    if (saveInProgress) {
+      saveAgain = true;
+      return;
+    }
+    const name = nameInput.value.trim() || savedName;
+    if (!name) {
+      setSaveStatus("Enter a name to start auto-saving.");
+      return;
+    }
+
+    saveInProgress = true;
+    saveAgain = false;
+    const savingVersion = editVersion;
+    const creating = studyId === null;
+    setSaveStatus("Saving…");
+    try {
+      const saved = await saveStudy(studyId, name, tree, settings, currentSide(), startNodeId);
+      if (!saved) throw new Error("Save failed");
+
+      studyId = saved.id;
+      savedName = saved.name;
+      savedVersion = savingVersion;
+      if (creating) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("id", String(saved.id));
+        url.searchParams.delete("side");
+        window.history.replaceState(null, "", url);
+        if (colorSelect) {
+          colorSelect.value = saved.side;
+          if (!boardOrientationManuallySet) {
+            boardOrientation = saved.side;
+            board.set({ orientation: boardOrientation });
+          }
+          colorSelect.disabled = true;
+          colorSelect.title = "The playing side is fixed once the study is created.";
+        }
+        deleteStudyBtn.hidden = false;
+      }
+      if (!deleting) {
+        if (!nameInput.value.trim()) {
+          setSaveStatus("Saved with the current name; enter a name to rename this study.");
+        } else {
+          setSaveStatus(editVersion === savingVersion && !saveAgain ? "All changes saved." : "Saving latest changes…");
+        }
+      }
+    } catch {
+      if (!deleting) setSaveStatus("Could not save. Your edits are still here; change something or reconnect to retry.", true);
+    } finally {
+      saveInProgress = false;
+      if (saveAgain) {
+        saveAgain = false;
+        if (!deleting) {
+          if (saveTimer !== null) window.clearTimeout(saveTimer);
+          saveTimer = null;
+          void persistStudy();
+        }
+      }
+    }
+  }
+
+  async function deleteStudy(): Promise<void> {
+    if (studyId === null || !window.confirm(`Delete "${savedName}"? This cannot be undone.`)) return;
+    deleting = true;
+    if (saveTimer !== null) window.clearTimeout(saveTimer);
+    saveTimer = null;
+    saveAgain = false;
+    deleteStudyBtn.disabled = true;
+    setSaveStatus("Deleting study…");
+
+    while (saveInProgress) await new Promise((resolve) => window.setTimeout(resolve, 20));
+
+    try {
+      const res = await fetch(`/api/studies/${studyId}`, { method: "DELETE", credentials: "same-origin" });
+      if (!res.ok) throw new Error("Delete failed");
+      window.location.href = "/studies.html";
+    } catch {
+      deleting = false;
+      deleteStudyBtn.disabled = false;
+      setSaveStatus("Could not delete the study. Please try again.", true);
+      scheduleAutoSave(0);
+    }
   }
 
   // Enforces "only one reply for the studied side at any position" (the
@@ -286,6 +406,7 @@ function renderEditor(
       return;
     }
     goTo(addMove(tree, currentId, move.san));
+    scheduleAutoSave();
   }
 
   function onMove(orig: Key, dest: Key): void {
@@ -299,6 +420,7 @@ function renderEditor(
       return;
     }
     goTo(addMove(tree, currentId, move.san));
+    scheduleAutoSave();
   }
 
   async function updateExplorer(fen: string): Promise<void> {
@@ -336,6 +458,7 @@ function renderEditor(
       return;
     }
     goTo(addMove(tree, currentId, move.san));
+    scheduleAutoSave();
   }
 
   async function updateEngine(chess: Chess): Promise<void> {
@@ -494,6 +617,7 @@ function renderEditor(
     // default (the real root). See starting-point.md.
     if (startNodeId !== null && !(startNodeId in tree.nodes)) startNodeId = null;
     goTo(parentId);
+    scheduleAutoSave();
   }
 
   flipBoardBtn.addEventListener("click", flipBoard);
@@ -502,34 +626,14 @@ function renderEditor(
 
   deleteBtn.addEventListener("click", deleteCurrentMove);
 
-  document.getElementById("start-point-btn")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget as HTMLButtonElement;
-    const previous = startNodeId;
+  document.getElementById("start-point-btn")?.addEventListener("click", () => {
     startNodeId = currentId === startNodeId ? null : currentId;
     renderTreeView();
     updateStartPointUI();
-
-    // Unlike moves and deletions (which only persist on the main Save
-    // button, matching every other pending edit), the starting point saves
-    // itself immediately — it's a small, easy-to-forget toggle, and losing
-    // it silently on the next reload would defeat the point of having it.
-    // Nothing to persist to yet for a study that's never been saved once —
-    // it'll be included in that first Save automatically.
-    if (!existing?.id) return;
-    const name = nameInput.value.trim();
-    if (!name) return; // can't save without a name; stays local until Save is used with one
-
-    btn.disabled = true;
-    const saved = await saveStudy(existing.id, name, tree, settings, currentSide(), startNodeId);
-    btn.disabled = false;
-    if (!saved) {
-      startNodeId = previous;
-      renderTreeView();
-      updateStartPointUI();
-      errorEl.textContent = "Could not save the starting point. Please try again.";
-      errorEl.hidden = false;
-    }
+    scheduleAutoSave(0);
   });
+
+  deleteStudyBtn.addEventListener("click", () => void deleteStudy());
 
   colorSelect?.addEventListener("change", () => {
     renderTreeView();
@@ -537,7 +641,42 @@ function renderEditor(
       boardOrientation = currentSide();
       board.set({ orientation: boardOrientation });
     }
+    scheduleAutoSave();
   });
+
+  nameInput.addEventListener("input", () => scheduleAutoSave(500));
+  window.addEventListener("online", () => scheduleAutoSave(0));
+
+  window.addEventListener("beforeunload", (event) => {
+    if (deleting || (editVersion === savedVersion && !saveInProgress)) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  document.addEventListener("click", async (event) => {
+    if (!(event.target instanceof Element) || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest<HTMLAnchorElement>("a[href]");
+    if (!link || link.target === "_blank" || link.hasAttribute("download") || (editVersion === savedVersion && !saveInProgress)) return;
+    event.preventDefault();
+    if (navigating || deleting) return;
+    navigating = true;
+    try {
+      while (editVersion !== savedVersion || saveInProgress) {
+        if (saveTimer !== null) window.clearTimeout(saveTimer);
+        saveTimer = null;
+        if (saveInProgress) {
+          await new Promise((resolve) => window.setTimeout(resolve, 20));
+          continue;
+        }
+        const previousVersion = savedVersion;
+        await persistStudy();
+        if (savedVersion === previousVersion && !saveInProgress) return;
+      }
+      window.location.href = link.href;
+    } finally {
+      navigating = false;
+    }
+  }, true);
 
   // Lichess-style keyboard navigation: Left/Right step through the line
   // you're currently viewing, Up jumps to the start, Down to its end,
@@ -594,6 +733,7 @@ function renderEditor(
     settings.enabled = explorerEnabledEl.checked;
     updateExplorerControls();
     void updateExplorer(positionAt(tree, currentId).fen());
+    scheduleAutoSave();
   });
 
   explorerSourceEl.addEventListener("change", () => {
@@ -604,17 +744,20 @@ function renderEditor(
     }
     updateExplorerControls();
     void updateExplorer(positionAt(tree, currentId).fen());
+    scheduleAutoSave();
   });
 
   explorerDatabaseEl.addEventListener("change", () => {
     settings.database = explorerDatabaseEl.value as ExplorerSettings["database"];
     updateExplorerControls();
     void updateExplorer(positionAt(tree, currentId).fen());
+    scheduleAutoSave();
   });
 
   explorerMinRatingEl.addEventListener("change", () => {
     settings.minRating = explorerMinRatingEl.value === "auto" ? null : Number(explorerMinRatingEl.value);
     void updateExplorer(positionAt(tree, currentId).fen());
+    scheduleAutoSave();
   });
 
   explorerSpeedsEl.addEventListener("change", (e) => {
@@ -627,6 +770,7 @@ function renderEditor(
     }
     settings.speeds = target.checked ? [...settings.speeds, speed] : settings.speeds.filter((s) => s !== speed);
     void updateExplorer(positionAt(tree, currentId).fen());
+    scheduleAutoSave();
   });
 
   engineEnabledEl.addEventListener("change", () => {
@@ -643,22 +787,6 @@ function renderEditor(
     }
   });
 
-  document.getElementById("save-btn")?.addEventListener("click", async () => {
-    const name = nameInput.value.trim();
-    errorEl.hidden = true;
-    if (!name) {
-      errorEl.textContent = "Please name this study.";
-      errorEl.hidden = false;
-      return;
-    }
-    const saved = await saveStudy(existing?.id ?? null, name, tree, settings, currentSide(), startNodeId);
-    if (!saved) {
-      errorEl.textContent = "Could not save. Please try again.";
-      errorEl.hidden = false;
-      return;
-    }
-    window.location.href = "/studies.html";
-  });
 }
 
 async function init(): Promise<void> {

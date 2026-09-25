@@ -84,6 +84,14 @@ def get_study(study_id: int, request: Request) -> dict:
     return study
 
 
+@router.delete("/api/studies/{study_id}")
+def delete_study(study_id: int, request: Request) -> dict:
+    owner = _require_owner(request)
+    if not store.delete_study(owner, study_id):
+        raise HTTPException(status_code=404, detail="not found")
+    return {"deleted": True}
+
+
 @router.put("/api/studies/{study_id}")
 def update_study(study_id: int, payload: StudyIn, request: Request) -> dict:
     owner = _require_owner(request)

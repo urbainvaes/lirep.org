@@ -191,6 +191,15 @@ def get_study(owner: str, study_id: int) -> dict[str, Any] | None:
     return _row_to_study(row) if row else None
 
 
+def delete_study(owner: str, study_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM studies WHERE owner = ? AND id = ?", (owner, study_id))
+        if cur.rowcount == 0:
+            return False
+        conn.execute("DELETE FROM practice_state WHERE owner = ? AND study_id = ?", (owner, study_id))
+    return True
+
+
 def create_study(
     owner: str,
     name: str,
