@@ -1276,7 +1276,8 @@ body {
 
 .tree-move--current {
   background: var(--primary);
-  color: var(--text-strong);
+  /* White on the blue in both themes: --text-strong is near-black in light mode. */
+  color: #fff;
 }
 
 /* The study's starting point (see starting-point.md). */
@@ -2373,7 +2374,9 @@ body {
   display: none;
 }
 
-/* Header menu: a hamburger on narrow screens (see src/menu.ts). */
+/* Header menu: a hamburger on narrower screens (see src/menu.ts). It starts
+   below 980 px, where the links, theme button and account no longer fit on
+   one row. */
 .site-nav .site-nav__logout {
   display: none;
 }
@@ -2393,7 +2396,7 @@ body {
   cursor: pointer;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   .site-header {
     position: relative;
   }

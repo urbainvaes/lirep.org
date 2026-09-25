@@ -32,7 +32,7 @@ function installMenu(): void {
   document.addEventListener("click", (event) => {
     if (!(event.target as Element).closest(".site-header")) setOpen(false);
   });
-  window.matchMedia("(min-width: 721px)").addEventListener("change", (event) => {
+  window.matchMedia("(min-width: 981px)").addEventListener("change", (event) => {
     if (event.matches) setOpen(false);
   });
 }
