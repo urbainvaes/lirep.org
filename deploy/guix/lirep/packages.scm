@@ -81,14 +81,16 @@ generation, move validation, and support for common formats.")
                 (mkdir-p bin)
                 (call-with-output-file (string-append bin "/lirep-backend")
                   (lambda (port)
-                    (format port "#!~a~%export GUIX_PYTHONPATH=~a:~a/share/lirep/backend~%exec ~a -m uvicorn app.main:app --host \"${LIREP_HOST:-127.0.0.1}\" --port \"${LIREP_PORT:-8000}\" --proxy-headers --app-dir ~a/share/lirep/backend \"$@\"~%"
+                    (format port "#!~a~%export GUIX_PYTHONPATH=~a:~a/share/lirep/backend~%export SSL_CERT_DIR=\"${SSL_CERT_DIR:-~a/etc/ssl/certs}\"~%exec ~a -m uvicorn app.main:app --host \"${LIREP_HOST:-127.0.0.1}\" --port \"${LIREP_PORT:-8000}\" --proxy-headers --app-dir ~a/share/lirep/backend \"$@\"~%"
                             (search-input-file inputs "/bin/sh")
                             python-path out
+                            (assoc-ref inputs "nss-certs")
                             (search-input-file inputs "/bin/python3")
                             out)))
                 (chmod (string-append bin "/lirep-backend") #o755)))))))
     (inputs
      (list bash-minimal
+           nss-certs
            python
            python-fastapi
            python-uvicorn
