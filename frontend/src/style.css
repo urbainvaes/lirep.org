@@ -937,7 +937,7 @@ body {
 
 .study-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
   gap: 20px;
   margin-bottom: 20px;
 }
@@ -951,6 +951,7 @@ body {
 
 .study-card--board {
   display: block;
+  aspect-ratio: 1;
 }
 
 .study-board-tools {
@@ -991,11 +992,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+  aspect-ratio: 45 / 55;
 }
 
 .tree-view {
   flex: 1;
-  min-height: 200px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   font-family: "Courier New", monospace;
   font-size: 0.9rem;
   color: var(--text);
@@ -1683,6 +1689,14 @@ body {
 }
 
 @media (max-width: 720px) {
+  .study-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .study-card--moves {
+    aspect-ratio: 1;
+  }
+
   .stat-metrics {
     grid-template-columns: 1fr;
   }

@@ -391,6 +391,15 @@ function renderEditor(
     treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
       el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
     });
+
+    const activeMove = treeViewEl.querySelector<HTMLElement>(".tree-move--current");
+    if (activeMove) {
+      const viewRect = treeViewEl.getBoundingClientRect();
+      const moveRect = activeMove.getBoundingClientRect();
+      if (moveRect.top < viewRect.top || moveRect.bottom > viewRect.bottom) {
+        treeViewEl.scrollTop += moveRect.top - viewRect.top - 12;
+      }
+    }
   }
 
   // Keeps the name-row badge and the "Set/Clear starting point" button's
