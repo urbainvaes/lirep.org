@@ -280,7 +280,7 @@ body {
   font-size: 0.9rem;
 }
 
-.profile-section {
+.profile-section + .profile-section {
   margin-top: 34px;
 }
 
@@ -434,13 +434,16 @@ body {
 
 .opening-groups {
   display: grid;
-  gap: 30px;
+  gap: 44px;
 }
 
 .opening-group h2 {
   margin: 0 0 14px;
-  color: var(--text-strong);
-  font-size: 1.2rem;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--primary-hover);
+  color: var(--primary-hover);
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 
 .opening-group__empty {
