@@ -44,15 +44,6 @@ export function renderNewStudyCard(side: "white" | "black" = "white"): string {
   `;
 }
 
-export function renderAlapinStudyCard(): string {
-  return `
-    <a class="study-card study-card--new" href="/study.html?template=alapin">
-      <span class="study-card__plus">+</span>
-      <span>Alapin (White)</span>
-    </a>
-  `;
-}
-
 export function openingMovesHtml(study: StudyCardData): string {
   const startId = study.startNodeId !== null && study.tree.nodes[study.startNodeId]
     ? study.startNodeId

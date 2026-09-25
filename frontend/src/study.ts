@@ -47,12 +47,9 @@ function getStudyId(): number | null {
   return id ? Number(id) : null;
 }
 
-function getNewStudySetup(): { side: "white" | "black"; template: string | null } {
+function getNewStudySide(): "white" | "black" {
   const params = new URLSearchParams(window.location.search);
-  return {
-    side: params.get("side") === "black" ? "black" : "white",
-    template: params.get("template"),
-  };
+  return params.get("side") === "black" ? "black" : "white";
 }
 
 async function loadStudy(id: number): Promise<Study | null> {
@@ -123,12 +120,11 @@ function renderEditor(
   main: HTMLElement,
   existing: Study | null,
   explorerDefaults: ExplorerDefaults | null,
-  newStudySetup: { side: "white" | "black"; template: string | null },
+  newStudySide: "white" | "black",
 ): void {
   const settings: ExplorerSettings = existing?.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
-  const isAlapin = !existing && newStudySetup.template === "alapin";
 
   main.innerHTML = `
     <div class="study-editor">
@@ -138,23 +134,21 @@ function renderEditor(
           class="study-name-input"
           type="text"
           placeholder="Name this study"
-          value="${existing ? escapeHtml(existing.name) : isAlapin ? "Alapin" : ""}"
+          value="${existing ? escapeHtml(existing.name) : ""}"
         />
         ${
           existing
             ? `<span class="study-color-badge">${existing.side === "white" ? "Playing White" : "Playing Black"}</span>`
             : `<select id="study-color" class="study-color-select" title="Which side is this repertoire for? This can't be changed after saving.">
-                  <option value="white" ${newStudySetup.side === "white" ? "selected" : ""}>Playing White</option>
-                  <option value="black" ${newStudySetup.side === "black" ? "selected" : ""}>Playing Black</option>
-               </select>`
+                  <option value="white" ${newStudySide === "white" ? "selected" : ""}>Playing White</option>
+                  <option value="black" ${newStudySide === "black" ? "selected" : ""}>Playing Black</option>
+                </select>`
         }
+        <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board" aria-label="Flip board"></button>
         <span id="study-start-badge" class="study-start-badge" hidden></span>
       </div>
       <div class="study-grid">
         <div class="study-card study-card--board">
-          <div class="study-board-tools">
-            <button id="flip-board-btn" class="btn btn-secondary" type="button" aria-label="Flip board orientation">Flip board</button>
-          </div>
           <div id="board" class="study-board"></div>
         </div>
 
@@ -232,15 +226,6 @@ function renderEditor(
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
-  if (isAlapin) {
-    let position = new Chess();
-    let nodeId = tree.rootId;
-    for (const san of ["e4", "c5", "c3"]) {
-      const move = position.move(san);
-      if (!move) break;
-      nodeId = addMove(tree, nodeId, move.san);
-    }
-  }
   let currentId = tree.rootId;
   // null means "no override — calculations start at the tree's real root",
   // the default. See starting-point.md.
@@ -455,7 +440,7 @@ function renderEditor(
   }
 
   board = createBoard(boardEl, onMove, boardOrientation);
-  flipBoardBtn.title = `${boardOrientation === "white" ? "White" : "Black"} at bottom`;
+  flipBoardBtn.title = `Flip board (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   // Opens right at the starting point when one is set (falling back to the
   // real root if it's somehow gone — same degrade-gracefully rule the
   // backend's stats calculations use, see starting-point.md), rather than
@@ -466,7 +451,7 @@ function renderEditor(
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     boardOrientationManuallySet = true;
     board.set({ orientation: boardOrientation });
-    flipBoardBtn.title = `${boardOrientation === "white" ? "White" : "Black"} at bottom`;
+    flipBoardBtn.title = `Flip board (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   });
 
   document.getElementById("start-btn")?.addEventListener("click", () => goTo(tree.rootId));
@@ -637,7 +622,7 @@ async function init(): Promise<void> {
     return;
   }
 
-  renderEditor(main, existing, explorerDefaults, getNewStudySetup());
+  renderEditor(main, existing, explorerDefaults, getNewStudySide());
 }
 
 init();

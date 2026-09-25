@@ -1,5 +1,5 @@
 import { fetchMe, renderAuthArea, renderSignedOut } from "./layout";
-import { renderAlapinStudyCard, renderNewStudyCard, renderStudyCard, renderStudyGroups, type StudyCardData } from "./studyCard";
+import { renderNewStudyCard, renderStudyCard, renderStudyGroups, type StudyCardData } from "./studyCard";
 
 type StudySummary = StudyCardData;
 
@@ -27,7 +27,7 @@ async function init(): Promise<void> {
     studies,
     (study) => renderStudyCard(study, `/study.html?id=${study.id}`),
     "studies-grid",
-    (side) => `${side === "white" ? renderAlapinStudyCard() : ""}${renderNewStudyCard(side)}`,
+    (side) => renderNewStudyCard(side),
   );
 }
 

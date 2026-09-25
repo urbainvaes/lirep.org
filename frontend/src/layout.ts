@@ -11,9 +11,13 @@ export function escapeHtml(value: string): string {
 }
 
 export async function fetchMe(): Promise<MeResponse> {
+  let cached: MeResponse | null = null;
   try {
-    const cached = sessionStorage.getItem("auth-state");
-    if (cached) renderAuthArea(JSON.parse(cached) as MeResponse);
+    const raw = sessionStorage.getItem("auth-state");
+    if (raw) {
+      cached = JSON.parse(raw) as MeResponse;
+      renderAuthArea(cached);
+    }
   } catch {
     // Storage may be unavailable; the API response remains authoritative.
   }
@@ -28,7 +32,12 @@ export async function fetchMe(): Promise<MeResponse> {
     }
     return data;
   } catch {
-    return { authenticated: false };
+    // A network error reaching our own backend (e.g. it's mid-restart, or a
+    // brief connectivity blip) isn't evidence the session is invalid —
+    // trust the last known state instead of flashing "Sign in" for
+    // something transient. Only a real 200/401-style response from the
+    // backend should ever say you're logged out.
+    return cached ?? { authenticated: false };
   }
 }
 

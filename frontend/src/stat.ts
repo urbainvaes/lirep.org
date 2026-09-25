@@ -62,6 +62,21 @@ interface Study {
   startNodeId: number | null;
 }
 
+interface PracticeSummary {
+  aggregateKnowledge: number | null;
+}
+
+async function loadPracticeKnowledge(studyId: number): Promise<number | null> {
+  try {
+    const res = await fetch("/api/practice/summary", { credentials: "same-origin" });
+    if (!res.ok) return null;
+    const summaries: Record<string, PracticeSummary> = await res.json();
+    return summaries[String(studyId)]?.aggregateKnowledge ?? null;
+  } catch {
+    return null;
+  }
+}
+
 interface JobStatus<T> {
   status: "running" | "done" | "error";
   done: number;
@@ -475,7 +490,12 @@ function readSettingsFromDom(): ExplorerSettings {
   return { enabled: true, database, minRating, speeds };
 }
 
-function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerDefaults | null): void {
+function renderPage(
+  main: HTMLElement,
+  study: Study,
+  explorerDefaults: ExplorerDefaults | null,
+  knowledge: number | null,
+): void {
   const sideLabel = study.side === "white" ? "Playing White" : "Playing Black";
   const sidePawn = `<span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>`;
   const opponent = study.side === "white" ? "Black" : "White";
@@ -512,6 +532,13 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
       : `<div class="stat-detail__score stat-card__score--empty">—</div>
          <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
          <p class="stat-card__meta">Not calculated yet.</p>`;
+  const knowledgeCardHtml = knowledge !== null
+    ? `<div class="stat-detail__score">${Math.round(knowledge * 100)}%</div>
+       <p class="stat-card__label">Practice knowledge</p>
+       <p class="stat-card__meta">Average recall across all positions; decays over time.</p>`
+    : `<div class="stat-detail__score stat-card__score--empty">—</div>
+       <p class="stat-card__label">Practice knowledge</p>
+       <p class="stat-card__meta">No practice positions yet.</p>`;
 
   main.innerHTML = `
     <a class="btn btn-secondary" href="/stats.html">&larr; Back to Stats</a>
@@ -536,16 +563,12 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
       <div class="stat-metrics">
         <div class="stat-metric-card">${winProbCardHtml}</div>
         <div class="stat-metric-card">${evalCardHtml}</div>
+        <div class="stat-metric-card">${knowledgeCardHtml}</div>
       </div>
 
+      <h2 class="stat-detail__chart-title">Analysis</h2>
       <div class="stat-actions stat-actions--single">
         <div class="stat-action">
-          <p class="tree-hint">
-            Expected evaluation needs a Stockfish assessment of every position that
-            matters for it — computing that here, once, locally in your browser,
-            means updating the expected evaluation later never has to ask Lichess
-            for it.
-          </p>
           <div class="eval-update-row">
             <button id="evals-btn" class="btn btn-secondary" type="button" ${hasMoves ? "" : "disabled"}>
               Update evaluations
@@ -569,12 +592,12 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
         </div>
       </div>
 
-      <div class="stat-actions">
+      <div class="stat-actions stat-actions--compact">
         <div class="stat-action">
           <button id="winprob-btn" class="btn btn-primary" type="button" ${hasMoves ? "" : "disabled"}>
             Update win probability
           </button>
-          <p class="stat-card__meta">Uses the Opening Explorer settings below.</p>
+          <p class="stat-card__meta">Based on how often players choose each reply.</p>
           <div class="progress-bar" id="winprob-progress" hidden>
             <div class="progress-bar__track"><div class="progress-bar__fill" id="winprob-progress-fill"></div></div>
             <span class="progress-bar__label" id="winprob-progress-label"></span>
@@ -588,8 +611,8 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
           <p class="stat-card__meta${evals ? "" : " stat-card__meta--warning"}">
             ${
               evals
-                ? "Uses the Opening Explorer settings below, and your calculated evaluations."
-                : `⚠ Evaluations haven't been calculated yet — click "Update evaluations" above first, or this may be slow and can hit Lichess's rate limit.`
+                ? "Combines Explorer data with calculated evaluations."
+                : `Calculate evaluations first. This may be slow and can hit Lichess's rate limit.`
             }
           </p>
           <div class="progress-bar" id="eval-score-progress" hidden>
@@ -599,39 +622,27 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
         </div>
       </div>
 
-      <h2 class="stat-detail__chart-title">Opening Explorer settings</h2>
-      <p class="tree-hint">
-        Scores are calculated by weighting ${opponent}'s replies by how often real players actually
-        choose them, at these settings. Change them and recalculate to see how your scores hold up
-        against a different pool of opponents.
-      </p>
-      <div class="explorer-settings-panel">
-        <div class="analysis-header__settings">
-          <select id="stat-database">
-            <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
-            <option value="masters" ${settings.database === "masters" ? "selected" : ""}>Masters</option>
-          </select>
-          <select id="stat-min-rating" ${settings.database === "lichess" ? "" : "disabled"}>
-            ${ratingOptionsHtml(ratingBuckets, settings.minRating)}
-          </select>
+      <details class="stat-settings">
+        <summary>Opening Explorer settings</summary>
+        <p class="stat-card__meta">These settings determine which replies are weighted in recalculated scores.</p>
+        <div class="explorer-settings-panel">
+          <div class="analysis-header__settings">
+            <select id="stat-database">
+              <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
+              <option value="masters" ${settings.database === "masters" ? "selected" : ""}>Masters</option>
+            </select>
+            <select id="stat-min-rating" ${settings.database === "lichess" ? "" : "disabled"}>
+              ${ratingOptionsHtml(ratingBuckets, settings.minRating)}
+            </select>
+          </div>
+          <div class="speed-checkboxes" id="stat-speeds">
+            ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database !== "lichess")}
+          </div>
         </div>
-        <div class="speed-checkboxes" id="stat-speeds">
-          ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database !== "lichess")}
-        </div>
-      </div>
+      </details>
 
       <h2 class="stat-detail__chart-title">Coverage by ${opponent.toLowerCase()}'s move number</h2>
-      <p class="tree-hint">
-        What fraction of real games (by move frequency, at this study's Opening Explorer settings)
-        are still following a line inside this study after each of ${opponent}'s replies. Your own
-        moves never reduce this — by the one-move-per-position rule, you always have exactly one
-        prepared reply — so every drop here comes from an ${opponent} move you haven't covered.
-        ${
-          startPoint
-            ? `<br><strong>Move numbers below are relative to this study's starting point (${startPoint})</strong>, not the actual game's move count — "move 1" is the first ${opponent} reply after ${startPoint}.`
-            : ""
-        }
-      </p>
+      <p class="tree-hint">Share of games still following your lines after each ${opponent} reply.${startPoint ? ` Move numbers start from ${startPoint}.` : ""}</p>
       <div class="coverage-chart-wrap">
         ${
           stats?.coverage?.length
@@ -717,7 +728,7 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
       });
       if (!res.ok) throw new Error("failed to save evaluations");
       const updated: Study = await res.json();
-      renderPage(main, updated, explorerDefaults);
+      renderPage(main, updated, explorerDefaults, knowledge);
     } catch (err) {
       btn.textContent = "Update evaluations";
       btn.disabled = false;
@@ -754,7 +765,7 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
         fill,
         label,
       );
-      renderPage(main, updated, explorerDefaults);
+      renderPage(main, updated, explorerDefaults, knowledge);
     } catch (err) {
       btn.textContent = "Update win probability";
       btn.disabled = false;
@@ -790,7 +801,7 @@ function renderPage(main: HTMLElement, study: Study, explorerDefaults: ExplorerD
         fill,
         label,
       );
-      renderPage(main, updated, explorerDefaults);
+      renderPage(main, updated, explorerDefaults, knowledge);
     } catch (err) {
       btn.textContent = "Update expected evaluation";
       btn.disabled = false;
@@ -821,16 +832,17 @@ async function init(): Promise<void> {
   }
 
   const studyId = getStudyId();
-  const [study, explorerDefaults] = await Promise.all([
+  const [study, explorerDefaults, knowledge] = await Promise.all([
     studyId ? loadStudy(studyId) : Promise.resolve(null),
     fetchExplorerDefaults(),
+    studyId ? loadPracticeKnowledge(studyId) : Promise.resolve(null),
   ]);
   if (!study) {
     main.innerHTML = `<div class="empty-state"><p>Study not found.</p></div>`;
     return;
   }
 
-  renderPage(main, study, explorerDefaults);
+  renderPage(main, study, explorerDefaults, knowledge);
 }
 
 init();
