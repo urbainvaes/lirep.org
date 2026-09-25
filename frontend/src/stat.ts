@@ -7,6 +7,7 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerUrl,
   fetchExplorerDefaults,
+  LIREP_DATASET,
   ratingOptionsHtml,
   speedCheckboxesHtml,
   type ExplorerData,
@@ -353,7 +354,7 @@ function formatDate(iso: string): string {
 }
 
 function statsSourceLabel(stats: StudyStats, fallbackSource: ExplorerSettings["source"]): string {
-  const provider = (stats.source ?? fallbackSource) === "lirep" ? "Lirep (Mar 2016)" : "Lichess";
+  const provider = (stats.source ?? fallbackSource) === "lirep" ? `Lirep (${LIREP_DATASET})` : "Lichess";
   const database = stats.database === "masters" ? "Masters" : `Players ${stats.minRating ?? "?"}+`;
   return `${provider} ${database}`;
 }

@@ -1,5 +1,10 @@
 import { escapeHtml } from "./layout";
 
+/** What the Lirep (local) Explorer contains: Lichess's own public game
+ * database (CC0), but only these months. Shown wherever Lirep is named so it
+ * is clear the games come from Lichess. */
+export const LIREP_DATASET = "Lichess games, Mar 2016";
+
 export type ExplorerSpeed = "bullet" | "blitz" | "rapid" | "classical";
 
 export interface ExplorerSettings {
@@ -174,7 +179,7 @@ export function renderExplorer(panel: HTMLElement, data: ExplorerData, onPlay: (
     .join("");
 
   const source = data.source === "lirep"
-    ? "Lirep · Mar 2016"
+    ? `Lirep · ${LIREP_DATASET}`
     : data.database === "masters"
       ? "Lichess Masters"
       : data.database === "player"

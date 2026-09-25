@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
+# Usage: import-month.sh [YYYY-MM]   (default: 2016-03)
+# Imports a downloaded month into the running local Explorer (start-server.sh
+# or deploy/run-explorer.sh, listening on 127.0.0.1:9002). Takes hours; run it
+# under `nice -n 19` if you want the machine to stay quiet.
 set -euo pipefail
 
+month="${1:-2016-03}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
-archive="$root/explorer/data/lichess_db_standard_rated_2016-03.pgn.zst"
+archive="$root/explorer/data/lichess_db_standard_rated_$month.pgn.zst"
 checksum="$archive.sha256"
 importer="$root/explorer/upstream/import-pgn/target/release/import-lichess"
 

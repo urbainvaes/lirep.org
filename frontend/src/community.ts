@@ -1,3 +1,4 @@
+import { LIREP_DATASET } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 
 interface Summary {
@@ -32,7 +33,7 @@ const percent = (value: number): string => `${(value * 100).toFixed(1)}%`;
 // means something next to the rating band and time controls behind it.
 function settingsLabel(opening: Opening): string {
   const database = opening.source === "lirep"
-    ? "Lirep (local, Mar 2016 games)"
+    ? `Lirep (local) · ${LIREP_DATASET}`
     : opening.database === "masters" ? "Masters games" : "Lichess games";
   const rating = opening.database === "masters" ? "" : opening.minRating ? `${opening.minRating}+ · ` : "all ratings · ";
   const speeds = opening.database === "masters" || opening.speeds.length === 0 ? "" : opening.speeds.join(", ");
@@ -99,9 +100,10 @@ function renderTable(openings: Opening[], signedIn: boolean, side: "white" | "bl
 }
 
 const LIREP_HELP =
-  "Lirep is this site's own Explorer: only games from March 2016 (about 5.8 million rated games), a much smaller " +
-  "and older sample than Lichess's full database. Scores calculated with it are less reliable and not comparable " +
-  "with Lichess scores, so they are left out of the leaderboard unless you include them here.";
+  "Lirep is this site's own Explorer. It is built from Lichess's public game database, but holds only " +
+  "a few months of games (" + LIREP_DATASET.replace("Lichess games, ", "") + "), a much smaller and older sample " +
+  "than the full Lichess Explorer. Scores calculated with it are less reliable and not comparable with the " +
+  "Lichess Explorer's scores, so they are left out of the leaderboard unless you include them here.";
 
 function render(main: HTMLElement, summary: Summary, openings: Opening[], signedIn: boolean): void {
   main.innerHTML = `
