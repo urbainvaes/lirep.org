@@ -1701,6 +1701,26 @@ body {
   margin: 0;
 }
 
+.practice-session__header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.practice-knowledge-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.practice-knowledge-badge strong {
+  color: var(--primary);
+  font-size: 1.15rem;
+}
+
 .practice-session__tools {
   display: flex;
   align-items: center;
@@ -1782,6 +1802,87 @@ body {
   margin-top: 4px;
 }
 
+.practice-celebration {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  border-color: #e0c93f;
+}
+
+.practice-celebration__badge {
+  font-size: 2.4rem;
+  line-height: 1;
+  animation: practice-celebration-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.practice-celebration__title {
+  margin: 6px 0 10px !important;
+  color: var(--text-strong);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.practice-celebration__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.practice-confetti-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.practice-confetti {
+  position: absolute;
+  top: -10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  opacity: 0.9;
+  animation-name: practice-confetti-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+
+@keyframes practice-celebration-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes practice-confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(160px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .practice-celebration__badge {
+    animation: none;
+  }
+
+  .practice-confetti-field {
+    display: none;
+  }
+}
+
 .practice-history {
   display: flex;
   flex-direction: column;
@@ -1826,6 +1927,22 @@ body {
 }
 
 .practice-history__expected {
+  color: var(--text-strong);
+}
+
+.practice-history__analysis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  text-decoration: none;
+}
+
+.practice-history__analysis:hover {
   color: var(--text-strong);
 }
 

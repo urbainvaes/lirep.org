@@ -131,10 +131,13 @@ def practice_summary_all(request: Request) -> dict[str, dict]:
 @router.get("/api/studies/{study_id}/practice/queue")
 def practice_queue(study_id: int, request: Request) -> dict:
     """Node ids to drill this session: due items first (staler retention
-    first), then never-attempted items in tree order, capped at
-    SESSION_SIZE — see practice.md §5. The frontend walks the tree itself
-    (it already has the full tree from GET /api/studies/{id}) and prompts
-    only at the nodes in this list, auto-playing the rest."""
+    first), then never-attempted items, capped at SESSION_SIZE. If neither
+    exists, falls back to whatever isn't already at 100% knowledge yet (or,
+    failing that, everything) — see practice.md §5. The frontend walks the
+    tree itself (it already has the full tree from GET /api/studies/{id})
+    and prompts only at the nodes in this list, auto-playing the rest — so
+    this list isn't just *which* nodes to ask about, it's also what decides
+    *where the session starts feeling like it's actually testing you*."""
     owner = _require_owner(request)
     study = store.get_study(owner, study_id)
     if not study:
@@ -153,10 +156,25 @@ def practice_queue(study_id: int, request: Request) -> dict:
         # Nothing is due and nothing is new, but practice shouldn't be
         # gated by the schedule if you want to drill anyway — there's no
         # reason to disable the whole tab just because the spaced-repetition
-        # algorithm is satisfied for now. Offer a voluntary review of
-        # everything instead, oldest-practiced first (freshest last, since
-        # those need it least).
-        queue = sorted(items, key=lambda node_id: states[node_id]["last_seen_at"])
+        # algorithm is satisfied for now. Offer a voluntary review instead —
+        # but only of whatever hasn't already reached a full, rounded 100%
+        # (see knowledge()). Queuing everything indiscriminately would select
+        # every drill-item node in the line, and since the frontend's walk
+        # only *prompts* at selected nodes (everything else is silently
+        # auto-played — see practice.md §5), that would force you to
+        # re-answer a long fully-mastered prefix before ever reaching
+        # whatever's actually worth reviewing. Excluding maxed-out nodes
+        # means that prefix is no longer selected, so the walk auto-plays
+        # straight through it and the session starts right at the first
+        # move that isn't already perfect.
+        not_full = [
+            node_id for node_id in items if round((knowledge(states.get(node_id)) or 0.0) * 100) < 100
+        ]
+        # Unless literally everything is at 100% — then there's nothing left
+        # to prioritize, so offer the whole thing anyway (this is exactly
+        # the case the practice-session UI's 100% celebration covers).
+        pool = not_full if not_full else items
+        queue = sorted(pool, key=lambda node_id: states[node_id]["last_seen_at"])
 
     return {"nodeIds": queue[:SESSION_SIZE]}
 

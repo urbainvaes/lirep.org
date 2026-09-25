@@ -195,10 +195,23 @@ streak from a branch that, structurally, doesn't exist anymore.
    deliberately simple starting point, not a claim that due-order is
    optimal.
 4. If that leaves the queue empty (nothing due, nothing new) but the study
-   does have drill items, the queue falls back to **all** of them, oldest
-   `lastSeenAt` first — a voluntary review rather than an empty session.
-   Practice is opt-in on demand, not something the schedule should be able
-   to lock you out of just because it's satisfied for now.
+   does have drill items, the queue falls back to a **voluntary review**
+   rather than an empty session — practice is opt-in on demand, not
+   something the schedule should be able to lock you out of just because
+   it's satisfied for now. That fallback pool is **every item that isn't
+   already at a full, rounded 100% knowledge**, oldest `lastSeenAt` first;
+   only if literally everything is at 100% does it fall back further, to
+   all of them (there's nothing left to prioritize at that point — see the
+   session view's 100% celebration in §6). Excluding maxed-out items here
+   isn't just about queue *contents* — it's what makes the walk (§5 below)
+   actually *start* somewhere useful: since the walk only pauses to quiz at
+   selected nodes and silently auto-plays everything else, a queue that
+   included every item in a mostly-mastered line would force you to
+   re-answer the whole already-known prefix before reaching whatever
+   actually needs review. Excluding it removes those nodes from the
+   selected set, so the walk auto-plays straight through that prefix and
+   the session starts right at the first move that isn't already perfect,
+   not at the beginning of the line.
 
 **Walking the tree during a session:**
 - At a **studied-side node** (a queue item): show the position, wait for you
@@ -253,7 +266,7 @@ Studies/Stats list pages), each showing:
 - A **Practice** button, disabled only when the study has no moves of its
   own to drill at all. Practice is never gated by the schedule itself —
   having nothing due or new just means a session falls back to a voluntary
-  review of everything, oldest-practiced first, rather than refusing to
+  review of whatever isn't already at 100% (§5), rather than refusing to
   start one. The whole point of tracking knowledge as a fading, ongoing
   number (§3) is defeated by a hard stop that says "come back later."
 
@@ -276,7 +289,15 @@ right is squarely in scope, and re-deriving the Study editor's whole
 analysis panel from scratch for that would have been wasted effort when
 the existing one already does the job.
 
-## 7. Implementation notes (for when this gets built)
+**Reaching 100% knowledge** (rounded, matching the header's own knowledge
+badge — see §3 on why hitting the displayed 100% is achievable even though
+the underlying aggregate almost never lands on an exact 1.0) pauses the
+otherwise open-ended session with a one-time celebration instead of quietly
+rolling into the next round: a short animation, then an explicit choice —
+**End session** or **Continue practicing**. Fires once per tab visit, not
+on every subsequent correct answer that happens to still be at 100%.
+
+## 7. Implementation notes
 
 - `backend/app/store.py`: new `practice_state` table (§4), migrated in like
   every other table this app has added incrementally; `get_practice_state`/

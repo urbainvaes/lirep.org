@@ -46,7 +46,7 @@
         <h2>Practice list</h2>
         <ul>
           <li>One card per study, showing aggregate knowledge (the mean knowledge score across the study's own-side positions), a due count, and a new (never-drilled) count.</li>
-          <li>A Practice button opens a session for that study. Disabled only when the study has no moves of its own to drill; having nothing currently due or new never disables it, since a session then falls back to a voluntary review of everything instead.</li>
+          <li>A Practice button opens a session for that study. Disabled only when the study has no moves of its own to drill; having nothing currently due or new never disables it, since a session then falls back to a voluntary review of whatever isn't already at 100% instead.</li>
         </ul>
       </section>
 
@@ -64,7 +64,7 @@
 
       <section>
         <h2>Session mechanics</h2>
-        <p>A session starts from the study's effective starting point (its custom starting point if one is set, otherwise the tree's real root — same resolution rule the Stats tab uses) and builds a bounded queue (default 20 positions): due positions first, oldest first, then new positions in tree order. Not leverage-ranked; queue order is due-ness only. If that leaves nothing queued but the study has drill items, the queue falls back to a review of all of them, oldest-practiced first — practice is never blocked just because the schedule is currently satisfied.</p>
+        <p>A session starts from the study's effective starting point (its custom starting point if one is set, otherwise the tree's real root — same resolution rule the Stats tab uses) and builds a bounded queue (default 20 positions): due positions first, oldest first, then new positions in tree order. Not leverage-ranked; queue order is due-ness only. If that leaves nothing queued but the study has drill items, the queue falls back to a voluntary review of whatever isn't already at a full, rounded 100% knowledge, oldest-practiced first — only if literally everything is at 100% does it fall back further, to reviewing all of them. Practice is never blocked just because the schedule is currently satisfied, but a mostly-mastered line also shouldn't have to be re-answered from its first move just to reach the one position that's actually worth reviewing: since only selected nodes get prompted (everything else is silently auto-played), excluding maxed-out nodes from that fallback is what makes the session start right at the first move that isn't already perfect.</p>
         <ul>
           <li>At an own-side position, wait for a move on the board. Only the first attempt is graded: a correct first try applies the knowledge update for a correct answer and continues into that child. A wrong first try applies the update for a wrong answer once, then lets you try again at the same position instead of revealing the answer immediately — a correct retry continues on exactly like a first-try success; a "Show answer" option plays the correct move and moves on for when you're genuinely stuck. Further wrong retries don't grade again.</li>
           <li>At an opponent position, the app plays a reply itself. Every branch that leads to a due or new position gets walked (in order, not chosen at random); branches with nothing left to review in them are skipped entirely rather than visited pointlessly. There is nothing to grade here.</li>
@@ -72,6 +72,7 @@
           <li>A session has no natural end: once a round's queue is drained, the next one loads automatically (a brief "Nice work — loading more…" transition, then straight into the next prompt) rather than stopping — there's no reason the app should force you to leave and come back. The study's live aggregate knowledge is shown in the session header throughout, updating after every graded attempt. The only way to stop is the "End session" link, which just navigates back to the Practice list — nothing needs to be finalized, since every attempt is already saved as it happens.</li>
         </ul>
         <p class="callout">Session view reuses the Study editor's board, theme, and piece set, with the Opening Explorer panel hidden. Its Stockfish toggle is kept, though, as a read-only "explore this position" option — arrows and a ranked eval list, no click-to-play — available at any point in the session for understanding why a missed move was right.</p>
+        <p>Reaching a rounded 100% knowledge score pauses the otherwise open-ended session with a one-time celebration — a short animation, then an explicit choice between "End session" and "Continue practicing" — rather than silently rolling into another round. It only fires once per tab visit, not on every subsequent correct answer that happens to still be at 100%.</p>
       </section>
 
       <section>

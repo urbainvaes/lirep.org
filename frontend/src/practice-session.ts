@@ -5,7 +5,7 @@ import { Chess } from "chess.js";
 import { applyBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
 import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { positionAt, type StudyTree } from "./tree";
+import { lastMoveAt, positionAt, sanPathTo, type StudyTree } from "./tree";
 
 interface Study {
   id: number;
@@ -120,8 +120,8 @@ function buildSteps(tree: StudyTree, startNodeId: number, selected: Set<number>)
   return steps;
 }
 
-function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
-  if (steps.length === 0) {
+function renderSession(main: HTMLElement, study: Study, startNodeId: number, initialSteps: Step[]): void {
+  if (initialSteps.length === 0) {
     main.innerHTML = `
       <div class="empty-state">
         <p>"${escapeHtml(study.name)}" has no moves of its own to practice yet.</p>
@@ -131,13 +131,17 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
     return;
   }
 
-  const totalQuizzes = steps.filter((step) => step.quiz).length;
-
   main.innerHTML = `
     <div class="practice-session">
       <div class="practice-session__header">
         <h1 class="page-title">${escapeHtml(study.name)}</h1>
-        <a class="btn btn-secondary" href="/practice.html">End session</a>
+        <div class="practice-session__header-right">
+          <span class="practice-knowledge-badge">
+            <span>Knowledge</span>
+            <strong id="practice-knowledge">—</strong>
+          </span>
+          <a class="btn btn-secondary" href="/practice.html">End session</a>
+        </div>
       </div>
       <div class="practice-session__tools">
         <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board (f)" aria-label="Flip board"></button>
@@ -179,9 +183,18 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const summaryEl = document.getElementById("practice-summary") as HTMLElement;
   const historyEl = document.getElementById("practice-history") as HTMLElement;
+  const knowledgeEl = document.getElementById("practice-knowledge") as HTMLElement;
 
   const tree = study.tree;
+  // Practice is open-ended — once a round's queue is drained, the next one
+  // is fetched automatically (see startNextRound) rather than ending the
+  // session, since there's no real reason to have to leave and come back.
+  // `steps`/`totalQuizzes` are therefore reassigned per round; `quizzesDone`/
+  // `correctCount` accumulate for as long as this tab stays open.
+  let steps = initialSteps;
+  let totalQuizzes = steps.filter((step) => step.quiz).length;
   let stepIndex = 0;
+  let roundDone = 0;
   let quizzesDone = 0;
   let correctCount = 0;
   let awaitingNodeId: number | null = null;
@@ -190,6 +203,9 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
   // just retries: they let you keep trying until you get it, but they don't
   // change the knowledge score or the history entry a second time.
   let firstAttemptGraded = false;
+  // Fires once per tab visit — reaching 100% again later (or staying there)
+  // shouldn't re-trigger it every single subsequent correct answer.
+  let celebrated = false;
   let board: Api;
   let engine: Engine | null = null;
   let currentChess: Chess = new Chess();
@@ -240,39 +256,80 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
       .join("");
   }
 
+  /** A Lichess analysis link for the *line* leading to `nodeId`, not just
+   * its bare position — PGN rather than FEN, so opening it shows the whole
+   * game up to here (and lets you step back through it), the same as the
+   * Study editor's own "Open position in Lichess analysis" link. */
+  function lichessAnalysisUrl(nodeId: number): string {
+    const line = sanPathTo(tree, nodeId);
+    return line.length
+      ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}`
+      : "https://lichess.org/analysis";
+  }
+
   /** Every place the board's displayed position changes goes through here,
-   * so re-running Stockfish on the new position (when the toggle is on)
-   * never gets forgotten at one call site but not another. */
-  function setBoardPosition(chess: Chess, interactive: boolean): void {
+   * so re-running Stockfish on the new position (when the toggle is on),
+   * and highlighting the move that actually led here, never gets forgotten
+   * at one call site but not another. Takes the node rather than an
+   * already-replayed Chess so it can look up that move for `lastMove` too —
+   * without it, chessground keeps showing whichever squares were last
+   * highlighted (e.g. from a different line entirely) instead of the
+   * opponent's actual last move whenever the board jumps to a position via
+   * `set()` rather than a real drag. */
+  function setBoardPosition(nodeId: number, interactive: boolean): void {
+    const chess = positionAt(tree, nodeId);
     currentChess = chess;
-    lichessAnalysisLink.href = `https://lichess.org/analysis/standard/${chess.fen().replaceAll(" ", "_")}`;
+    lichessAnalysisLink.href = lichessAnalysisUrl(nodeId);
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      lastMove: lastMoveAt(tree, nodeId),
       movable: interactive ? { color: toColor(chess), dests: computeDests(chess) } : { color: undefined, dests: new Map() },
     });
     void updateEngine(chess);
   }
 
-  function addHistoryEntry(expectedSan: string, correct: boolean, playedSan: string, knowledgePct: number | null): void {
+  function addHistoryEntry(nodeId: number, expectedSan: string, correct: boolean, playedSan: string, knowledgePct: number | null): void {
     const pct = knowledgePct === null ? "" : `<span class="practice-history__knowledge">${knowledgePct}%</span>`;
     const detail = correct
       ? escapeHtml(expectedSan)
       : `${escapeHtml(playedSan)} <span class="practice-history__expected">→ ${escapeHtml(expectedSan)}</span>`;
+    const analysisUrl = lichessAnalysisUrl(nodeId);
     const item = document.createElement("li");
     item.className = `practice-history__item ${correct ? "practice-history__item--correct" : "practice-history__item--incorrect"}`;
     item.innerHTML = `
       <span class="practice-history__mark">${correct ? "✓" : "✗"}</span>
       <span class="practice-history__san">${detail}</span>
       ${pct}
+      <a
+        class="practice-history__analysis"
+        href="${analysisUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-icon=""
+        aria-label="Open position in Lichess analysis"
+        title="Open position in Lichess analysis"
+      ></a>
     `;
     historyEl.insertBefore(item, historyEl.firstChild);
   }
 
-  async function finish(): Promise<void> {
+  async function refreshKnowledge(): Promise<number | null> {
     const aggregate = await loadAggregateKnowledge(study.id);
+    knowledgeEl.textContent = aggregate === null ? "—" : `${Math.round(aggregate * 100)}%`;
+    return aggregate;
+  }
+
+  /** Practice has no natural end — once a round's queue (due items, or
+   * everything if nothing's due — see practice.md §5) is drained, the next
+   * one loads automatically instead of stopping. This is the rare fallback
+   * for a queue that comes back genuinely empty (only possible if the study
+   * lost every one of its drill-item nodes mid-session), not the normal
+   * path. */
+  async function stop(): Promise<void> {
+    const aggregate = await refreshKnowledge();
     const pct = aggregate === null ? "—" : `${Math.round(aggregate * 100)}%`;
-    progressEl.textContent = "Session complete";
+    progressEl.textContent = "Nothing left to practice here";
     promptEl.textContent = "";
     promptEl.className = "practice-prompt";
     summaryEl.hidden = false;
@@ -283,13 +340,32 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
     `;
   }
 
+  async function startNextRound(): Promise<void> {
+    showAnswerBtn.hidden = true;
+    promptEl.className = "practice-prompt practice-prompt--correct";
+    promptEl.textContent = "Nice work — loading more…";
+    progressEl.textContent = "Round complete";
+
+    const nodeIds = await loadQueue(study.id);
+    const nextSteps = buildSteps(tree, startNodeId, new Set(nodeIds));
+    if (nextSteps.length === 0) {
+      await stop();
+      return;
+    }
+    steps = nextSteps;
+    totalQuizzes = steps.filter((step) => step.quiz).length;
+    stepIndex = 0;
+    roundDone = 0;
+    window.setTimeout(() => void advance(), CORRECT_PAUSE_MS);
+  }
+
   function showPrompt(nodeId: number): void {
     const parentId = tree.nodes[nodeId].parentId as number;
-    setBoardPosition(positionAt(tree, parentId), true);
+    setBoardPosition(parentId, true);
     awaitingNodeId = nodeId;
     firstAttemptGraded = false;
     showAnswerBtn.hidden = true;
-    progressEl.textContent = `Position ${quizzesDone + 1} of ${totalQuizzes}`;
+    progressEl.textContent = `Position ${roundDone + 1} of ${totalQuizzes}`;
     promptEl.textContent = "Your move";
     promptEl.className = "practice-prompt";
   }
@@ -299,7 +375,7 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
       stepIndex++;
     }
     if (stepIndex >= steps.length) {
-      await finish();
+      await startNextRound();
       return;
     }
     showPrompt(steps[stepIndex].nodeId);
@@ -307,37 +383,81 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
 
   /** The current position is done being quizzed — either answered right
    * (first try or a retry) or revealed via "Show answer" — so lock the
-   * board on the real move and auto-advance after a pause. */
-  function completeItem(nodeId: number, promptClass: string, message: string, pauseMs: number): void {
+   * board on the real move and auto-advance after a pause. `pauseMs: null`
+   * locks the board and advances the step counter without scheduling that
+   * auto-advance — used when a celebration is about to take over instead,
+   * pausing the loop until the user picks what to do next. */
+  function completeItem(nodeId: number, promptClass: string, message: string, pauseMs: number | null): void {
     awaitingNodeId = null;
     firstAttemptGraded = false;
     showAnswerBtn.hidden = true;
-    setBoardPosition(positionAt(tree, nodeId), false);
+    setBoardPosition(nodeId, false);
     promptEl.className = `practice-prompt ${promptClass}`.trim();
     promptEl.textContent = message;
     stepIndex++;
-    window.setTimeout(() => void advance(), pauseMs);
+    if (pauseMs !== null) window.setTimeout(() => void advance(), pauseMs);
+  }
+
+  /** A one-time celebration for reaching 100% knowledge (rounded, matching
+   * what the header badge itself shows) — pauses the otherwise-infinite
+   * practice loop (see startNextRound) at this milestone instead of
+   * ploughing straight past it, and hands the choice of what happens next
+   * back to the user explicitly. */
+  function showCelebration(): void {
+    progressEl.textContent = "Fully known!";
+    const confetti = Array.from({ length: 16 }, () => {
+      const left = Math.random() * 100;
+      const delay = Math.random() * 0.5;
+      const duration = 1.4 + Math.random() * 0.8;
+      const hue = Math.round(Math.random() * 360);
+      return `<span class="practice-confetti" style="left:${left}%; animation-delay:${delay}s; animation-duration:${duration}s; background:hsl(${hue} 75% 60%)"></span>`;
+    }).join("");
+
+    summaryEl.hidden = false;
+    summaryEl.className = "practice-feedback practice-feedback--summary practice-celebration";
+    summaryEl.innerHTML = `
+      <div class="practice-confetti-field" aria-hidden="true">${confetti}</div>
+      <div class="practice-celebration__badge">🏆</div>
+      <p class="practice-celebration__title">100% known!</p>
+      <p>Every position in "${escapeHtml(study.name)}" is fully fresh right now.</p>
+      <div class="practice-celebration__actions">
+        <a class="btn btn-secondary" href="/practice.html">End session</a>
+        <button class="btn btn-primary" type="button" id="practice-continue-btn">Continue practicing</button>
+      </div>
+    `;
+    document.getElementById("practice-continue-btn")?.addEventListener("click", () => {
+      summaryEl.hidden = true;
+      summaryEl.className = "practice-feedback practice-feedback--summary";
+      summaryEl.innerHTML = "";
+      void advance();
+    });
   }
 
   function retryAtSamePrompt(nodeId: number, message: string): void {
     const parentId = tree.nodes[nodeId].parentId as number;
-    setBoardPosition(positionAt(tree, parentId), true);
+    setBoardPosition(parentId, true);
     promptEl.className = "practice-prompt practice-prompt--incorrect";
     promptEl.textContent = message;
   }
 
   async function handleFirstAttempt(nodeId: number, correct: boolean, playedSan: string): Promise<void> {
+    roundDone++;
     quizzesDone++;
     if (correct) correctCount++;
 
     const result = await recordAttempt(study.id, nodeId, correct);
     const expectedSan = tree.nodes[nodeId].san as string;
     const knowledgePct = result ? Math.round(result.knowledge * 100) : null;
-    addHistoryEntry(expectedSan, correct, playedSan, knowledgePct);
+    addHistoryEntry(nodeId, expectedSan, correct, playedSan, knowledgePct);
 
     if (correct) {
-      completeItem(nodeId, "practice-prompt--correct", "Correct!", CORRECT_PAUSE_MS);
+      const aggregate = await refreshKnowledge();
+      const reachedFull = !celebrated && aggregate !== null && Math.round(aggregate * 100) >= 100;
+      if (reachedFull) celebrated = true;
+      completeItem(nodeId, "practice-prompt--correct", "Correct!", reachedFull ? null : CORRECT_PAUSE_MS);
+      if (reachedFull) showCelebration();
     } else {
+      void refreshKnowledge();
       // Allow another try instead of moving straight on — a single slip
       // shouldn't end the position, only a second miss (or giving up) does.
       firstAttemptGraded = true;
@@ -411,6 +531,7 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
     }
   });
 
+  void refreshKnowledge();
   void advance();
 }
 
@@ -441,7 +562,7 @@ async function init(): Promise<void> {
   const startNodeId =
     study.startNodeId !== null && study.startNodeId in study.tree.nodes ? study.startNodeId : study.tree.rootId;
   const steps = buildSteps(study.tree, startNodeId, new Set(nodeIds));
-  renderSession(main, study, steps);
+  renderSession(main, study, startNodeId, steps);
 }
 
 init();
