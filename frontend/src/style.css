@@ -218,7 +218,8 @@ body {
 
 .btn-primary {
   background: var(--primary);
-  color: var(--text-strong);
+  /* White on the blue in both themes: --text-strong is near-black in light mode. */
+  color: #fff;
 }
 
 .btn-primary:hover {
@@ -1687,7 +1688,7 @@ body {
 
 .btn-danger {
   background: #7e2424;
-  color: var(--text-strong);
+  color: #fff;
 }
 
 .btn-danger:hover {
