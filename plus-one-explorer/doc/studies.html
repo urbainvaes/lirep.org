@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Detailed behavior and interaction guide for Lirep.org Studies." />
+    <title>Studies — Lirep.org Guide</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="doc-header">
+      <div>
+        <p class="eyebrow">Lirep.org · Product behavior</p>
+        <h1>Studies</h1>
+        <p>Behavior specification for the repertoire list and study editor.</p>
+      </div>
+    </header>
+    <main>
+      <nav aria-label="Documentation">
+        <a href="index.html">Overview</a>
+        <a href="studies.html" aria-current="page">Studies</a>
+        <a href="stats.html">Stats</a>
+      </nav>
+
+      <section>
+        <h2>Purpose and access</h2>
+        <p>A study is a named opening repertoire for one fixed side, represented as a tree of chess positions and moves. It is private to the Lichess account that created it. All study screens require Lichess sign-in.</p>
+        <p>When signed out, the Studies page and editor show a short sign-in prompt and a Sign in link. If a requested study ID does not belong to the account or does not exist, show “Study not found.”</p>
+      </section>
+
+      <section>
+        <h2>Study list</h2>
+        <ul>
+          <li>Load the current account's studies and render one card per study, followed by a New study card.</li>
+          <li>Each card shows the study name, up to the first six SAN moves of its main line, and the main-line move count. Append “+ variations” if the tree contains more nodes than the main line. An empty repertoire says “No moves yet.”</li>
+          <li>Selecting a study opens its editor. New study opens a blank editor.</li>
+          <li>If the account has no studies, still show New study; the list need not block on a special empty state.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Study data model</h2>
+        <p>Persist <code>id</code>, <code>name</code>, <code>side</code>, <code>tree</code>, <code>explorerSettings</code>, optional <code>startNodeId</code>, and calculation data. The tree is a node map: each node has an ID, SAN move (null at the root), parent ID, and ordered child IDs. Keep a root ID and next ID. Child order matters: the first child is the main line; later children are variations.</p>
+        <p>The side is chosen as Playing White or Playing Black only when creating a study. Show a selector for a new study and a read-only badge for an existing one. The server must ignore attempts to change the side during an update.</p>
+      </section>
+
+      <section>
+        <h2>Editor layout and move editing</h2>
+        <p>The editor contains a name input and side badge/selector, then a chessboard, a clickable move tree with controls, an Opening Explorer panel, and a Stockfish panel. New studies start at the normal initial chess position with an empty root. Apply the user's Lichess board theme and piece set when available; otherwise use the default board appearance.</p>
+        <ul>
+          <li>Moves can be entered by making a legal board move or by selecting a SAN move from Explorer or Stockfish. Append the move under the currently selected node. If that same SAN child already exists, navigate to it instead of duplicating it.</li>
+          <li>At positions where it is the studied side's turn, allow at most one child. Replaying the existing move is valid; attempting a different move must not alter the tree and must explain that the existing move must be deleted first.</li>
+          <li>At opponent-to-move positions, allow any number of distinct children, creating variations. Keep the user's current branch as the preferred forward-navigation branch.</li>
+          <li>Render the move list in PGN style. The first child is the unparenthesized main line; sibling alternatives appear in parentheses at their branch point. Show correct move numbers for White and Black moves, including Black's number when a variation resumes. Clicking any move selects that position and updates the board, tree highlight, Explorer, and enabled engine analysis.</li>
+          <li>Mark moves made by the studied side in blue, the currently selected node with a background highlight, and the custom starting point in orange. The starting-point style takes precedence if both markers apply.</li>
+        </ul>
+        <h3>Navigation and actions</h3>
+        <ul>
+          <li><strong>Go to start</strong> selects the true root. <strong>Delete this move</strong> deletes the selected node and its entire descendant subtree, then selects its parent. Disable deletion at the root.</li>
+          <li>Left/Right arrow steps backward/forward along the currently followed branch. Up jumps to the true root; Down follows the selected branch to its end. Do not intercept these keys while an input, select, or textarea has focus, or when a modifier key is held.</li>
+          <li><strong>Save</strong> requires a non-empty trimmed name. Create with <code>POST /api/studies</code> and update with <code>PUT /api/studies/{id}</code>; save the whole tree, side, Explorer settings, and starting point. On success return to the study list; on failure preserve edits and show an error. Cancel returns to the list.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Starting point</h2>
+        <p>The starting point changes where Stats calculations begin, not the tree or move numbering. Default is the actual root (<code>startNodeId: null</code>). When a non-root node is selected, the action sets that node as the starting point; selecting the active starting node changes the action to Clear starting point. Clearing restores the root default.</p>
+        <p>Visually color the designated move orange and show a badge by the study name with its actual move notation. Do not renumber the move tree. Persist this toggle immediately for an already-saved study; for a new study, include it on the first Save. If deleting a subtree removes the chosen node, clear the starting point. Backend calculations must also fall back to the true root if a stored ID no longer exists.</p>
+      </section>
+
+      <section>
+        <h2>Opening Explorer</h2>
+        <p>Explorer is below the board and updates for the currently selected FEN. Its enable checkbox hides the panel and disables its settings when off. Changing a setting fetches data for the current position. Show a loading state while fetching and a recoverable unavailable message on failure.</p>
+        <ul>
+          <li>Databases: Players (Lichess rated games) and Masters. For Players, offer minimum rating and Bullet, Blitz, Rapid, Classical speed filters. Default speeds are Blitz, Rapid, Classical; require at least one checked speed.</li>
+          <li>“My current rating” is the default player threshold. Resolve from Rapid, then Blitz, then Classical; use 1500 if no rating exists. Convert to the containing Explorer bucket and that bucket plus every higher bucket. A manually selected threshold is fixed and stored on the study.</li>
+          <li>In Masters mode, disable the rating and speed controls; they do not filter the Masters database.</li>
+          <li>Render each move with SAN, a white/draw/black outcome bar and percentages, and game counts. Clicking a row plays/adds that move in the current tree, subject to the studied-side one-child rule.</li>
+          <li>Indicate the data fetch time as a relative age, with the exact timestamp available on hover. The backend cache is shared and keyed by database, query filters, and FEN; Explorer entries expire after 24 hours.</li>
+        </ul>
+        <p class="callout">Explorer is not anonymous in this app: a signed-in Lichess session is required. On an HTTP 429, report that the user must wait before retrying rather than rapidly retrying.</p>
+      </section>
+
+      <section>
+        <h2>Stockfish</h2>
+        <p>The checkbox lazily starts a local Stockfish WASM worker on first use. Analyze the current position with MultiPV 5. Draw up to five ranked arrows on the board, green through red, and show a matching ranked list with SAN and evaluation. Selecting a candidate plays it like an Explorer row. Re-analyze whenever the selected node changes; stop/discard stale searches when navigation moves on. Turning the option off clears arrows/results and terminates the worker. Game-over positions show a game-over state and no candidate moves.</p>
+      </section>
+
+      <section>
+        <h2>Save and errors</h2>
+        <p>Study CRUD and calculation data are account-scoped in SQLite. Keep edits local until Save, except an existing study's starting-point toggle, which saves immediately. A failed immediate save rolls the toggle back and displays an error. Preserve the editor state after any failed request so the user can retry.</p>
+        <p class="subtle">Relevant behavior is implemented across the study list/editor, tree helpers, study API, Explorer service, and shared Stockfish client.</p>
+      </section>
+
+      <footer><span>Lirep.org · Behavior guide</span><a href="stats.html">Next: Stats →</a></footer>
+    </main>
+  </body>
+</html>

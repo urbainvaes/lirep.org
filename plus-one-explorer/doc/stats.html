@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Detailed behavior and calculation guide for Lirep.org Stats." />
+    <title>Stats — Lirep.org Guide</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="doc-header">
+      <div>
+        <p class="eyebrow">Lirep.org · Product behavior</p>
+        <h1>Stats</h1>
+        <p>Screen states, calculation rules, data sources, and progress behavior for repertoire analysis.</p>
+      </div>
+    </header>
+    <main>
+      <nav aria-label="Documentation">
+        <a href="index.html">Overview</a>
+        <a href="studies.html">Studies</a>
+        <a href="stats.html" aria-current="page">Stats</a>
+      </nav>
+
+      <section>
+        <h2>Purpose and access</h2>
+        <p>Stats evaluate a saved study against a selected pool of real games. The studied side is assumed to remember and always play its prepared move. Opponent replies are weighted by their frequency in the Lichess Opening Explorer.</p>
+        <p>Both the Stats list and detail page require Lichess sign-in. Show a sign-in prompt when signed out and “Study not found” when a requested ID is unavailable to the account.</p>
+      </section>
+
+      <section>
+        <h2>Stats list</h2>
+        <ul>
+          <li>Load the account's studies. Show an empty state with a New study link when there are none.</li>
+          <li>Render one card per study with its score-tier chess-piece badge, study name, studied side, and expected score as a percentage. Until calculated, show a dash and “Not calculated yet.”</li>
+          <li>When score exists, show its Explorer source (Players and minimum rating, or Masters), number of positions evaluated, and calculation time. If expected evaluation exists, show it too.</li>
+          <li>The score badge tiers are gold at 60%+, silver at 55%+, bronze at 50%+, and unbadged/below breakeven under 50%. The piece badge on a calculated card opens the study detail page. A card with no calculated score does not open.</li>
+          <li>Each card has Calculate or Recalculate. Disable the button while working. It starts the win-probability job and then the expected-evaluation job in sequence, updating the button label with current progress. If the first succeeds and second fails, retain and display the successful result instead of discarding it.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Study detail screen</h2>
+        <p>Open at <code>stat.html?id={studyId}</code>. Show Back to Stats, the tier badge and legend toggle, study name, and Playing White/Black badge. Show two metric cards, calculation actions, Explorer settings, then coverage chart. Every metric and chart must identify if its calculation begins at a custom starting point.</p>
+        <h3>Metric cards</h3>
+        <ul>
+          <li><strong>Win probability</strong> is displayed as a percentage but means expected score: a win = 1, draw = 0.5, loss = 0, from the studied side's perspective. Include source, evaluated-position count, and timestamp.</li>
+          <li><strong>Expected evaluation at the end of prep</strong> is a weighted Stockfish score in pawns from the studied side's POV, formatted to two decimals with a sign. Display forced-mate labels for capped mate values and calculation time. If end positions lacked an engine evaluation, they contribute 0.00 and the card states how many misses occurred.</li>
+          <li>Empty metrics show a dash and “Not calculated yet.” The tier legend explains all score thresholds.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Calculation definitions</h2>
+        <h3>Expected score and coverage</h3>
+        <p>These are exclusively Opening Explorer-derived; never approximate them with engine scores. Walk from the effective starting node. At a studied-side turn, follow its sole prepared child. If preparation ends on the studied side's turn, use that position's Explorer W/D/L score as a neutral fallback. At an opponent turn, fetch that position's move list and weight each listed move by its game count divided by the total listed games. Recurse through prepared replies; for a reply absent from the tree, use that move's own W/D/L result from Explorer and stop that branch. A terminal result inside the tree is exact (win 1, draw .5, loss 0). If there are no Explorer games, use neutral expected score .5.</p>
+        <p>Coverage tracks probability mass that remains inside the tree under the same opponent move weights. Start at 1.0. Studied-side moves preserve mass; opponent moves split it by frequency; mass on an unprepared reply exits the book. Record the remaining mass after each opponent move. Thus coverage can only drop on opponent replies. The tooltip also reports the number of tree moves/branches represented at that depth, a structural count rather than a weighted count.</p>
+        <h3>Expected evaluation</h3>
+        <p>Use the same weighted tree walk and studied-side perfect-play assumption, but assign leaves an engine evaluation. When an opponent reply leaves the tree, evaluate the resulting position and weight it by that reply's real frequency. If a studied-side leaf or position with no usable Explorer games is reached, evaluate the current position. Checkmate is represented by ±100,000 centipawns; draws are 0. Store evaluations in White's POV, then convert to the studied side's POV for the result. Display cp as pawns (cp / 100).</p>
+        <p>Explorer move lists are capped by Lichess (roughly the top dozen moves), so rare omitted moves are not separately modeled. A custom start node changes the calculation root only; it does not trim or renumber the tree. Coverage move numbers are relative to that start node and the chart identifies which opponent move each point follows.</p>
+      </section>
+
+      <section>
+        <h2>Three independent actions</h2>
+        <h3>Update evaluations</h3>
+        <p>This action evaluates engine positions locally in the browser with the same Stockfish WASM worker used by the study editor. It does not calculate a metric; it prepares reusable evaluations for expected evaluation. First discover off-tree opponent replies by reading Explorer data at each opponent-to-move node. Then evaluate every tree node and every discovered off-tree resulting position. Reuse existing study node evaluations and globally cached FEN evaluations; only calculate missing positions. Save node evaluations to this study and off-tree evaluations to the shared global FEN cache.</p>
+        <p>Show an indeterminate “Finding positions to evaluate…” phase, then an exact percentage/count for remaining engine work. If there is nothing new, report “Already up to date.” Show a check when every current tree node has an evaluation; this status is structural and does not guarantee every off-tree reply is cached. After edits, stale node evaluations are not current and the user may update them again.</p>
+        <h3>Update win probability</h3>
+        <p>Start a backend job that calculates expected score and coverage from Explorer data. It does not call Stockfish or Cloud Eval. Save only its fields and timestamp, independently of expected evaluation. Explorer lookups use a persistent cross-study cache with a 24-hour TTL.</p>
+        <h3>Update expected evaluation</h3>
+        <p>Start a separate backend job. Prefer stored study evaluations for tree nodes and shared cached FEN evaluations for off-tree replies. Use Lichess Cloud Eval only for positions not covered by either cache; Cloud Eval has sparse coverage, and missing positions count as 0.00. A 404 can be recorded as a retryable miss; a 429 must fail clearly and must not be immediately retried. Show this action in warning styling with a note to run Update evaluations first when no saved evaluations exist, but do not block it.</p>
+        <p>Each detail-page action runs independently and updates its own result/timestamp without clearing the other. All three action buttons are disabled while any one runs. The two server jobs return a job ID and are polled about every 400 ms; show a simple progress bar and completed-position count. Since the total is unknown, estimate the bar using tree-node count and cap it at 100%. On failure, show the message beside the relevant bar and re-enable the actions.</p>
+      </section>
+
+      <section>
+        <h2>Explorer settings</h2>
+        <p>Show the study's editable settings on the detail page. Changing the controls alone does not trigger calculation. The next win-probability or expected-evaluation action sends the selected settings and saves them as the study's new settings (not a temporary preview), so subsequent views and calculations use them.</p>
+        <ul>
+          <li>Players or Masters database. Masters disables rating and speed controls.</li>
+          <li>For Players, select “My current rating” (stored as automatic/null) or a fixed rating threshold. Automatic mode resolves the current rating to its Explorer bucket and includes that and higher buckets. Reference rating order is Rapid, Blitz, Classical; default to 1500 if unrated.</li>
+          <li>Bullet, Blitz, Rapid, and Classical checkboxes; default to Blitz, Rapid, Classical, and always require at least one speed.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Coverage chart and caching</h2>
+        <p>Render a responsive line chart with percentage on the vertical axis and the studied opponent's move number on the horizontal axis. Hovering near the line shows opponent move number, coverage percentage, and number of remembered moves at that depth. If no coverage is stored, show an explanatory empty state and require recalculation to populate it.</p>
+        <p>Explorer responses and rating resolutions persist in SQLite across backend restarts. Successful engine evaluations are cached by FEN globally; study tree-node evaluations are stored on the study. Backend calculation jobs are in-memory and do not survive a process restart. Process one Explorer request at a time and fail fast on 429 with a wait-a-minute message.</p>
+      </section>
+
+      <section>
+        <h2>Interpretation and limits</h2>
+        <ul>
+          <li>Expected score reports game results, not engine quality. It can disagree with expected evaluation; this is intentional.</li>
+          <li>All results assume perfect memorization and one prepared move at each studied-side decision. They do not model mistakes by the user.</li>
+          <li>Opponent frequencies reflect the selected current pool, not move quality. Sparse data, capped move lists, and changes in current ratings affect estimates.</li>
+          <li>Local Stockfish is fixed-depth and runs on the user's device. Cloud Eval is only a fallback when needed and may have no evaluation for a position.</li>
+          <li>Recalculation is manual because it may require sequential network calls and take several seconds. Settings are saved when a backend metric is recalculated; Update evaluations uses the current Explorer selection to discover off-tree positions.</li>
+        </ul>
+      </section>
+
+      <footer><span>Lirep.org · Behavior guide</span><a href="studies.html">← Studies</a></footer>
+    </main>
+  </body>
+</html>
