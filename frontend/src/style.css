@@ -2725,3 +2725,7 @@ body {
   inset: 0;
   z-index: 100;
 }
+
+.tool-table td:first-child > a.tool-source {
+  font-size: 0.7rem;
+}
