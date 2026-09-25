@@ -19,7 +19,7 @@ import {
   type ExplorerSpeed,
 } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { addMove, createEmptyTree, deleteSubtree, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
+import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
 interface StudyStats {
   winProbability: number;
@@ -595,6 +595,7 @@ function renderEditor(
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      lastMove: lastMoveAt(tree, currentId),
       movable: { color: toColor(chess), dests: computeDests(chess) },
     });
 

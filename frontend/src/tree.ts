@@ -1,3 +1,4 @@
+import type { Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
 import { escapeHtml } from "./layout";
@@ -45,6 +46,27 @@ export function positionAt(tree: StudyTree, nodeId: number): Chess {
   const chess = new Chess();
   for (const san of sanPathTo(tree, nodeId)) chess.move(san);
   return chess;
+}
+
+/** The [from, to] squares of the move that led to `nodeId`, for chessground's
+ * `lastMove` highlight — `[]` at the root, where there's no move to show.
+ * Chessground only tracks this itself for moves made through its own drag
+ * API; jumping the board to an arbitrary position via `board.set({ fen })`
+ * (navigating the tree, auto-playing a reply, switching lines) leaves
+ * whatever was highlighted before untouched unless this is passed
+ * explicitly alongside the new fen — that mismatch is the bug this fixes. */
+export function lastMoveAt(tree: StudyTree, nodeId: number): Key[] {
+  const sans = sanPathTo(tree, nodeId);
+  if (sans.length === 0) return [];
+  const chess = new Chess();
+  let from = "";
+  let to = "";
+  for (const san of sans) {
+    const move = chess.move(san);
+    from = move.from;
+    to = move.to;
+  }
+  return [from as Key, to as Key];
 }
 
 /** Adds `san` as a child of `parentId`, reusing an existing branch with the same move if there is one. */
