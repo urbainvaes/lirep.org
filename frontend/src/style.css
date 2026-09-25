@@ -918,6 +918,35 @@ body {
   border-color: var(--primary);
 }
 
+.study-name-input--attention {
+  border-color: #d62929;
+  animation: study-name-shake 0.4s ease-in-out;
+}
+
+@keyframes study-name-shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .study-name-input--attention {
+    animation: none;
+  }
+}
+
 .study-color-select {
   padding: 0 10px;
   background: var(--panel-bg);

@@ -305,6 +305,21 @@ function renderEditor(
     saveStatusEl.classList.toggle("study-save-status--error", failed);
   }
 
+  /** A blocked-navigation attempt (clicking a nav link with no name set yet —
+   * see the click interceptor below) is otherwise only visible via the small,
+   * neutral-colored status line, easy to miss entirely. This draws the eye
+   * straight to the field that actually needs filling in. */
+  function flagMissingName(): void {
+    setSaveStatus("Enter a name before leaving this page.", true);
+    nameInput.classList.remove("study-name-input--attention");
+    // Force a reflow so re-triggering the animation on a second blocked
+    // click (while the class never actually left, e.g. two rapid clicks)
+    // restarts it instead of being a no-op.
+    void nameInput.offsetWidth;
+    nameInput.classList.add("study-name-input--attention");
+    nameInput.focus();
+  }
+
   function scheduleAutoSave(delay = 250): void {
     if (deleting) return;
     editVersion++;
@@ -317,7 +332,10 @@ function renderEditor(
       );
       if (studyId === null) return;
     }
-    if (nameInput.value.trim()) setSaveStatus("Unsaved changes…");
+    if (nameInput.value.trim()) {
+      nameInput.classList.remove("study-name-input--attention");
+      setSaveStatus("Unsaved changes…");
+    }
     saveTimer = window.setTimeout(() => {
       saveTimer = null;
       void persistStudy();
@@ -769,7 +787,10 @@ function renderEditor(
         }
         const previousVersion = savedVersion;
         await persistStudy();
-        if (savedVersion === previousVersion && !saveInProgress) return;
+        if (savedVersion === previousVersion && !saveInProgress) {
+          if (!nameInput.value.trim()) flagMissingName();
+          return;
+        }
       }
       window.location.href = link.href;
     } finally {
