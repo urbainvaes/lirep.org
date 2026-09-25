@@ -433,7 +433,7 @@ function renderEditor(
     try {
       const res = await fetch(`/api/studies/${studyId}`, { method: "DELETE", credentials: "same-origin" });
       if (!res.ok) throw new Error("Delete failed");
-      window.location.href = "/studies.html";
+      window.location.href = "/";
     } catch {
       deleting = false;
       deleteStudyBtn.disabled = false;

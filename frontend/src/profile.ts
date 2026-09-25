@@ -129,7 +129,7 @@ function renderProfile(
           <h2>Your repertoires</h2>
           <p class="profile-subtitle">Prepared lines, ready for review.</p>
         </div>
-        <a class="profile-section__link" href="/studies.html">All studies <span aria-hidden="true">→</span></a>
+        <a class="profile-section__link" href="/">All studies <span aria-hidden="true">→</span></a>
       </div>
       ${studyRows
         ? `<div class="profile-study-list">${studyRows}</div>`

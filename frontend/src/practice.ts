@@ -70,7 +70,7 @@ async function init(): Promise<void> {
   if (studies.length === 0) {
     grid.innerHTML = `
       <div class="empty-state">
-        <p>No studies yet. Create one in the Studies tab first.</p>
+        <p>No studies yet. Create one first.</p>
         <a class="btn btn-primary" href="/study.html">New study</a>
       </div>
     `;

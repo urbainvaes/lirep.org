@@ -520,11 +520,6 @@ body {
   margin: 0;
 }
 
-.study-card__footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .study-card__actions .study-card__delete {
   justify-self: end;
 }
@@ -628,12 +623,6 @@ body {
 .study-card__plus {
   font-size: 2rem;
   line-height: 1;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
 }
 
 .stat-card {

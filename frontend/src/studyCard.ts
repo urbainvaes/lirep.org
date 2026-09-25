@@ -13,7 +13,7 @@ export interface StudyCardData {
 export function renderStudyGroups(
   studies: StudyCardData[],
   renderCard: (study: StudyCardData) => string,
-  gridClass: "studies-grid" | "stats-grid" | "practice-grid",
+  gridClass: "studies-grid" | "practice-grid",
   renderAddition?: (side: "white" | "black") => string,
 ): string {
   return `
@@ -82,12 +82,6 @@ function renderStudyCardContent(study: StudyCardData): string {
     <div class="study-card__score"><span title="Win % + half of the draw % (a win counts 1, a draw 0.5), from real games in the Explorer, if you always play your prepared moves.">Expected score</span><strong>${scoreLabel}</strong></div>
     <div class="study-card__line">${openingMovesHtml(study)}</div>
   `;
-}
-
-export function renderStudyCard(study: StudyCardData, href: string, deletable = false): string {
-  // The bin sits at the bottom right of the card.
-  const footer = deletable ? `<div class="study-card__footer">${deleteButtonHtml(study)}</div>` : "";
-  return `<a class="study-card study-card--summary" href="${href}">${renderStudyCardContent(study)}${footer}</a>`;
 }
 
 export function renderStudyCardWithActions(study: StudyCardData): string {
