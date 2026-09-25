@@ -1,4 +1,5 @@
 import "./theme";
+import "./menu";
 
 export interface MeResponse {
   authenticated: boolean;

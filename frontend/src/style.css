@@ -966,6 +966,23 @@ body {
   gap: 10px;
 }
 
+.eval-depth-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.eval-depth-control select {
+  padding: 6px 9px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+}
+
 .eval-count {
   color: var(--text-dim);
   font-size: 0.8rem;
@@ -2312,4 +2329,88 @@ body {
 
 .explorer-player[hidden] {
   display: none;
+}
+
+/* Header menu: a hamburger on narrow screens (see src/menu.ts). */
+.menu-toggle {
+  display: none;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .site-header {
+    position: relative;
+  }
+
+  .site-header__inner {
+    gap: 10px;
+    padding: 0 12px;
+  }
+
+  .site-title {
+    font-size: 1.4rem;
+    gap: 0.5rem;
+  }
+
+  .site-title .site-icon {
+    height: 32px;
+    width: 32px;
+  }
+
+  .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .site-nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0;
+    padding: 4px 16px 8px;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 8px 16px var(--shadow);
+  }
+
+  .site-nav--open {
+    display: flex;
+  }
+
+  .site-nav a {
+    padding: 13px 0;
+    font-size: 1.05rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .site-nav a:first-child {
+    border-top: 0;
+  }
+
+  .theme-toggle {
+    margin-left: auto;
+  }
+
+  .username {
+    max-width: 30vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
