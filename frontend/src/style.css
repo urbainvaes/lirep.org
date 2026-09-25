@@ -528,15 +528,16 @@ body {
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #b86a6a;
-  opacity: 0.75;
+  /* Quiet like the other icon controls (the card's own dim text colour), and
+     only turning red, in the theme's own red, when you reach for it. */
+  color: var(--text-dim);
   cursor: pointer;
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out;
 }
 
 .study-card__delete:hover {
   color: var(--bad);
-  opacity: 1;
-  background: rgba(214, 41, 41, 0.14);
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
 }
 
 .study-card__delete:disabled {
