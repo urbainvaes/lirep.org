@@ -2298,3 +2298,18 @@ body {
   color: var(--primary-hover);
   text-decoration: underline;
 }
+
+.explorer-player {
+  width: 9.5rem;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel-bg);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.explorer-player[hidden] {
+  display: none;
+}

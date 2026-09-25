@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -11,6 +12,11 @@ from .config import DEFAULT_EXPLORER_SOURCE, HTTP_TIMEOUT, LOCAL_LICHESS_EXPLORE
 
 LICHESS_EXPLORER_URL = "https://explorer.lichess.org/lichess"
 MASTERS_EXPLORER_URL = "https://explorer.lichess.org/masters"
+PLAYER_EXPLORER_URL = "https://explorer.lichess.org/player"
+# The player endpoint streams NDJSON while it indexes the player's recent
+# games; the last line received is the most complete picture. Stop reading
+# after this long and use what has arrived.
+PLAYER_STREAM_SECONDS = 25
 
 # All speeds selectable in the UI, and what's included when a study hasn't
 # customized this yet. Ultra-bullet and correspondence are left off the
@@ -115,6 +121,38 @@ def _shape_response(
     }
 
 
+async def _fetch_player(
+    client: httpx.AsyncClient, headers: dict[str, str], fen: str, player: str, color: str, speeds: str
+) -> dict:
+    """One player's games, as `color`, from Lichess's explorer."""
+    last: dict | None = None
+    try:
+        async with asyncio.timeout(PLAYER_STREAM_SECONDS):
+            async with client.stream(
+                "GET",
+                PLAYER_EXPLORER_URL,
+                params={"player": player, "color": color, "fen": fen, "speeds": speeds, "recentGames": 0},
+                headers=headers,
+            ) as resp:
+                if resp.status_code == 429:
+                    raise HTTPException(
+                        status_code=429,
+                        detail="rate limited by lichess's opening explorer (429) — please wait a minute before trying again",
+                    )
+                if resp.status_code == 404:
+                    raise HTTPException(status_code=404, detail=f"Lichess has no player named {player}")
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=502, detail=f"lichess explorer fetch failed ({resp.status_code})")
+                async for line in resp.aiter_lines():
+                    if line.strip():
+                        last = json.loads(line)
+    except TimeoutError:
+        pass  # use the latest partial result below
+    if last is None:
+        raise HTTPException(status_code=504, detail="lichess's player explorer did not answer in time")
+    return last
+
+
 async def fetch_explorer(
     client: httpx.AsyncClient,
     headers: dict[str, str],
@@ -123,6 +161,8 @@ async def fetch_explorer(
     database: str,
     min_rating: int | None,
     speeds: str,
+    player: str | None = None,
+    color: str | None = None,
 ) -> dict:
     """Raw, uncached fetch — see fetch_explorer_cached below, which every
     caller (the live /api/explorer endpoint and stats.py's recalculation)
@@ -137,6 +177,10 @@ async def fetch_explorer(
             f"{LOCAL_LICHESS_EXPLORER_URL}/lichess",
             params={"fen": fen, "speeds": speeds, "ratings": _ratings_from(min_rating)},
         )
+    elif database == "player":
+        if not player or color not in ("white", "black"):
+            raise HTTPException(status_code=400, detail="a player name and side are required for the Player database")
+        return await _fetch_player(client, headers, fen, player, color, speeds)
     elif database == "masters":
         resp = await client.get(MASTERS_EXPLORER_URL, params={"fen": fen}, headers=headers)
     else:
@@ -164,6 +208,8 @@ async def fetch_explorer_cached(
     database: str,
     min_rating: int | None,
     speeds: str,
+    player: str | None = None,
+    color: str | None = None,
 ) -> tuple[dict, str]:
     """(data, fetchedAt ISO timestamp). Persisted across studies *and* users:
     a position's real-world move frequencies don't depend on who's asking, so
@@ -174,8 +220,9 @@ async def fetch_explorer_cached(
     explorer-cache.md for the full writeup and why this matters for staying
     under Lichess's (undocumented) rate limit.
     """
-    ratings = _ratings_from(min_rating) if database != "masters" else ""
-    cache_key = f"{source}|{database}|{ratings}|{speeds}|{fen}"
+    ratings = _ratings_from(min_rating) if database == "lichess" else ""
+    who = f"{player.lower()}|{color}" if database == "player" and player else ""
+    cache_key = f"{source}|{database}|{who}|{ratings}|{speeds}|{fen}"
     cached = store.get_explorer_cache(cache_key)
     if cached is not None:
         return cached["response"], cached["fetchedAt"]
@@ -184,14 +231,14 @@ async def fetch_explorer_cached(
     if pending is None:
         async def fetch_and_cache() -> tuple[dict, str]:
             try:
-                data = await fetch_explorer(client, headers, fen, source, database, min_rating, speeds)
+                data = await fetch_explorer(client, headers, fen, source, database, min_rating, speeds, player, color)
             except RuntimeError:
                 if not client.is_closed:
                     raise
                 # The initiating request can disconnect while another caller
                 # still awaits its fetch; retry with an independently owned client.
                 async with httpx.AsyncClient(timeout=client.timeout) as replacement:
-                    data = await fetch_explorer(replacement, headers, fen, source, database, min_rating, speeds)
+                    data = await fetch_explorer(replacement, headers, fen, source, database, min_rating, speeds, player, color)
             except httpx.RequestError as exc:
                 # A genuine connection failure (host unreachable, timed out) —
                 # not the client-closed case above — so surface it as a clean
@@ -247,6 +294,8 @@ async def explorer(
     database: str = "lichess",
     minRating: int | None = None,
     speeds: str = ",".join(DEFAULT_SPEEDS),
+    player: str | None = None,
+    color: Literal["white", "black"] | None = None,
 ) -> dict:
     token = request.session.get("access_token")
     if not token:
@@ -270,6 +319,14 @@ async def explorer(
         if source == "lirep" and database == "masters":
             raise HTTPException(status_code=400, detail="Masters is only available from Lichess")
 
-        data, fetched_at = await fetch_explorer_cached(client, headers, fen, source, database, min_rating, speeds)
+        if database == "player":
+            source = "lichess"  # one player's games exist only on Lichess's explorer
+        data, fetched_at = await fetch_explorer_cached(
+            client, headers, fen, source, database, min_rating, speeds, player, color
+        )
 
-    return _shape_response(source, database, None if database == "masters" else min_rating, data, fetched_at)
+    shaped = _shape_response(source, database, min_rating if database == "lichess" else None, data, fetched_at)
+    if database == "player":
+        shaped["player"] = player
+        shaped["color"] = color
+    return shaped

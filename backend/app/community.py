@@ -35,6 +35,9 @@ def _entry(owner: str, study: dict, me: str | None) -> dict:
     elif source != "lichess":
         reason = "Calculated with the local Explorer, not Lichess's"
         probability = None
+    elif (stats.get("database") or settings.get("database")) == "player":
+        reason = "Calculated from one player's games"
+        probability = None
     return {
         "id": study["id"],
         "name": study["name"],

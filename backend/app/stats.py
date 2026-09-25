@@ -75,9 +75,11 @@ class _Evaluator:
         client: httpx.AsyncClient,
         headers: dict[str, str],
         source: Literal["lirep", "lichess"],
-        database: Literal["lichess", "masters"],
+        database: Literal["lichess", "masters", "player"],
         min_rating: int | None,
         speeds: str,
+        player: str | None = None,
+        color: str | None = None,
         on_progress: Callable[[int], None] | None = None,
     ) -> None:
         self.client = client
@@ -86,6 +88,8 @@ class _Evaluator:
         self.database = database
         self.min_rating = min_rating
         self.speeds = speeds
+        self.player = player
+        self.color = color
         self.on_progress = on_progress
         self.cache: dict[str, dict[str, Any]] = {}
         self.explorer_calls = 0
@@ -109,7 +113,8 @@ class _Evaluator:
         self.explorer_calls += 1
         self._report_progress()
         data, _fetched_at = await fetch_explorer_cached(
-            self.client, self.headers, fen, self.source, self.database, self.min_rating, self.speeds
+            self.client, self.headers, fen, self.source, self.database, self.min_rating, self.speeds,
+            self.player, self.color,
         )
         self.cache[fen] = data
         return data
@@ -250,16 +255,27 @@ class ExpectedEvalIn(BaseModel):
 
 async def _resolve_explorer_settings(
     job_id: str, owner: str, study: dict, headers: dict[str, str]
-) -> tuple[Literal["lirep", "lichess"], Literal["lichess", "masters"], int | None, str] | None:
-    """Resolve the saved explorer settings for the win-probability job."""
+) -> tuple[
+    Literal["lirep", "lichess"], Literal["lichess", "masters", "player"], int | None, str, str | None, str | None
+] | None:
+    """Resolve the saved explorer settings for the win-probability job:
+    (source, database, min_rating, speeds, player, color)."""
     explorer_settings = study["explorerSettings"]
     source: Literal["lirep", "lichess"] = explorer_settings.get("source", DEFAULT_EXPLORER_SOURCE)
-    database: Literal["lichess", "masters"] = explorer_settings.get("database", "lichess")
+    database: Literal["lichess", "masters", "player"] = explorer_settings.get("database", "lichess")
     speeds = ",".join(explorer_settings.get("speeds") or DEFAULT_SPEEDS)
 
     if source == "lirep" and database == "masters":
         jobs.fail(job_id, "Masters data is only available from Lichess")
         return None
+
+    player: str | None = None
+    color: str | None = None
+    if database == "player":
+        # One player's games as the study's side; defaults to the owner.
+        source = "lichess"
+        player = explorer_settings.get("player") or owner
+        color = study["side"]
 
     min_rating = explorer_settings.get("minRating")
     if database == "lichess" and min_rating is None:
@@ -269,7 +285,7 @@ async def _resolve_explorer_settings(
             except HTTPException as exc:
                 jobs.fail(job_id, str(exc.detail))
                 return None
-    return source, database, min_rating, speeds
+    return source, database, min_rating, speeds, player, color
 
 
 def _resolve_start_node_id(study: dict) -> int:
@@ -297,11 +313,12 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
         resolved = await _resolve_explorer_settings(job_id, owner, study, headers)
         if resolved is None:
             return
-        source, database, min_rating, speeds = resolved
+        source, database, min_rating, speeds, player, color = resolved
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             evaluator = _Evaluator(
-                client, headers, source, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
+                client, headers, source, database, min_rating, speeds, player, color,
+                on_progress=lambda n: jobs.set_progress(job_id, n),
             )
             win_rate, draw_probability, loss_probability = await evaluator.outcomes(
                 study["tree"], start_node_id, study["side"]
@@ -322,6 +339,7 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
                 "source": source,
                 "database": database,
                 "minRating": min_rating,
+                "player": player,
                 "speeds": explorer_settings.get("speeds", list(DEFAULT_SPEEDS)),
                 "nodesEvaluated": evaluator.nodes_evaluated,
                 "explorerCalls": evaluator.explorer_calls,

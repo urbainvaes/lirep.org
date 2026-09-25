@@ -5,7 +5,9 @@ export type ExplorerSpeed = "bullet" | "blitz" | "rapid" | "classical";
 export interface ExplorerSettings {
   enabled: boolean;
   source: "lirep" | "lichess";
-  database: "lichess" | "masters";
+  database: "lichess" | "masters" | "player";
+  /** Only for database "player": whose games to show (as the study's side). */
+  player?: string | null;
   /** A fixed rating bucket, chosen once (defaulting to the signed-in
    * player's own bracket, from ExplorerDefaults.defaultMinRating) rather
    * than re-resolved on every request. Only ever null for a study saved
@@ -19,6 +21,7 @@ export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
   enabled: true,
   source: "lichess",
   database: "lichess",
+  player: null,
   minRating: null,
   speeds: ["blitz", "rapid", "classical"],
 };
@@ -42,7 +45,9 @@ export interface ExplorerMove {
 
 export interface ExplorerData {
   source: ExplorerSettings["source"];
-  database: "lichess" | "masters";
+  database: "lichess" | "masters" | "player";
+  player?: string | null;
+  color?: "white" | "black" | null;
   minRating: number | null;
   opening: string | null;
   totals: { white: number; draws: number; black: number };
@@ -93,11 +98,16 @@ export async function fetchExplorerDefaults(): Promise<ExplorerDefaults | null> 
   }
 }
 
-export function explorerUrl(fen: string, settings: ExplorerSettings): string {
+export function explorerUrl(fen: string, settings: ExplorerSettings, side: "white" | "black"): string {
   const params = new URLSearchParams({ fen, source: settings.source, database: settings.database });
   if (settings.database === "lichess") {
     if (settings.minRating !== null) params.set("minRating", String(settings.minRating));
     params.set("speeds", settings.speeds.join(","));
+  } else if (settings.database === "player") {
+    // One player's games as the side this study is played from.
+    params.set("speeds", settings.speeds.join(","));
+    params.set("player", settings.player ?? "");
+    params.set("color", side);
   }
   return `/api/explorer?${params.toString()}`;
 }
@@ -167,7 +177,9 @@ export function renderExplorer(panel: HTMLElement, data: ExplorerData, onPlay: (
     ? "Lirep · Mar 2016"
     : data.database === "masters"
       ? "Lichess Masters"
-      : `Lichess Players rated ${data.minRating ?? "?"}+`;
+      : data.database === "player"
+        ? `${escapeHtml(data.player ?? "?")}'s games as ${data.color ?? "?"}`
+        : `Lichess Players rated ${data.minRating ?? "?"}+`;
   const fetchedAtDate = new Date(data.fetchedAt);
 
   panel.innerHTML = `

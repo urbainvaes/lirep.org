@@ -206,7 +206,11 @@ function renderEditor(
               <select id="explorer-database" aria-label="Lichess database" ${settings.enabled && settings.source === "lichess" ? "" : "disabled"}>
                 <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
                 <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
+                <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
               </select>
+              <input id="explorer-player" class="explorer-player" type="text" placeholder="Lichess username"
+                aria-label="Player whose games to show" value="${escapeHtml(settings.player ?? "")}"
+                ${settings.enabled && settings.database === "player" ? "" : "hidden"} />
               <select
                 id="explorer-min-rating"
                 ${settings.enabled && settings.database === "lichess" ? "" : "disabled"}
@@ -216,7 +220,7 @@ function renderEditor(
             </div>
           </div>
           <div class="speed-checkboxes" id="explorer-speeds">
-            ${speedCheckboxesHtml(allSpeeds, settings.speeds, !settings.enabled || settings.database !== "lichess")}
+            ${speedCheckboxesHtml(allSpeeds, settings.speeds, !settings.enabled || settings.database === "masters")}
           </div>
           <div id="explorer-panel" class="explorer-panel" ${settings.enabled ? "" : "hidden"}></div>
         </div>
@@ -256,6 +260,7 @@ function renderEditor(
   const explorerEnabledEl = document.getElementById("explorer-enabled") as HTMLInputElement;
   const explorerSourceEl = document.getElementById("explorer-source") as HTMLSelectElement;
   const explorerDatabaseEl = document.getElementById("explorer-database") as HTMLSelectElement;
+  const explorerPlayerEl = document.getElementById("explorer-player") as HTMLInputElement;
   const explorerMinRatingEl = document.getElementById("explorer-min-rating") as HTMLSelectElement;
   const explorerSpeedsEl = document.getElementById("explorer-speeds") as HTMLElement;
   const engineEnabledEl = document.getElementById("engine-enabled") as HTMLInputElement;
@@ -495,7 +500,7 @@ function renderEditor(
     const requestId = ++explorerRequestId;
     renderExplorerLoading(explorerPanelEl);
     try {
-      const res = await fetch(explorerUrl(fen, settings), { credentials: "same-origin" });
+      const res = await fetch(explorerUrl(fen, settings, currentSide()), { credentials: "same-origin" });
       if (requestId !== explorerRequestId) return;
       if (!res.ok) {
         renderExplorerError(explorerPanelEl);
@@ -882,13 +887,16 @@ function renderEditor(
   });
 
   function updateExplorerControls(): void {
+    const playerSelected = settings.database === "player";
     explorerSourceEl.disabled = !settings.enabled;
-    explorerDatabaseEl.disabled = !settings.enabled || settings.source === "lirep";
+    explorerSourceEl.querySelector<HTMLOptionElement>('option[value="lirep"]')!.disabled =
+      playerSelected || !explorerDefaults?.lirepAvailable;
+    explorerDatabaseEl.disabled = !settings.enabled || (settings.source === "lirep" && !playerSelected);
     explorerDatabaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = settings.source === "lirep";
-    const playerPoolEnabled = settings.enabled && settings.database === "lichess";
-    explorerMinRatingEl.disabled = !playerPoolEnabled;
+    explorerMinRatingEl.disabled = !(settings.enabled && settings.database === "lichess");
+    explorerPlayerEl.hidden = !(settings.enabled && playerSelected);
     explorerSpeedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
-      cb.disabled = !playerPoolEnabled;
+      cb.disabled = !settings.enabled || settings.database === "masters";
     });
   }
 
@@ -912,7 +920,28 @@ function renderEditor(
 
   explorerDatabaseEl.addEventListener("change", () => {
     settings.database = explorerDatabaseEl.value as ExplorerSettings["database"];
+    if (settings.database === "player") {
+      // One player's games exist only on Lichess; default to the signed-in user.
+      settings.source = "lichess";
+      explorerSourceEl.value = "lichess";
+      if (!settings.player) {
+        void fetchMe().then((me) => {
+          if (me.username && !settings.player && settings.database === "player") {
+            settings.player = me.username;
+            explorerPlayerEl.value = me.username;
+            void updateExplorer(positionAt(tree, currentId).fen());
+            scheduleAutoSave();
+          }
+        });
+      }
+    }
     updateExplorerControls();
+    void updateExplorer(positionAt(tree, currentId).fen());
+    scheduleAutoSave();
+  });
+
+  explorerPlayerEl.addEventListener("change", () => {
+    settings.player = explorerPlayerEl.value.trim() || null;
     void updateExplorer(positionAt(tree, currentId).fen());
     scheduleAutoSave();
   });

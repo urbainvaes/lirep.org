@@ -209,7 +209,7 @@ async function findRequiredEvaluations(
       return;
     }
 
-    const data = await fetchExplorerPosition(chess.fen(), settings, explorerCache);
+    const data = await fetchExplorerPosition(chess.fen(), settings, side, explorerCache);
     const totalGames = data.moves.reduce((total, move) => total + move.white + move.draws + move.black, 0);
     if (totalGames === 0) {
       positions.add(chess.fen());
@@ -236,11 +236,12 @@ async function findRequiredEvaluations(
 async function fetchExplorerPosition(
   fen: string,
   settings: ExplorerSettings,
+  side: "white" | "black",
   cache: Map<string, ExplorerData>,
 ): Promise<ExplorerData> {
   const cached = cache.get(fen);
   if (cached) return cached;
-  const res = await fetch(explorerUrl(fen, settings), { credentials: "same-origin" });
+  const res = await fetch(explorerUrl(fen, settings, side), { credentials: "same-origin" });
   if (!res.ok) throw new Error("Opening Explorer data unavailable for this position");
   const data: ExplorerData = await res.json();
   cache.set(fen, data);
@@ -316,7 +317,7 @@ export async function expectedEvaluation(
       return walk(childId, child);
     }
 
-    const data = await fetchExplorerPosition(chess.fen(), settings, explorerCache);
+    const data = await fetchExplorerPosition(chess.fen(), settings, side, explorerCache);
     const total = data.moves.reduce((games, move) => games + move.white + move.draws + move.black, 0);
     if (!total) return valueAt(chess.fen());
     const childrenBySan = new Map(node.children.map((id) => [tree.nodes[id].san, id]));
@@ -534,10 +535,11 @@ function readSettingsFromDom(): ExplorerSettings {
   const database = (document.getElementById("stat-database") as HTMLSelectElement).value as ExplorerSettings["database"];
   const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
   const minRating = Number(minRatingEl.value);
+  const player = (document.getElementById("stat-player") as HTMLInputElement).value.trim() || null;
   const speeds = Array.from(
     document.querySelectorAll<HTMLInputElement>("#stat-speeds input:checked"),
   ).map((cb) => cb.value as ExplorerSpeed);
-  return { enabled: true, source, database, minRating, speeds };
+  return { enabled: true, source: database === "player" ? "lichess" : source, database, player, minRating, speeds };
 }
 
 function renderPage(
@@ -687,13 +689,17 @@ function renderPage(
             <select id="stat-database" aria-label="Lichess database" ${settings.source === "lirep" ? "disabled" : ""}>
               <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
               <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
+              <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
             </select>
             <select id="stat-min-rating" ${settings.database === "lichess" ? "" : "disabled"}>
               ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
             </select>
+            <input id="stat-player" class="explorer-player" type="text" placeholder="Lichess username"
+              aria-label="Player whose games to use" value="${escapeHtml(settings.player ?? "")}"
+              ${settings.database === "player" ? "" : "hidden"} />
           </div>
           <div class="speed-checkboxes" id="stat-speeds">
-            ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database !== "lichess")}
+            ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database === "masters")}
           </div>
         </div>
       </details>
@@ -735,13 +741,19 @@ function renderPage(
   const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
   const speedsEl = document.getElementById("stat-speeds") as HTMLElement;
 
+  const playerEl = document.getElementById("stat-player") as HTMLInputElement;
+
   function updateExplorerControls(): void {
-    databaseEl.disabled = sourceEl.value === "lirep";
+    const playerSelected = databaseEl.value === "player";
+    databaseEl.disabled = sourceEl.value === "lirep" && !playerSelected;
     databaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = sourceEl.value === "lirep";
-    const playersSelected = databaseEl.value === "lichess";
-    minRatingEl.disabled = !playersSelected;
+    sourceEl.querySelector<HTMLOptionElement>('option[value="lirep"]')!.disabled =
+      playerSelected || !explorerDefaults?.lirepAvailable;
+    if (playerSelected) sourceEl.value = "lichess"; // one player's games exist only on Lichess
+    minRatingEl.disabled = databaseEl.value !== "lichess";
+    playerEl.hidden = !playerSelected;
     speedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
-      cb.disabled = !playersSelected;
+      cb.disabled = databaseEl.value === "masters";
     });
   }
 
@@ -750,7 +762,14 @@ function renderPage(
     updateExplorerControls();
   });
 
-  databaseEl.addEventListener("change", updateExplorerControls);
+  databaseEl.addEventListener("change", () => {
+    updateExplorerControls();
+    if (databaseEl.value === "player" && !playerEl.value.trim()) {
+      void fetchMe().then((me) => {
+        if (me.username && !playerEl.value.trim()) playerEl.value = me.username;
+      });
+    }
+  });
 
   speedsEl.addEventListener("change", (e) => {
     const target = e.target as HTMLInputElement;

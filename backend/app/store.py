@@ -16,6 +16,7 @@ DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {
     "source": DEFAULT_EXPLORER_SOURCE,
     "database": "lichess",
     "minRating": None,
+    "player": None,
     "speeds": ["blitz", "rapid", "classical"],
 }
 DEFAULT_SIDE = "white"

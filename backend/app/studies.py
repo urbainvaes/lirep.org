@@ -12,7 +12,10 @@ router = APIRouter()
 class ExplorerSettings(BaseModel):
     enabled: bool = True
     source: Literal["lirep", "lichess"] = DEFAULT_EXPLORER_SOURCE
-    database: Literal["lichess", "masters"] = "lichess"
+    database: Literal["lichess", "masters", "player"] = "lichess"
+    # Only for database == "player": whose games to look at (the games they
+    # played as the study's side), like the Player tab of Lichess's explorer.
+    player: str | None = None
     # A fixed bucket, chosen once (see /api/explorer-defaults) rather than
     # tracked as a standing "current rating" mode. Only ever None for a
     # study saved before this existed — see explorer.py's fallback.
@@ -28,6 +31,10 @@ class ExplorerSettings(BaseModel):
                 values["source"] = "lichess" if values.get("database") == "masters" else DEFAULT_EXPLORER_SOURCE
             if values["source"] == "lirep" and values.get("database") == "masters":
                 values["database"] = "lichess"
+            if values.get("database") == "player":
+                # One player's games exist only on Lichess's own explorer.
+                values["source"] = "lichess"
+                values["player"] = (values.get("player") or "").strip() or None
         return values
 
 
