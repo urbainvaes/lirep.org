@@ -23,15 +23,16 @@ export interface EngineAnalysis {
 }
 
 interface PendingSearch {
-  id: number;
+  fen: string;
   resolve: (result: EngineAnalysis) => void;
 }
 
 export class Engine {
   private worker: Worker;
   private readyPromise: Promise<void>;
-  private requestId = 0;
-  private queue: PendingSearch[] = [];
+  private activeSearch: PendingSearch | null = null;
+  private nextSearch: PendingSearch | null = null;
+  private stopping = false;
   private linesByRank: Map<number, EngineLine> = new Map();
   private latestDepth = 0;
 
@@ -71,27 +72,39 @@ export class Engine {
         });
       }
     } else if (line.startsWith("bestmove")) {
-      const entry = this.queue.shift();
       const lines = [...this.linesByRank.entries()].sort((a, b) => a[0] - b[0]).map(([, l]) => l);
       const result: EngineAnalysis = { lines, depth: this.latestDepth };
       this.linesByRank = new Map();
       this.latestDepth = 0;
-      // Only the most recently requested search's result is delivered;
-      // results from searches superseded by a later analyze() call (and
-      // told to "stop") are discarded here.
-      if (entry && entry.id === this.requestId) entry.resolve(result);
+      this.activeSearch?.resolve(result);
+      this.activeSearch = null;
+      this.stopping = false;
+      void this.startNextSearch();
     }
   };
 
   async analyze(fen: string): Promise<EngineAnalysis> {
     await this.readyPromise;
-    const id = ++this.requestId;
-    if (this.queue.length > 0) this.worker.postMessage("stop");
     return new Promise((resolve) => {
-      this.queue.push({ id, resolve });
-      this.worker.postMessage(`position fen ${fen}`);
-      this.worker.postMessage(`go depth ${SEARCH_DEPTH}`);
+      if (this.nextSearch) this.nextSearch.resolve({ lines: [], depth: 0 });
+      this.nextSearch = { fen, resolve };
+      if (this.activeSearch && !this.stopping) {
+        this.stopping = true;
+        this.worker.postMessage("stop");
+      } else if (!this.activeSearch) {
+        void this.startNextSearch();
+      }
     });
+  }
+
+  private async startNextSearch(): Promise<void> {
+    if (this.activeSearch || !this.nextSearch) return;
+    await this.readyPromise;
+    const search = this.nextSearch;
+    this.nextSearch = null;
+    this.activeSearch = search;
+    this.worker.postMessage(`position fen ${search.fen}`);
+    this.worker.postMessage(`go depth ${SEARCH_DEPTH}`);
   }
 
   terminate(): void {

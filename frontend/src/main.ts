@@ -27,8 +27,7 @@ async function init(): Promise<void> {
   }
 
   grid.innerHTML = `
-    ${renderStudyGroups(studies, renderStudyCardWithActions, "studies-grid")}
-    <div class="study-create-grid">${renderNewStudyCard()}</div>
+    ${renderStudyGroups(studies, renderStudyCardWithActions, "studies-grid", renderNewStudyCard)}
   `;
 }
 

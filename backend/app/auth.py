@@ -166,8 +166,13 @@ async def logout(request: Request) -> RedirectResponse:
     token = request.session.pop("access_token", None)
     request.session.clear()
     if token:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            await client.delete(TOKEN_URL, headers={"Authorization": f"Bearer {token}"})
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                resp = await client.delete(TOKEN_URL, headers={"Authorization": f"Bearer {token}"})
+            if resp.is_error:
+                logger.warning("Lichess token revocation failed: HTTP %s", resp.status_code)
+        except httpx.HTTPError as exc:
+            logger.warning("Could not revoke Lichess token during logout: %s", type(exc).__name__)
     return RedirectResponse(FRONTEND_URL)
 
 

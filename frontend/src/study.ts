@@ -154,11 +154,12 @@ function renderEditor(
 
         <div class="study-card study-card--moves">
           <div id="tree-view" class="tree-view"></div>
-          <p class="tree-hint">Click a move to jump there. Play a different move from any point to start a variation.</p>
+          <p class="tree-hint">Click a move to jump there. Play a different move from any point to start a variation. Keyboard: ←/→ to navigate, ↑/↓ for the start/end of the line, Delete to remove the selected move, f to flip the board.</p>
           <p id="move-conflict" class="move-conflict" hidden></p>
           <div class="study-actions">
+            <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
             <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
-            <button id="delete-btn" class="btn btn-secondary" type="button">Delete this move</button>
+            <button id="delete-btn" class="btn btn-secondary study-icon-btn" type="button" data-icon="" aria-label="Delete this move" title="Delete this move and everything after it (Delete)"></button>
             <button id="start-point-btn" class="btn btn-secondary" type="button">Set as starting point</button>
           </div>
         </div>
@@ -166,8 +167,8 @@ function renderEditor(
         <div class="study-card study-card--explorer">
           <div class="analysis-header">
             <label class="explorer-toggle">
-              <input type="checkbox" id="explorer-enabled" ${settings.enabled ? "checked" : ""} />
-              Opening Explorer
+              <input type="checkbox" id="explorer-enabled" aria-label="Opening Explorer" ${settings.enabled ? "checked" : ""} />
+              <span class="analysis-label" data-icon="" aria-hidden="true">Opening Explorer</span>
             </label>
             <div class="analysis-header__settings">
               <select id="explorer-database" ${settings.enabled ? "" : "disabled"}>
@@ -191,8 +192,8 @@ function renderEditor(
         <div class="study-card study-card--engine">
           <div class="analysis-header">
             <label class="explorer-toggle">
-              <input type="checkbox" id="engine-enabled" />
-              Stockfish
+              <input type="checkbox" id="engine-enabled" aria-label="Stockfish" />
+              <span class="analysis-label" data-icon="" aria-hidden="true">Stockfish</span>
             </label>
             <span id="engine-status" class="engine-eval"></span>
           </div>
@@ -224,6 +225,7 @@ function renderEditor(
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
   const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
+  const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
   let currentId = tree.rootId;
@@ -233,6 +235,7 @@ function renderEditor(
   let board: Api;
   let explorerRequestId = 0;
   let engine: Engine | null = null;
+  let engineAnalysisId = 0;
   let boardOrientation = currentSide();
   let boardOrientationManuallySet = false;
 
@@ -328,6 +331,7 @@ function renderEditor(
   }
 
   async function updateEngine(chess: Chess): Promise<void> {
+    const analysisId = ++engineAnalysisId;
     if (!engineEnabledEl.checked) return;
 
     if (chess.isGameOver()) {
@@ -340,6 +344,7 @@ function renderEditor(
     if (!engine) engine = new Engine();
     engineStatusEl.textContent = "Thinking…";
     const analysis: EngineAnalysis = await engine.analyze(chess.fen());
+    if (analysisId !== engineAnalysisId || !engineEnabledEl.checked) return;
     const sideToMoveIsWhite = chess.turn() === "w";
 
     board.set({
@@ -405,6 +410,7 @@ function renderEditor(
 
     currentId = nodeId;
     const chess = positionAt(tree, currentId);
+    lichessAnalysisLink.href = `https://lichess.org/analysis/standard/${chess.fen().replaceAll(" ", "_")}`;
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
@@ -440,23 +446,21 @@ function renderEditor(
   }
 
   board = createBoard(boardEl, onMove, boardOrientation);
-  flipBoardBtn.title = `Flip board (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
+  flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   // Opens right at the starting point when one is set (falling back to the
   // real root if it's somehow gone — same degrade-gracefully rule the
   // backend's stats calculations use, see starting-point.md), rather than
   // always the very first move.
   goTo(startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId);
 
-  flipBoardBtn.addEventListener("click", () => {
+  function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     boardOrientationManuallySet = true;
     board.set({ orientation: boardOrientation });
-    flipBoardBtn.title = `Flip board (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
-  });
+    flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
+  }
 
-  document.getElementById("start-btn")?.addEventListener("click", () => goTo(tree.rootId));
-
-  deleteBtn.addEventListener("click", () => {
+  function deleteCurrentMove(): void {
     if (currentId === tree.rootId) return;
     const parentId = tree.nodes[currentId].parentId as number;
     deleteSubtree(tree, currentId);
@@ -465,7 +469,13 @@ function renderEditor(
     // default (the real root). See starting-point.md.
     if (startNodeId !== null && !(startNodeId in tree.nodes)) startNodeId = null;
     goTo(parentId);
-  });
+  }
+
+  flipBoardBtn.addEventListener("click", flipBoard);
+
+  document.getElementById("start-btn")?.addEventListener("click", () => goTo(tree.rootId));
+
+  deleteBtn.addEventListener("click", deleteCurrentMove);
 
   document.getElementById("start-point-btn")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget as HTMLButtonElement;
@@ -505,11 +515,14 @@ function renderEditor(
   });
 
   // Lichess-style keyboard navigation: Left/Right step through the line
-  // you're currently viewing, Up jumps to the start, Down to its end.
+  // you're currently viewing, Up jumps to the start, Down to its end,
+  // Delete/Backspace removes the selected move (same as lichess's own study
+  // editor), f flips the board.
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const target = e.target as HTMLElement;
-    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+    const navigatingFromEngineToggle = target === engineEnabledEl && e.key.startsWith("Arrow");
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) && !navigatingFromEngineToggle) return;
 
     switch (e.key) {
       case "ArrowLeft":
@@ -527,6 +540,16 @@ function renderEditor(
       case "ArrowDown":
         e.preventDefault();
         goToLineEnd();
+        break;
+      case "Delete":
+      case "Backspace":
+        e.preventDefault();
+        deleteCurrentMove();
+        break;
+      case "f":
+      case "F":
+        e.preventDefault();
+        flipBoard();
         break;
     }
   });
@@ -572,6 +595,7 @@ function renderEditor(
     if (engineEnabledEl.checked) {
       void updateEngine(positionAt(tree, currentId));
     } else {
+      engineAnalysisId++;
       board.set({ drawable: { autoShapes: [] } });
       engineStatusEl.textContent = "";
       enginePanelEl.hidden = true;

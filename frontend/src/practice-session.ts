@@ -139,11 +139,12 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
         <h1 class="page-title">${escapeHtml(study.name)}</h1>
         <a class="btn btn-secondary" href="/practice.html">End session</a>
       </div>
+      <div class="practice-session__tools">
+        <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board (f)" aria-label="Flip board"></button>
+        <a id="open-lichess-analysis" class="btn btn-secondary" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer">Open position in Lichess analysis</a>
+      </div>
       <div class="practice-layout">
         <div class="study-card study-card--board">
-          <div class="study-board-tools">
-            <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board" aria-label="Flip board"></button>
-          </div>
           <div id="board" class="study-board"></div>
         </div>
         <div class="study-card practice-panel">
@@ -169,6 +170,7 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
 
   const boardEl = document.getElementById("board") as HTMLElement;
   const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
+  const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
   const progressEl = document.getElementById("practice-progress") as HTMLElement;
   const promptEl = document.getElementById("practice-prompt") as HTMLElement;
   const showAnswerBtn = document.getElementById("practice-show-answer") as HTMLButtonElement;
@@ -243,6 +245,7 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
    * never gets forgotten at one call site but not another. */
   function setBoardPosition(chess: Chess, interactive: boolean): void {
     currentChess = chess;
+    lichessAnalysisLink.href = `https://lichess.org/analysis/standard/${chess.fen().replaceAll(" ", "_")}`;
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
@@ -369,9 +372,22 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
 
   board = createBoard(boardEl, onMove, boardOrientation);
 
-  flipBoardBtn.addEventListener("click", () => {
+  function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     board.set({ orientation: boardOrientation });
+  }
+
+  flipBoardBtn.addEventListener("click", flipBoard);
+
+  // Same "f" shortcut as the Study editor and lichess.org's own analysis board.
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement;
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+    if (e.key === "f" || e.key === "F") {
+      e.preventDefault();
+      flipBoard();
+    }
   });
 
   showAnswerBtn.addEventListener("click", () => {

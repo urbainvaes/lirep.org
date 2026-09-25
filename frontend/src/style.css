@@ -75,8 +75,8 @@ body {
      the wordmark's color (including on hover) the same way lichess.org's
      own icon-font logo does. */
   background-color: currentColor;
-  -webkit-mask-image: url("/logos/rook.png");
-  mask-image: url("/logos/rook.png");
+  -webkit-mask-image: url("/logos/rook2.png");
+  mask-image: url("/logos/rook2.png");
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
@@ -1020,6 +1020,26 @@ body {
   gap: 8px;
 }
 
+.study-actions .study-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 1.15rem;
+}
+
+.analysis-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.analysis-label::before {
+  margin-right: 6px;
+  font-size: 1.1rem;
+}
+
 .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -1481,6 +1501,13 @@ body {
 
 .practice-session__header .page-title {
   margin: 0;
+}
+
+.practice-session__tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 /* Wider than a plain .study-grid — the board is the point here, the side
