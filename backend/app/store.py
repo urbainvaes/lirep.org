@@ -109,6 +109,28 @@ def init_db() -> None:
         if "start_node_id" not in columns:
             conn.execute("ALTER TABLE studies ADD COLUMN start_node_id INTEGER")
 
+        # Registration order: users.id is the user number, starting at 1. Lichess
+        # usernames are case-insensitive. Accounts that existed before this table
+        # (known only through their studies) are numbered by their first study.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO users (username, created_at)
+            SELECT owner, MIN(created_at) FROM studies
+            WHERE owner COLLATE NOCASE NOT IN (SELECT username FROM users)
+            GROUP BY owner
+            ORDER BY MIN(created_at), MIN(id)
+            """
+        )
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS explorer_cache (
@@ -173,6 +195,20 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
 
 
 _COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, created_at, updated_at"
+
+
+def register_user(username: str) -> int:
+    """Returns the user's number (1 for the first registered), registering them
+    on first sight."""
+    with _connect() as conn:
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if row is None:
+            # Insert only when missing: even an ignored INSERT would use up an
+            # AUTOINCREMENT value and leave gaps in the numbering.
+            conn.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (username,))
+            row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    assert row is not None
+    return int(row["id"])
 
 
 def list_studies(owner: str) -> list[dict[str, Any]]:

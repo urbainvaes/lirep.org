@@ -10,6 +10,7 @@ interface RatingInfo {
 interface ProfileResponse {
   username: string;
   title?: string | null;
+  userNumber: number;
   ratings: Partial<Record<"bullet" | "blitz" | "rapid" | "classical", RatingInfo>>;
 }
 
@@ -104,6 +105,11 @@ function renderProfile(
     .join("");
 
   main.innerHTML = `
+    <div class="profile-header">
+      <h1>${titlePrefix}${escapeHtml(profile.username)}</h1>
+      <p class="profile-subtitle">Lirep user #${profile.userNumber}</p>
+    </div>
+
     <section class="profile-section">
       <div class="profile-section__heading">
         <div>

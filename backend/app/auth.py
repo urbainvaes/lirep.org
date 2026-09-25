@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, REDIRECT_URI
+from .store import register_user
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,7 @@ async def callback(
     request.session["access_token"] = access_token
     request.session["username"] = account["username"]
     request.session["title"] = account.get("title")
+    register_user(account["username"])
     return RedirectResponse(FRONTEND_URL)
 
 
@@ -210,7 +212,12 @@ async def profile(request: Request) -> dict:
         if speed in perfs
     }
 
-    return {"username": data["username"], "title": data.get("title"), "ratings": ratings}
+    return {
+        "username": data["username"],
+        "title": data.get("title"),
+        "userNumber": register_user(data["username"]),
+        "ratings": ratings,
+    }
 
 
 DEFAULT_BOARD_THEME = {"theme": "brown", "pieceSet": "cburnett"}
