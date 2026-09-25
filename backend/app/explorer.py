@@ -211,7 +211,10 @@ async def fetch_explorer_cached(
     player: str | None = None,
     color: str | None = None,
 ) -> tuple[dict, str]:
-    """(data, fetchedAt ISO timestamp). Persisted across studies *and* users:
+    """(data, fetchedAt ISO timestamp). Only Lichess responses are persisted:
+    the local Lirep explorer is unlimited and its data never changes, so
+    caching it would only fill the size cap and evict Lichess entries.
+    Lichess responses are persisted across studies *and* users:
     a position's real-world move frequencies don't depend on who's asking, so
     the cache key is the provider plus its exact query (see
     store.EXPLORER_CACHE_TTL_SECONDS for the staleness window). This is what
@@ -223,7 +226,8 @@ async def fetch_explorer_cached(
     ratings = _ratings_from(min_rating) if database == "lichess" else ""
     who = f"{player.lower()}|{color}" if database == "player" and player else ""
     cache_key = f"{source}|{database}|{who}|{ratings}|{speeds}|{fen}"
-    cached = store.get_explorer_cache(cache_key)
+    persist = source == "lichess"
+    cached = store.get_explorer_cache(cache_key) if persist else None
     if cached is not None:
         return cached["response"], cached["fetchedAt"]
 
@@ -246,7 +250,8 @@ async def fetch_explorer_cached(
                 name = "the local Lirep explorer" if source == "lirep" else "lichess's opening explorer"
                 raise HTTPException(status_code=502, detail=f"could not reach {name}") from exc
             fetched_at = datetime.now(UTC).isoformat()
-            store.set_explorer_cache(cache_key, data, fetched_at)
+            if persist:
+                store.set_explorer_cache(cache_key, data, fetched_at)
             return data, fetched_at
 
         pending = asyncio.create_task(fetch_and_cache())

@@ -7,7 +7,7 @@ evaluation cache. They have different ownership and freshness rules:
 
 | Data | Storage and scope | Lifetime |
 | --- | --- | --- |
-| Explorer responses | Backend `explorer_cache`, shared across studies and accounts | 24-hour TTL |
+| Lichess Explorer responses | Backend `explorer_cache`, shared across studies and accounts | 30-day TTL; 24 hours for the player database |
 | Resolved default rating bucket (for a new study's picker) | Backend `rating_cache`, per username | 1-hour TTL; stale fallback on refresh failure |
 | Stockfish position evals | Browser IndexedDB `positions`, keyed by `[username, fen]` | Until browser data is cleared; no sync |
 
@@ -34,14 +34,21 @@ make one request at a time and, after HTTP 429, wait about a minute (or
 longer) and reduce request frequency. A live Explorer 429 fails fast rather
 than triggering an immediate retry.
 
+Only responses from Lichess's Explorer are cached. The local Lirep explorer
+has no rate limit and its data never changes, so its responses are fetched
+fresh every time; caching them would only fill the size cap below and evict
+Lichess entries.
+
 `explorer_cache(cache_key, response, fetched_at)` stores the raw Explorer
 JSON. The key has the form
-`source|database|ratings|speeds|fen`: `source` is `lirep` or `lichess`, and
+`source|database|ratings|speeds|fen`: `source` is always `lichess`, and
 `ratings` is the actual comma-separated bucket list passed to the provider,
 not merely the configured minimum threshold. Masters queries have no rating
 filter. This lets different studies or accounts reuse exactly the same
 provider/query while keeping distinct settings separate. Responses older
-than `EXPLORER_CACHE_TTL_SECONDS` (24 hours) are fetched again and replaced;
+than `EXPLORER_CACHE_TTL_SECONDS` (30 days) are fetched again and replaced,
+except for the player database, whose games change whenever the player
+plays: it uses `EXPLORER_PLAYER_CACHE_TTL_SECONDS` (24 hours);
 there is no manual refresh bypass. The browser receives a shaped
 `/api/explorer` response, including `fetchedAt`; the Study editor displays
 its true age ("Fetched just now", "Fetched 3h ago", etc.). The backend

@@ -166,7 +166,8 @@ remain persistently cached on the backend (see
 - Calculations start at `startNodeId` if set and still present, otherwise the
   tree root; see [starting-point.md](starting-point.md).
 - Recalculation is manual because Explorer lookups and local Stockfish
-  searches can take time. Backend Explorer responses have a 24-hour TTL.
+  searches can take time. Backend Lichess Explorer responses are cached for 30 days (24 hours for
+  the player database); the local Lirep explorer is not cached.
 
 ## Stored shape
 

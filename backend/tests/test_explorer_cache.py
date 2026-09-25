@@ -22,17 +22,29 @@ class ExplorerCacheTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_startup_removes_expired_entries(self) -> None:
         now = datetime.now(UTC)
-        store.set_explorer_cache("old", {"moves": []}, (now - timedelta(days=2)).isoformat())
+        store.set_explorer_cache("old", {"moves": []}, (now - timedelta(days=31)).isoformat())
         store.set_explorer_cache("new", {"moves": []}, now.isoformat())
         store.init_db()
         with store._connect() as conn:
             keys = {row[0] for row in conn.execute("SELECT cache_key FROM explorer_cache")}
         self.assertEqual(keys, {"new"})
 
+    async def test_player_entries_expire_sooner(self) -> None:
+        now = datetime.now(UTC)
+        two_days_ago = (now - timedelta(days=2)).isoformat()
+        store.set_explorer_cache("lichess|lichess||1600|rapid|fen", {"moves": []}, two_days_ago)
+        store.set_explorer_cache("lichess|player|someone|white||rapid|fen", {"moves": []}, two_days_ago)
+        self.assertIsNotNone(store.get_explorer_cache("lichess|lichess||1600|rapid|fen"))
+        self.assertIsNone(store.get_explorer_cache("lichess|player|someone|white||rapid|fen"))
+        store.prune_explorer_cache(now)
+        with store._connect() as conn:
+            keys = {row[0] for row in conn.execute("SELECT cache_key FROM explorer_cache")}
+        self.assertEqual(keys, {"lichess|lichess||1600|rapid|fen"})
+
     async def test_writes_trigger_expiry_cleanup(self) -> None:
         now = datetime.now(UTC)
         with patch.object(store, "EXPLORER_CACHE_CLEANUP_WRITE_INTERVAL", 2):
-            store.set_explorer_cache("old", {"moves": []}, (now - timedelta(days=2)).isoformat())
+            store.set_explorer_cache("old", {"moves": []}, (now - timedelta(days=31)).isoformat())
             store.set_explorer_cache("new", {"moves": []}, now.isoformat())
         with store._connect() as conn:
             keys = {row[0] for row in conn.execute("SELECT cache_key FROM explorer_cache")}
@@ -68,6 +80,21 @@ class ExplorerCacheTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, 1)
         self.assertTrue(all(result == results[0] for result in results))
         self.assertEqual(cached, results[0])
+
+    async def test_lirep_responses_are_not_persisted(self) -> None:
+        calls = 0
+
+        async def fetch(*_args):
+            nonlocal calls
+            calls += 1
+            return {"moves": []}
+
+        with patch.object(explorer, "fetch_explorer", fetch):
+            await explorer.fetch_explorer_cached(None, {}, "fen", "lirep", "lichess", 1600, "rapid")
+            await explorer.fetch_explorer_cached(None, {}, "fen", "lirep", "lichess", 1600, "rapid")
+        self.assertEqual(calls, 2)
+        with store._connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM explorer_cache").fetchone()[0], 0)
 
     async def test_failed_fetch_is_not_cached(self) -> None:
         calls = 0
