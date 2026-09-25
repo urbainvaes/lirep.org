@@ -197,6 +197,10 @@ body {
   font-weight: 600;
 }
 
+.username__icon {
+  display: none;
+}
+
 .username:hover {
   color: var(--primary-hover);
 }
@@ -2422,10 +2426,23 @@ body {
     display: none;
   }
 
+  /* A person icon instead of the name; the name stays in the tooltip and the
+     accessible label. */
   .username {
-    max-width: 30vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .username__name {
+    display: none;
+  }
+
+  .username__icon {
+    display: block;
   }
 }

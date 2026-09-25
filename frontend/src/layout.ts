@@ -55,7 +55,10 @@ export function renderAuthArea(data: MeResponse): void {
 
   if (data.authenticated && data.username) {
     authArea.innerHTML = `
-      <a class="username" href="/profile.html">${escapeHtml(data.username)}</a>
+      <a class="username" href="/profile.html" title="${escapeHtml(data.username)}" aria-label="Profile: ${escapeHtml(data.username)}">
+        <span class="username__name">${escapeHtml(data.username)}</span>
+        <svg class="username__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+      </a>
       <a class="btn btn-secondary site-auth__logout" href="/auth/logout">Log out</a>
     `;
     nav?.insertAdjacentHTML("beforeend", `<a class="site-nav__logout" href="/auth/logout">Log out</a>`);
