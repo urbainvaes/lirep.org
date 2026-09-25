@@ -148,7 +148,17 @@ def practice_queue(study_id: int, request: Request) -> dict:
     due.sort(key=lambda node_id: states[node_id]["last_seen_at"])
     new = [node_id for node_id in items if node_id not in states]
 
-    return {"nodeIds": (due + new)[:SESSION_SIZE]}
+    queue = due + new
+    if not queue and items:
+        # Nothing is due and nothing is new, but practice shouldn't be
+        # gated by the schedule if you want to drill anyway — there's no
+        # reason to disable the whole tab just because the spaced-repetition
+        # algorithm is satisfied for now. Offer a voluntary review of
+        # everything instead, oldest-practiced first (freshest last, since
+        # those need it least).
+        queue = sorted(items, key=lambda node_id: states[node_id]["last_seen_at"])
+
+    return {"nodeIds": queue[:SESSION_SIZE]}
 
 
 class AttemptIn(BaseModel):

@@ -14,13 +14,14 @@ export function renderStudyGroups(
   studies: StudyCardData[],
   renderCard: (study: StudyCardData) => string,
   gridClass: "studies-grid" | "stats-grid" | "practice-grid",
+  renderAddition?: (side: "white" | "black") => string,
 ): string {
   return `
     <div class="opening-groups">
       ${(["white", "black"] as const).map((side) => {
         const group = studies.filter((study) => study.side === side);
         const title = side === "white" ? "Openings for White" : "Openings for Black";
-        const cards = group.map(renderCard).join("");
+        const cards = group.map(renderCard).join("") + (renderAddition?.(side) ?? "");
         return `
           <section class="opening-group">
             <h2>${title}</h2>
@@ -34,11 +35,20 @@ export function renderStudyGroups(
   `;
 }
 
-export function renderNewStudyCard(): string {
+export function renderNewStudyCard(side: "white" | "black" = "white"): string {
   return `
-    <a class="study-card study-card--new" href="/study.html">
+    <a class="study-card study-card--new" href="/study.html?side=${side}">
       <span class="study-card__plus">+</span>
-      <span>New study</span>
+      <span>New ${side === "white" ? "White" : "Black"} study</span>
+    </a>
+  `;
+}
+
+export function renderAlapinStudyCard(): string {
+  return `
+    <a class="study-card study-card--new" href="/study.html?template=alapin">
+      <span class="study-card__plus">+</span>
+      <span>Alapin (White)</span>
     </a>
   `;
 }

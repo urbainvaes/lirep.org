@@ -124,7 +124,7 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
   if (steps.length === 0) {
     main.innerHTML = `
       <div class="empty-state">
-        <p>Nothing to practice in "${escapeHtml(study.name)}" right now — everything's either fresh or has no due reviews yet.</p>
+        <p>"${escapeHtml(study.name)}" has no moves of its own to practice yet.</p>
         <a class="btn btn-primary" href="/practice.html">Back to Practice</a>
       </div>
     `;

@@ -113,6 +113,11 @@ body {
   color: var(--text-strong);
 }
 
+.site-nav a[aria-current="page"] {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
 .site-auth {
   display: flex;
   align-items: center;

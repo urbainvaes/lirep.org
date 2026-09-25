@@ -177,6 +177,11 @@ streak from a branch that, structurally, doesn't exist anymore.
    in tree order. **Not** leverage-ranked (§2 "out of scope") — that's a
    deliberately simple starting point, not a claim that due-order is
    optimal.
+4. If that leaves the queue empty (nothing due, nothing new) but the study
+   does have drill items, the queue falls back to **all** of them, oldest
+   `lastSeenAt` first — a voluntary review rather than an empty session.
+   Practice is opt-in on demand, not something the schedule should be able
+   to lock you out of just because it's satisfied for now.
 
 **Walking the tree during a session:**
 - At a **studied-side node** (a queue item): show the position, wait for you
@@ -228,8 +233,12 @@ the (still-unbuilt) study dashboard.
 Studies/Stats list pages), each showing:
 - Aggregate knowledge (mean `knowledge(node)` across drill-item nodes).
 - Due count ("6 due for review") and new count ("12 not started").
-- A **Practice** button, disabled with an explanatory note if there's
-  nothing due and nothing new (nothing to drill right now).
+- A **Practice** button, disabled only when the study has no moves of its
+  own to drill at all. Practice is never gated by the schedule itself —
+  having nothing due or new just means a session falls back to a voluntary
+  review of everything, oldest-practiced first, rather than refusing to
+  start one. The whole point of tracking knowledge as a fading, ongoing
+  number (§3) is defeated by a hard stop that says "come back later."
 
 **Session view:** reuses the Study editor's board component (same
 chessground instance, same piece/board theme lookup) with the Opening

@@ -47,7 +47,7 @@
         <h2>Practice list</h2>
         <ul>
           <li>One card per study, showing aggregate knowledge (the mean knowledge score across the study's own-side positions), a due count, and a new (never-drilled) count.</li>
-          <li>A Practice button opens a session for that study. Disabled, with an explanatory note, when nothing is due and nothing is new.</li>
+          <li>A Practice button opens a session for that study. Disabled only when the study has no moves of its own to drill; having nothing currently due or new never disables it, since a session then falls back to a voluntary review of everything instead.</li>
         </ul>
       </section>
 
@@ -60,7 +60,7 @@
 
       <section>
         <h2>Session mechanics</h2>
-        <p>A session starts from the study's effective starting point (its custom starting point if one is set, otherwise the tree's real root — same resolution rule the Stats tab uses) and builds a bounded queue (default 20 positions): due positions first, oldest first, then new positions in tree order. Not leverage-ranked; queue order is due-ness only.</p>
+        <p>A session starts from the study's effective starting point (its custom starting point if one is set, otherwise the tree's real root — same resolution rule the Stats tab uses) and builds a bounded queue (default 20 positions): due positions first, oldest first, then new positions in tree order. Not leverage-ranked; queue order is due-ness only. If that leaves nothing queued but the study has drill items, the queue falls back to a review of all of them, oldest-practiced first — practice is never blocked just because the schedule is currently satisfied.</p>
         <ul>
           <li>At an own-side position, wait for a move on the board. Only the first attempt is graded: a correct first try applies the knowledge update for a correct answer and continues into that child. A wrong first try applies the update for a wrong answer once, then lets you try again at the same position instead of revealing the answer immediately — a correct retry continues on exactly like a first-try success; a "Show answer" option plays the correct move and moves on for when you're genuinely stuck. Further wrong retries don't grade again.</li>
           <li>At an opponent position, the app plays a reply itself. Every branch that leads to a due or new position gets walked (in order, not chosen at random); branches with nothing left to review in them are skipped entirely rather than visited pointlessly. There is nothing to grade here.</li>

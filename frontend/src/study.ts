@@ -47,6 +47,14 @@ function getStudyId(): number | null {
   return id ? Number(id) : null;
 }
 
+function getNewStudySetup(): { side: "white" | "black"; template: string | null } {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    side: params.get("side") === "black" ? "black" : "white",
+    template: params.get("template"),
+  };
+}
+
 async function loadStudy(id: number): Promise<Study | null> {
   const res = await fetch(`/api/studies/${id}`, { credentials: "same-origin" });
   return res.ok ? res.json() : null;
@@ -111,10 +119,16 @@ function uciToSan(chess: Chess, uci: string): string {
   return move ? move.san : uci;
 }
 
-function renderEditor(main: HTMLElement, existing: Study | null, explorerDefaults: ExplorerDefaults | null): void {
+function renderEditor(
+  main: HTMLElement,
+  existing: Study | null,
+  explorerDefaults: ExplorerDefaults | null,
+  newStudySetup: { side: "white" | "black"; template: string | null },
+): void {
   const settings: ExplorerSettings = existing?.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
+  const isAlapin = !existing && newStudySetup.template === "alapin";
 
   main.innerHTML = `
     <div class="study-editor">
@@ -124,14 +138,14 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
           class="study-name-input"
           type="text"
           placeholder="Name this study"
-          value="${existing ? escapeHtml(existing.name) : ""}"
+          value="${existing ? escapeHtml(existing.name) : isAlapin ? "Alapin" : ""}"
         />
         ${
           existing
             ? `<span class="study-color-badge">${existing.side === "white" ? "Playing White" : "Playing Black"}</span>`
             : `<select id="study-color" class="study-color-select" title="Which side is this repertoire for? This can't be changed after saving.">
-                 <option value="white">Playing White</option>
-                 <option value="black">Playing Black</option>
+                  <option value="white" ${newStudySetup.side === "white" ? "selected" : ""}>Playing White</option>
+                  <option value="black" ${newStudySetup.side === "black" ? "selected" : ""}>Playing Black</option>
                </select>`
         }
         <span id="study-start-badge" class="study-start-badge" hidden></span>
@@ -218,6 +232,15 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
+  if (isAlapin) {
+    let position = new Chess();
+    let nodeId = tree.rootId;
+    for (const san of ["e4", "c5", "c3"]) {
+      const move = position.move(san);
+      if (!move) break;
+      nodeId = addMove(tree, nodeId, move.san);
+    }
+  }
   let currentId = tree.rootId;
   // null means "no override — calculations start at the tree's real root",
   // the default. See starting-point.md.
@@ -614,7 +637,7 @@ async function init(): Promise<void> {
     return;
   }
 
-  renderEditor(main, existing, explorerDefaults);
+  renderEditor(main, existing, explorerDefaults, getNewStudySetup());
 }
 
 init();

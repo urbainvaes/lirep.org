@@ -1,5 +1,5 @@
 import { fetchMe, renderAuthArea, renderSignedOut } from "./layout";
-import { renderNewStudyCard, renderStudyCard, renderStudyGroups, type StudyCardData } from "./studyCard";
+import { renderAlapinStudyCard, renderNewStudyCard, renderStudyCard, renderStudyGroups, type StudyCardData } from "./studyCard";
 
 type StudySummary = StudyCardData;
 
@@ -23,10 +23,12 @@ async function init(): Promise<void> {
     // Network error / backend not running: show an empty grid below.
   }
 
-  grid.innerHTML = `
-    ${renderStudyGroups(studies, (study) => renderStudyCard(study, `/study.html?id=${study.id}`), "studies-grid")}
-    <div class="study-create-grid">${renderNewStudyCard()}</div>
-  `;
+  grid.innerHTML = renderStudyGroups(
+    studies,
+    (study) => renderStudyCard(study, `/study.html?id=${study.id}`),
+    "studies-grid",
+    (side) => `${side === "white" ? renderAlapinStudyCard() : ""}${renderNewStudyCard(side)}`,
+  );
 }
 
 init();
