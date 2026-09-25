@@ -17,6 +17,7 @@
         <nav class="site-nav">
           <a href="/studies.html">Studies</a>
           <a href="/stats.html">Stats</a>
+          <a href="/practice.html">Practice</a>
           <a href="/doc/index.html">Doc</a>
           <a href="/about.html">About</a>
         </nav>
@@ -32,6 +33,7 @@
         <a href="index.html">Overview</a>
         <a href="studies.html" aria-current="page">Studies</a>
         <a href="stats.html">Stats</a>
+        <a href="practice.html">Practice</a>
       </nav>
 
       <section>
@@ -64,7 +66,7 @@
           <li>At positions where it is the studied side's turn, allow at most one child. Replaying the existing move is valid; attempting a different move must not alter the tree and must explain that the existing move must be deleted first.</li>
           <li>At opponent-to-move positions, allow any number of distinct children, creating variations. Keep the user's current branch as the preferred forward-navigation branch.</li>
           <li>Render the move list in PGN style. The first child is the unparenthesized main line; sibling alternatives appear in parentheses at their branch point. Show correct move numbers for White and Black moves, including Black's number when a variation resumes. Clicking any move selects that position and updates the board, tree highlight, Explorer, and enabled engine analysis.</li>
-          <li>Mark moves made by the studied side in blue, the currently selected node with a background highlight, and the custom starting point in orange. The starting-point style takes precedence if both markers apply.</li>
+          <li>Mark moves made by the studied side in blue, the currently selected node with a background highlight, and the custom starting point in yellow. The starting-point style takes precedence if both markers apply.</li>
         </ul>
         <h3>Navigation and actions</h3>
         <ul>
@@ -77,7 +79,7 @@
       <section>
         <h2>Starting point</h2>
         <p>The starting point changes where Stats calculations begin, not the tree or move numbering. Default is the actual root (<code>startNodeId: null</code>). When a non-root node is selected, the action sets that node as the starting point; selecting the active starting node changes the action to Clear starting point. Clearing restores the root default.</p>
-        <p>Visually color the designated move orange and show a badge by the study name with its actual move notation. Do not renumber the move tree. Persist this toggle immediately for an already-saved study; for a new study, include it on the first Save. If deleting a subtree removes the chosen node, clear the starting point. Backend calculations must also fall back to the true root if a stored ID no longer exists.</p>
+        <p>Visually color the designated move yellow and show a badge by the study name with its actual move notation. Do not renumber the move tree. Persist this toggle immediately for an already-saved study; for a new study, include it on the first Save. If deleting a subtree removes the chosen node, clear the starting point. Backend calculations must also fall back to the true root if a stored ID no longer exists.</p>
       </section>
 
       <section>

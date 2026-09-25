@@ -19,7 +19,7 @@ import {
   type ExplorerSpeed,
 } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { addMove, createEmptyTree, deleteSubtree, pathTo, renderTree, sanPathTo, type StudyTree } from "./tree";
+import { addMove, createEmptyTree, deleteSubtree, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
 interface StudyStats {
   winProbability: number;
@@ -89,12 +89,6 @@ function renderSignedOut(main: HTMLElement): void {
   `;
 }
 
-function positionAt(tree: StudyTree, nodeId: number): Chess {
-  const chess = new Chess();
-  for (const san of sanPathTo(tree, nodeId)) chess.move(san);
-  return chess;
-}
-
 // null when there's nothing to say (no starting point set, or it's just the
 // real root) — see starting-point.md.
 function describeStartPoint(tree: StudyTree, startNodeId: number | null): string | null {
@@ -144,6 +138,9 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
       </div>
       <div class="study-grid">
         <div class="study-card study-card--board">
+          <div class="study-board-tools">
+            <button id="flip-board-btn" class="btn btn-secondary" type="button" aria-label="Flip board orientation">Flip board</button>
+          </div>
           <div id="board" class="study-board"></div>
         </div>
 
@@ -217,6 +214,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
   const colorSelect = document.getElementById("study-color") as HTMLSelectElement | null;
   const errorEl = document.getElementById("study-error") as HTMLElement;
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
+  const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
@@ -227,6 +225,8 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
   let board: Api;
   let explorerRequestId = 0;
   let engine: Engine | null = null;
+  let boardOrientation = currentSide();
+  let boardOrientationManuallySet = false;
 
   // Remembers, per node, which child was last navigated into from it — so
   // arrow-key "forward"/"end of line" continue along whichever branch you're
@@ -431,8 +431,20 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     if (nodeId !== currentId) goTo(nodeId);
   }
 
-  board = createBoard(boardEl, onMove);
-  goTo(tree.rootId);
+  board = createBoard(boardEl, onMove, boardOrientation);
+  flipBoardBtn.title = `${boardOrientation === "white" ? "White" : "Black"} at bottom`;
+  // Opens right at the starting point when one is set (falling back to the
+  // real root if it's somehow gone — same degrade-gracefully rule the
+  // backend's stats calculations use, see starting-point.md), rather than
+  // always the very first move.
+  goTo(startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId);
+
+  flipBoardBtn.addEventListener("click", () => {
+    boardOrientation = boardOrientation === "white" ? "black" : "white";
+    boardOrientationManuallySet = true;
+    board.set({ orientation: boardOrientation });
+    flipBoardBtn.title = `${boardOrientation === "white" ? "White" : "Black"} at bottom`;
+  });
 
   document.getElementById("start-btn")?.addEventListener("click", () => goTo(tree.rootId));
 
@@ -476,7 +488,13 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     }
   });
 
-  colorSelect?.addEventListener("change", renderTreeView);
+  colorSelect?.addEventListener("change", () => {
+    renderTreeView();
+    if (!boardOrientationManuallySet) {
+      boardOrientation = currentSide();
+      board.set({ orientation: boardOrientation });
+    }
+  });
 
   // Lichess-style keyboard navigation: Left/Right step through the line
   // you're currently viewing, Up jumps to the start, Down to its end.

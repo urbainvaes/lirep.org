@@ -1,5 +1,5 @@
 import { fetchMe, renderAuthArea } from "./layout";
-import { renderStudyCard, type StudyCardData } from "./studyCard";
+import { renderStudyCard, renderStudyGroups, type StudyCardData } from "./studyCard";
 
 function renderSignedOut(grid: HTMLElement): void {
   grid.innerHTML = `
@@ -30,19 +30,11 @@ async function init(): Promise<void> {
     // Network error / backend not running: show the empty state below.
   }
 
-  if (studies.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state">
-        <p>No studies yet. Create one in the Studies tab first.</p>
-        <a class="btn btn-primary" href="/study.html">New study</a>
-      </div>
-    `;
-    return;
-  }
-
-  grid.innerHTML = studies
-    .map((study) => renderStudyCard(study, `/stat.html?id=${study.id}`))
-    .join("");
+  grid.innerHTML = renderStudyGroups(
+    studies,
+    (study) => renderStudyCard(study, `/stat.html?id=${study.id}`),
+    "stats-grid",
+  );
 }
 
 init();

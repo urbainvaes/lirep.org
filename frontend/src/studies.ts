@@ -1,5 +1,5 @@
 import { fetchMe, renderAuthArea } from "./layout";
-import { renderStudyCard, type StudyCardData } from "./studyCard";
+import { renderNewStudyCard, renderStudyCard, renderStudyGroups, type StudyCardData } from "./studyCard";
 
 type StudySummary = StudyCardData;
 
@@ -32,13 +32,9 @@ async function init(): Promise<void> {
     // Network error / backend not running: show an empty grid below.
   }
 
-  const cards = studies.map((study) => renderStudyCard(study, `/study.html?id=${study.id}`)).join("");
   grid.innerHTML = `
-    ${cards}
-    <a class="study-card study-card--new" href="/study.html">
-      <span class="study-card__plus">+</span>
-      <span>New study</span>
-    </a>
+    ${renderStudyGroups(studies, (study) => renderStudyCard(study, `/study.html?id=${study.id}`), "studies-grid")}
+    <div class="study-create-grid">${renderNewStudyCard()}</div>
   `;
 }
 

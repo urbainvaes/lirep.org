@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path(__file__).resolve().parent.parent / "chesster.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "lirep.db"
 
 DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {
     "enabled": True,
@@ -123,6 +123,20 @@ def init_db() -> None:
                 fen TEXT PRIMARY KEY,
                 cp REAL,
                 fetched_at TEXT NOT NULL
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS practice_state (
+                owner TEXT NOT NULL,
+                study_id INTEGER NOT NULL,
+                node_id INTEGER NOT NULL,
+                streak INTEGER NOT NULL DEFAULT 0,
+                tau_days REAL NOT NULL DEFAULT 1.0,
+                last_seen_at TEXT NOT NULL,
+                PRIMARY KEY (owner, study_id, node_id)
             )
             """
         )
@@ -347,4 +361,37 @@ def set_cloud_eval_cache(fen: str, cp: float | None, fetched_at: str) -> None:
             ON CONFLICT(fen) DO UPDATE SET cp = excluded.cp, fetched_at = excluded.fetched_at
             """,
             (fen, cp, fetched_at),
+        )
+
+
+def get_practice_states(owner: str, study_id: int) -> dict[int, dict[str, Any]]:
+    """Every drill-item node this study has ever recorded an attempt for,
+    keyed by node_id. A node missing from the result has never been
+    attempted ("new" — see practice.md §3); there's deliberately no row for
+    it until the first attempt, rather than a zeroed-out row up front, so
+    "never attempted" and "attempted and reset to streak 0" stay
+    distinguishable at the storage layer too."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT node_id, streak, tau_days, last_seen_at FROM practice_state WHERE owner = ? AND study_id = ?",
+            (owner, study_id),
+        ).fetchall()
+    return {
+        row["node_id"]: {"streak": row["streak"], "tau_days": row["tau_days"], "last_seen_at": row["last_seen_at"]}
+        for row in rows
+    }
+
+
+def upsert_practice_state(
+    owner: str, study_id: int, node_id: int, streak: int, tau_days: float, last_seen_at: str
+) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO practice_state (owner, study_id, node_id, streak, tau_days, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(owner, study_id, node_id) DO UPDATE SET
+                streak = excluded.streak, tau_days = excluded.tau_days, last_seen_at = excluded.last_seen_at
+            """,
+            (owner, study_id, node_id, streak, tau_days, last_seen_at),
         )

@@ -1,3 +1,5 @@
+import { Chess } from "chess.js";
+
 import { escapeHtml } from "./layout";
 
 export interface TreeNode {
@@ -35,6 +37,13 @@ export function sanPathTo(tree: StudyTree, nodeId: number): string[] {
   return pathTo(tree, nodeId)
     .map((node) => node.san)
     .filter((san): san is string => san !== null);
+}
+
+/** A chess.js position replayed from the tree's real root up to `nodeId`. */
+export function positionAt(tree: StudyTree, nodeId: number): Chess {
+  const chess = new Chess();
+  for (const san of sanPathTo(tree, nodeId)) chess.move(san);
+  return chess;
 }
 
 /** Adds `san` as a child of `parentId`, reusing an existing branch with the same move if there is one. */

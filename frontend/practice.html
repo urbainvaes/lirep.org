@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Study stats · lirep.org</title>
+    <title>Practice · lirep.org</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -16,7 +16,7 @@
         <nav class="site-nav">
           <a href="/studies.html">Studies</a>
           <a href="/stats.html">Stats</a>
-          <a href="/practice.html">Practice</a>
+          <a href="/practice.html" aria-current="page">Practice</a>
           <a href="/doc/index.html">Doc</a>
           <a href="/about.html">About</a>
         </nav>
@@ -26,12 +26,15 @@
       </div>
     </header>
 
-    <main class="site-main" id="stat-main">
-      <div class="empty-state">
-        <p>Loading…</p>
+    <main class="site-main">
+      <h1 class="page-title">Practice</h1>
+      <div class="practice-grid" id="practice-grid">
+        <div class="empty-state">
+          <p>Loading…</p>
+        </div>
       </div>
     </main>
 
-    <script type="module" src="/src/stat.ts"></script>
+    <script type="module" src="/src/practice.ts"></script>
   </body>
 </html>

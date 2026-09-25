@@ -129,8 +129,19 @@ async def me(request: Request) -> dict:
     if not token:
         return {"authenticated": False}
 
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-        resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {token}"})
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {token}"})
+    except httpx.HTTPError:
+        # This endpoint is polled on every page load just to decide what the
+        # header shows. A network blip to lichess.org here isn't evidence the
+        # session is actually invalid — fall back to the username saved at
+        # login instead of flashing "signed out" for something transient.
+        username = request.session.get("username")
+        if username:
+            return {"authenticated": True, "username": username, "title": None}
+        return {"authenticated": False}
+
     if resp.status_code != 200:
         return {"authenticated": False}
 

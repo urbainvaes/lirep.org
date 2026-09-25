@@ -271,6 +271,33 @@ body {
   gap: 16px;
 }
 
+.opening-groups {
+  display: grid;
+  gap: 30px;
+}
+
+.opening-group h2 {
+  margin: 0 0 14px;
+  color: var(--text-strong);
+  font-size: 1.2rem;
+}
+
+.opening-group__empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--text-dim);
+  background: var(--panel-bg);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.study-create-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  margin-top: 16px;
+}
+
 .study-card {
   display: block;
   background: var(--panel-bg);
@@ -341,6 +368,19 @@ body {
 .study-card__score strong {
   color: var(--primary);
   font-size: 1.05rem;
+}
+
+.study-card__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.study-card__actions .btn {
+  padding-inline: 6px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .study-card__move-line {
@@ -850,9 +890,13 @@ body {
 }
 
 .study-card--board {
+  display: block;
+}
+
+.study-board-tools {
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-end;
+  margin-bottom: 10px;
 }
 
 .study-board {
@@ -1329,5 +1373,190 @@ body {
 
   .doc-main > section {
     padding: 18px 16px;
+  }
+}
+
+/* Practice tab — see practice.md. */
+
+.practice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.practice-card__counts {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.practice-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.practice-badge--due {
+  color: #e0a53f;
+  background: rgba(224, 165, 63, 0.12);
+}
+
+.practice-badge--new {
+  color: var(--primary-hover);
+  background: rgba(74, 160, 240, 0.12);
+}
+
+.practice-card__status {
+  margin: auto 0 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.practice-card--unavailable {
+  opacity: 0.72;
+}
+
+.practice-session__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.practice-session__header .page-title {
+  margin: 0;
+}
+
+/* Wider than a plain .study-grid — the board is the point here, the side
+   panel only needs room for a short prompt and a scrolling history list. */
+.practice-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.practice-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.practice-show-answer {
+  align-self: flex-start;
+}
+
+/* Read-only version of the Study editor's engine line rows — practice mode
+   lets you explore Stockfish's view of a position, not play into it. */
+.engine-line--readonly {
+  cursor: default;
+}
+
+.engine-line--readonly:hover {
+  border-color: var(--border);
+}
+
+.practice-progress {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.practice-prompt {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.3rem;
+  font-weight: 600;
+  min-height: 1.6em;
+}
+
+.practice-prompt--correct {
+  color: #3fbf60;
+}
+
+.practice-prompt--incorrect {
+  color: #d62929;
+}
+
+.practice-feedback {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+}
+
+.practice-feedback p {
+  margin: 0;
+}
+
+.practice-feedback--summary {
+  color: var(--text);
+}
+
+.practice-feedback--summary p {
+  margin-bottom: 8px;
+}
+
+.practice-feedback--summary .btn {
+  margin-top: 4px;
+}
+
+.practice-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.practice-history__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.practice-history__mark {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.practice-history__item--correct .practice-history__mark {
+  color: #3fbf60;
+}
+
+.practice-history__item--incorrect .practice-history__mark {
+  color: #d62929;
+}
+
+.practice-history__san {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: "Courier New", monospace;
+}
+
+.practice-history__expected {
+  color: var(--text-strong);
+}
+
+.practice-history__knowledge {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+@media (max-width: 720px) {
+  .practice-layout {
+    grid-template-columns: 1fr;
   }
 }

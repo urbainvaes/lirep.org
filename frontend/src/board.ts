@@ -24,8 +24,9 @@ export function computeDests(chess: Chess): Dests {
 }
 
 /** A bare chessground board. Position/turn/dests are pushed in via api.set() by the caller. */
-export function createBoard(el: HTMLElement, onMove: (orig: Key, dest: Key) => void): Api {
+export function createBoard(el: HTMLElement, onMove: (orig: Key, dest: Key) => void, orientation: Color = "white"): Api {
   return Chessground(el, {
+    orientation,
     movable: {
       free: false,
       events: { after: onMove },
@@ -99,6 +100,17 @@ export function applyLichessBoardTheme(theme: string, pieceSet: string): void {
     document.head.appendChild(styleEl);
   }
   styleEl.textContent = rules.join("\n");
+}
+
+export async function applyBoardTheme(): Promise<void> {
+  try {
+    const res = await fetch("/api/board-theme", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const { theme, pieceSet } = await res.json();
+    applyLichessBoardTheme(theme, pieceSet);
+  } catch {
+    // Network error / backend not running: chessground's bundled default look stays.
+  }
 }
 
 export function formatMoves(moves: string[]): string {
