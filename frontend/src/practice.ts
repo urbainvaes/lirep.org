@@ -77,7 +77,19 @@ async function init(): Promise<void> {
     return;
   }
 
-  grid.innerHTML = renderStudyGroups(studies, (study) => renderCard(study, summaries), "practice-grid");
+  // Weakest first: least knowledge (never-practiced counts as 0), then most
+  // due; studies with nothing to practice go last.
+  const sortKey = (study: StudyCardData): [number, number, number] => {
+    const summary = summaries[String(study.id)];
+    if (!summary || summary.totalItems === 0) return [1, 0, 0];
+    return [0, summary.aggregateKnowledge ?? 0, -summary.dueCount];
+  };
+  const sorted = [...studies].sort((a, b) => {
+    const [ka, kb] = [sortKey(a), sortKey(b)];
+    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2] || a.name.localeCompare(b.name);
+  });
+
+  grid.innerHTML = renderStudyGroups(sorted, (study) => renderCard(study, summaries), "practice-grid");
 }
 
 init();
