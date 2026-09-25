@@ -122,16 +122,21 @@ function renderEditor(
   explorerDefaults: ExplorerDefaults | null,
   newStudySide: "white" | "black",
 ): void {
+  const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
+  // Falls back to a fixed bucket, not DEFAULT_EXPLORER_SETTINGS.minRating
+  // (null), even when /api/explorer-defaults failed to load — a null here
+  // would silently persist on the first autosave and then make every future
+  // Explorer query for this study use explorer.py's own generic 1500-based
+  // default forever, regardless of what this fallback actually resolves to.
+  const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1400;
   const settings: ExplorerSettings = existing?.explorerSettings ?? {
     ...DEFAULT_EXPLORER_SETTINGS,
     source: explorerDefaults?.defaultSource ?? DEFAULT_EXPLORER_SETTINGS.source,
     // A brand-new study starts pinned to the signed-in player's own rating
     // bracket, resolved once here rather than tracked as a standing "auto"
     // mode — see ratingOptionsHtml.
-    minRating: explorerDefaults?.defaultMinRating ?? DEFAULT_EXPLORER_SETTINGS.minRating,
+    minRating: defaultMinRating,
   };
-  const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
-  const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1400;
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
   main.innerHTML = `
