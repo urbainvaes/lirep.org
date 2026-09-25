@@ -154,6 +154,9 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
         <div class="study-card practice-panel">
           <p id="practice-progress" class="practice-progress"></p>
           <p id="practice-prompt" class="practice-prompt"></p>
+          <p id="practice-save-warning" class="practice-save-warning" hidden>
+            Couldn't save that attempt — check your connection. Your progress here wasn't recorded.
+          </p>
           <button id="practice-show-answer" class="btn btn-secondary practice-show-answer" type="button" hidden>
             Show answer
           </button>
@@ -184,6 +187,7 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
   const summaryEl = document.getElementById("practice-summary") as HTMLElement;
   const historyEl = document.getElementById("practice-history") as HTMLElement;
   const knowledgeEl = document.getElementById("practice-knowledge") as HTMLElement;
+  const saveWarningEl = document.getElementById("practice-save-warning") as HTMLElement;
 
   const tree = study.tree;
   // Practice is open-ended — once a round's queue is drained, the next one
@@ -446,6 +450,11 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     if (correct) correctCount++;
 
     const result = await recordAttempt(study.id, nodeId, correct);
+    // A null result means the save itself failed (network blip, expired
+    // session, server error) — surfaced explicitly rather than silently
+    // proceeding as if this attempt had been recorded, which would leave
+    // the user believing their progress was saved when it wasn't.
+    saveWarningEl.hidden = result !== null;
     const expectedSan = tree.nodes[nodeId].san as string;
     const knowledgePct = result ? Math.round(result.knowledge * 100) : null;
     addHistoryEntry(nodeId, expectedSan, correct, playedSan, knowledgePct);
@@ -485,6 +494,12 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     const expectedSan = tree.nodes[nodeId].san as string;
     const correct = move.san === expectedSan;
     if (!firstAttemptGraded) {
+      // Freeze the board immediately, synchronously — handleFirstAttempt
+      // awaits recordAttempt before firstAttemptGraded itself gets set, so
+      // without this a second move dragged while that save is still in
+      // flight would re-enter handleFirstAttempt for the same node and
+      // grade it twice.
+      board.set({ movable: { color: undefined, dests: new Map() } });
       void handleFirstAttempt(nodeId, correct, move.san);
     } else {
       handleRetry(nodeId, correct);
@@ -553,7 +568,16 @@ async function init(): Promise<void> {
     return;
   }
 
-  const [study, , nodeIds] = await Promise.all([loadStudy(studyId), applyBoardTheme(), loadQueue(studyId)]);
+  let study: Study | null;
+  let nodeIds: number[];
+  try {
+    [study, , nodeIds] = await Promise.all([loadStudy(studyId), applyBoardTheme(), loadQueue(studyId)]);
+  } catch {
+    // Network error / backend not running — same fallback practice.ts uses,
+    // rather than leaving an unhandled rejection and a permanently blank page.
+    main.innerHTML = `<div class="empty-state"><p>Could not load this study. Please try again.</p></div>`;
+    return;
+  }
   if (!study) {
     main.innerHTML = `<div class="empty-state"><p>Study not found.</p></div>`;
     return;

@@ -1747,6 +1747,15 @@ body {
   align-self: flex-start;
 }
 
+.practice-save-warning {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #d62929;
+  border-radius: 6px;
+  color: #d62929;
+  font-size: 0.85rem;
+}
+
 /* Read-only version of the Study editor's engine line rows — practice mode
    lets you explore Stockfish's view of a position, not play into it. */
 .engine-line--readonly {
