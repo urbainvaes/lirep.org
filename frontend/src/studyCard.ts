@@ -65,16 +65,19 @@ export function openingMovesHtml(study: StudyCardData): string {
   return rows.join("");
 }
 
-function renderStudyCardContent(study: StudyCardData, deletable: boolean): string {
+function deleteButtonHtml(study: StudyCardData): string {
+  return `<button class="study-card__delete" type="button" data-delete-study="${study.id}" aria-label="Delete ${escapeHtml(study.name)}" title="Delete study">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>
+      </button>`;
+}
+
+function renderStudyCardContent(study: StudyCardData): string {
   const score = study.stats?.winProbability;
   const scoreLabel = score === undefined ? "—" : `${(score * 100).toFixed(1)}%`;
 
   return `
     <div class="study-card__header">
       <h3>${escapeHtml(study.name)}</h3>
-      ${deletable ? `<button class="study-card__delete" type="button" data-delete-study="${study.id}" aria-label="Delete ${escapeHtml(study.name)}" title="Delete study">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>
-      </button>` : ""}
     </div>
     <div class="study-card__score"><span title="Win % + half of the draw % (a win counts 1, a draw 0.5), from real games in the Explorer, if you always play your prepared moves.">Expected score</span><strong>${scoreLabel}</strong></div>
     <div class="study-card__line">${openingMovesHtml(study)}</div>
@@ -82,17 +85,20 @@ function renderStudyCardContent(study: StudyCardData, deletable: boolean): strin
 }
 
 export function renderStudyCard(study: StudyCardData, href: string, deletable = false): string {
-  return `<a class="study-card study-card--summary" href="${href}">${renderStudyCardContent(study, deletable)}</a>`;
+  // The bin sits at the bottom right of the card.
+  const footer = deletable ? `<div class="study-card__footer">${deleteButtonHtml(study)}</div>` : "";
+  return `<a class="study-card study-card--summary" href="${href}">${renderStudyCardContent(study)}${footer}</a>`;
 }
 
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
     <article class="study-card study-card--summary">
-      ${renderStudyCardContent(study, true)}
+      ${renderStudyCardContent(study)}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
         <a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>
         <a class="btn btn-secondary" href="/stat.html?id=${study.id}">Stats</a>
+        ${deleteButtonHtml(study)}
       </div>
     </article>
   `;

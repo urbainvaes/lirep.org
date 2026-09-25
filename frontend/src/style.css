@@ -520,6 +520,15 @@ body {
   margin: 0;
 }
 
+.study-card__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.study-card__actions .study-card__delete {
+  justify-self: end;
+}
+
 .study-card__delete {
   display: inline-flex;
   flex-shrink: 0;
@@ -560,8 +569,9 @@ body {
 
 .study-card__actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: auto auto auto 1fr;
+  align-items: center;
+  gap: 4px;
   /* Grid rows stretch every .study-card in a row to the tallest one's
      height; pushing this to the bottom of that stretched space (rather than
      right after whatever content came before it) is what keeps the action
@@ -571,7 +581,8 @@ body {
 }
 
 .study-card__actions .btn {
-  padding-inline: 6px;
+  font-size: 0.82rem;
+  padding-inline: 8px;
   text-align: center;
   white-space: nowrap;
 }
