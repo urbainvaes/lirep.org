@@ -21,6 +21,10 @@
   --page-bg: #161512;
   --panel-bg: #262421;
   --header-bg: #2e2a24;
+  /* A neutral, noticeably lighter gray for cards nested inside another card
+     (e.g. the Stats detail page's metric cards) — --header-bg reads too
+     close to --panel-bg to tell the two apart there. */
+  --card-nested-bg: #3d3d3d;
   --border: #383838;
   --text: #bababa;
   --text-dim: #949494;
@@ -567,7 +571,7 @@ body {
 }
 
 .stat-metric-card {
-  background: var(--header-bg);
+  background: var(--card-nested-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px 18px 18px;
@@ -666,7 +670,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--header-bg);
+  background: var(--card-nested-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px 18px;
@@ -728,7 +732,7 @@ body {
 .stat-settings {
   margin: 22px 0 28px;
   padding: 14px 16px;
-  background: var(--header-bg);
+  background: var(--card-nested-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
