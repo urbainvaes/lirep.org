@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -7,7 +8,8 @@ from typing import Any, Iterator
 
 from .config import DEFAULT_EXPLORER_SOURCE
 
-DB_PATH = Path(__file__).resolve().parent.parent / "lirep.db"
+# LIREP_DB_PATH lets a deployment keep the database outside the source tree.
+DB_PATH = Path(os.getenv("LIREP_DB_PATH") or Path(__file__).resolve().parent.parent / "lirep.db")
 
 DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {
     "enabled": True,
