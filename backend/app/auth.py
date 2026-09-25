@@ -154,8 +154,10 @@ async def callback(
             "Please try again."
         )
 
+    account = account_resp.json()
     request.session["access_token"] = access_token
-    request.session["username"] = account_resp.json()["username"]
+    request.session["username"] = account["username"]
+    request.session["title"] = account.get("title")
     return RedirectResponse(FRONTEND_URL)
 
 
@@ -171,28 +173,10 @@ async def logout(request: Request) -> RedirectResponse:
 
 @router.get("/api/me")
 async def me(request: Request) -> dict:
-    token = request.session.get("access_token")
-    if not token:
+    username = request.session.get("username")
+    if not username or not request.session.get("access_token"):
         return {"authenticated": False}
-
-    try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {token}"})
-    except httpx.HTTPError:
-        # This endpoint is polled on every page load just to decide what the
-        # header shows. A network blip to lichess.org here isn't evidence the
-        # session is actually invalid — fall back to the username saved at
-        # login instead of flashing "signed out" for something transient.
-        username = request.session.get("username")
-        if username:
-            return {"authenticated": True, "username": username, "title": None}
-        return {"authenticated": False}
-
-    if resp.status_code != 200:
-        return {"authenticated": False}
-
-    data = resp.json()
-    return {"authenticated": True, "username": data["username"], "title": data.get("title")}
+    return {"authenticated": True, "username": username, "title": request.session.get("title")}
 
 
 RATED_SPEEDS = ("bullet", "blitz", "rapid", "classical")
