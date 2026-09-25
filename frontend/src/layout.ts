@@ -12,8 +12,21 @@ export function escapeHtml(value: string): string {
 
 export async function fetchMe(): Promise<MeResponse> {
   try {
+    const cached = sessionStorage.getItem("auth-state");
+    if (cached) renderAuthArea(JSON.parse(cached) as MeResponse);
+  } catch {
+    // Storage may be unavailable; the API response remains authoritative.
+  }
+
+  try {
     const res = await fetch("/api/me", { credentials: "same-origin" });
-    return await res.json();
+    const data: MeResponse = await res.json();
+    try {
+      sessionStorage.setItem("auth-state", JSON.stringify(data));
+    } catch {
+      // Storage may be unavailable; continue with the API response.
+    }
+    return data;
   } catch {
     return { authenticated: false };
   }
@@ -31,4 +44,13 @@ export function renderAuthArea(data: MeResponse): void {
   } else {
     authArea.innerHTML = `<a class="btn btn-primary" href="/auth/login">Sign in</a>`;
   }
+}
+
+export function renderSignedOut(container: HTMLElement): void {
+  container.innerHTML = `
+    <div class="empty-state">
+      <p>Sign in with your Lichess account to use Studies, Stats, and Practice.</p>
+      <a class="btn btn-primary" href="/auth/login">Sign in</a>
+    </div>
+  `;
 }

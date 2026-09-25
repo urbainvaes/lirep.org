@@ -1,4 +1,4 @@
-import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
+import { escapeHtml, fetchMe, renderAuthArea, renderSignedOut } from "./layout";
 import { openingMovesHtml, renderStudyGroups, type StudyCardData } from "./studyCard";
 
 interface PracticeSummary {
@@ -6,15 +6,6 @@ interface PracticeSummary {
   dueCount: number;
   newCount: number;
   aggregateKnowledge: number | null;
-}
-
-function renderSignedOut(grid: HTMLElement): void {
-  grid.innerHTML = `
-    <div class="empty-state">
-      <p>Sign in with your Lichess account to practice your studies.</p>
-      <a class="btn btn-primary" href="/auth/login">Sign in</a>
-    </div>
-  `;
 }
 
 function knowledgeLabel(summary: PracticeSummary): string {

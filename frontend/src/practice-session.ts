@@ -1,5 +1,5 @@
 import type { Api } from "@lichess-org/chessground/api";
-import type { Key } from "@lichess-org/chessground/types";
+import type { Color, Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
 import { applyBoardTheme, computeDests, createBoard, toColor } from "./board";
@@ -141,6 +141,9 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
       </div>
       <div class="practice-layout">
         <div class="study-card study-card--board">
+          <div class="study-board-tools">
+            <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board" aria-label="Flip board"></button>
+          </div>
           <div id="board" class="study-board"></div>
         </div>
         <div class="study-card practice-panel">
@@ -165,6 +168,7 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
   `;
 
   const boardEl = document.getElementById("board") as HTMLElement;
+  const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
   const progressEl = document.getElementById("practice-progress") as HTMLElement;
   const promptEl = document.getElementById("practice-prompt") as HTMLElement;
   const showAnswerBtn = document.getElementById("practice-show-answer") as HTMLButtonElement;
@@ -187,6 +191,9 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
   let board: Api;
   let engine: Engine | null = null;
   let currentChess: Chess = new Chess();
+  // Defaults to the studied side at the bottom (e.g. Black at the bottom
+  // for a Black opening) — that's the side you're actually answering for.
+  let boardOrientation: Color = study.side;
 
   async function updateEngine(chess: Chess): Promise<void> {
     if (!engineEnabledEl.checked) return;
@@ -360,7 +367,12 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
     }
   }
 
-  board = createBoard(boardEl, onMove);
+  board = createBoard(boardEl, onMove, boardOrientation);
+
+  flipBoardBtn.addEventListener("click", () => {
+    boardOrientation = boardOrientation === "white" ? "black" : "white";
+    board.set({ orientation: boardOrientation });
+  });
 
   showAnswerBtn.addEventListener("click", () => {
     if (awaitingNodeId === null) return;

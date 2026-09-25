@@ -899,6 +899,29 @@ body {
   margin-bottom: 10px;
 }
 
+/* Icon-only flip-board button, matching lichess.org's own "switch" glyph
+   and small square tool-button styling (their .fbt class). */
+.board-flip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.board-flip-btn:hover {
+  color: var(--text-strong);
+  border-color: var(--text-dim);
+}
+
 .study-board {
   width: 100%;
   aspect-ratio: 1 / 1;

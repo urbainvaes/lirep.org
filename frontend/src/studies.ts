@@ -1,16 +1,7 @@
-import { fetchMe, renderAuthArea } from "./layout";
+import { fetchMe, renderAuthArea, renderSignedOut } from "./layout";
 import { renderNewStudyCard, renderStudyCard, renderStudyGroups, type StudyCardData } from "./studyCard";
 
 type StudySummary = StudyCardData;
-
-function renderSignedOut(grid: HTMLElement): void {
-  grid.innerHTML = `
-    <div class="empty-state">
-      <p>Sign in with your Lichess account to create studies.</p>
-      <a class="btn btn-primary" href="/auth/login">Sign in</a>
-    </div>
-  `;
-}
 
 async function init(): Promise<void> {
   const me = await fetchMe();
