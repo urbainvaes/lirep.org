@@ -414,6 +414,16 @@ function cssVar(name: string): string {
 }
 
 let coverageChart: Chart | null = null;
+let lastCoverageChart: { canvas: HTMLCanvasElement; coverage: number[]; nodeCounts: number[]; opponent: string } | null = null;
+
+// <canvas> doesn't follow the CSS cascade, so redraw with the new colors when
+// the light/dark theme changes.
+document.addEventListener("themechange", () => {
+  if (lastCoverageChart) {
+    const { canvas, coverage, nodeCounts, opponent } = lastCoverageChart;
+    renderCoverageChart(canvas, coverage, nodeCounts, opponent);
+  }
+});
 
 // Same chart type and hover behavior as lichess.org's own rating-distribution
 // chart (a Chart.js line chart with intersect:false + a generous hit radius,
@@ -425,6 +435,7 @@ function renderCoverageChart(
   nodeCounts: number[],
   opponent: string,
 ): void {
+  lastCoverageChart = { canvas, coverage, nodeCounts, opponent };
   const primary = cssVar("--primary");
   const textDim = cssVar("--text-dim");
   const border = cssVar("--border");

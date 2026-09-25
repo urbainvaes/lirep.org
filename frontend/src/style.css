@@ -31,7 +31,69 @@
   --text-strong: #ffffff;
   --primary: #3692e7;
   --primary-hover: #4aa0f0;
+  --good: #3fbf60;
+  --warn: #e0a53f;
+  --info: #8dbbd8;
+  --bad: #d62929;
+  --bad-soft: #e05252;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --pawn-white: #f0f0f0;
+  --pawn-black: #4a4a4a;
+  --pct-white: #e8e8e8;
+  --pct-black: #9a9a9a;
+  color-scheme: dark;
 }
+
+
+/* Light theme — lichess.org's own light palette (see reference/lichess). */
+:root[data-theme="light"] {
+  --page-bg: #edebe9;
+  --panel-bg: #ffffff;
+  --header-bg: #e4e1dd;
+  --card-nested-bg: #f3f1ee;
+  --border: #d4d1cc;
+  --text: #4d4d4d;
+  --text-dim: #6f6f6f;
+  --text-strong: #1a1a1a;
+  --primary: #1f78d1;
+  --primary-hover: #1565b3;
+  --good: #1d8a3a;
+  --warn: #a5680f;
+  --info: #2a6f99;
+  --bad: #c42323;
+  --bad-soft: #c93a3a;
+  --shadow: rgba(0, 0, 0, 0.18);
+  --pawn-white: #ffffff;
+  --pawn-black: #3a3a3a;
+  --pct-white: #4d4d4d;
+  --pct-black: #4d4d4d;
+  color-scheme: light;
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  border-color: var(--primary);
+  color: var(--text-strong);
+}
+
+.theme-toggle + .site-auth {
+  margin-left: 0;
+}
+
 
 * {
   box-sizing: border-box;
@@ -464,7 +526,7 @@ body {
 }
 
 .study-card__delete:hover {
-  color: #d62929;
+  color: var(--bad);
   opacity: 1;
   background: rgba(214, 41, 41, 0.14);
 }
@@ -606,11 +668,12 @@ body {
 }
 
 .side-pawn--white {
-  color: #f0f0f0;
+  color: var(--pawn-white);
+  -webkit-text-stroke: 0.5px var(--text-dim);
 }
 
 .side-pawn--black {
-  color: #4a4a4a;
+  color: var(--pawn-black);
   -webkit-text-stroke: 0.5px var(--text-dim);
 }
 
@@ -893,7 +956,7 @@ body {
 }
 
 .stat-card__meta--warning {
-  color: #e0a53f;
+  color: var(--warn);
 }
 
 .eval-update-row {
@@ -916,7 +979,7 @@ body {
   height: 22px;
   border-radius: 50%;
   background: rgba(63, 191, 96, 0.15);
-  color: #3fbf60;
+  color: var(--good);
   font-size: 0.85rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -951,7 +1014,7 @@ body {
 }
 
 .progress-bar__label--error {
-  color: #e05252;
+  color: var(--bad-soft);
   white-space: normal;
 }
 
@@ -1014,7 +1077,7 @@ body {
 }
 
 .study-name-input--attention {
-  border-color: #d62929;
+  border-color: var(--bad);
   animation: study-name-shake 0.4s ease-in-out;
 }
 
@@ -1068,16 +1131,16 @@ body {
   align-items: center;
   padding: 0 12px;
   background: var(--panel-bg);
-  border: 1px solid #8dbbd8;
+  border: 1px solid var(--info);
   border-radius: 6px;
-  color: #8dbbd8;
+  color: var(--info);
   font-size: 0.85rem;
   white-space: nowrap;
 }
 
 .move-conflict {
   margin: 0;
-  color: #d62929;
+  color: var(--bad);
   font-size: 0.8rem;
 }
 
@@ -1183,7 +1246,7 @@ body {
 }
 
 .tree-move-number {
-  color: #3fbf60;
+  color: var(--good);
 }
 
 .tree-move--current {
@@ -1193,7 +1256,7 @@ body {
 
 /* The study's starting point (see starting-point.md). */
 .tree-move--start-point {
-  color: #8dbbd8;
+  color: var(--info);
 }
 
 .tree-variation {
@@ -1271,7 +1334,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px var(--shadow);
 }
 
 .study-keyboard-help__title {
@@ -1554,7 +1617,7 @@ body {
 }
 
 .explorer-row__pct-white {
-  color: #e8e8e8;
+  color: var(--pct-white);
 }
 
 .explorer-row__pct-draws {
@@ -1562,7 +1625,7 @@ body {
 }
 
 .explorer-row__pct-black {
-  color: #9a9a9a;
+  color: var(--pct-black);
 }
 
 .explorer-row__games {
@@ -1595,7 +1658,7 @@ body {
 }
 
 .study-save-status--error {
-  color: #d62929;
+  color: var(--bad);
 }
 
 .btn-danger {
@@ -1613,7 +1676,7 @@ body {
   padding: 32px 28px;
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-left: 4px solid #d62929;
+  border-left: 4px solid var(--bad);
   border-radius: 8px;
   text-align: center;
 }
@@ -1794,7 +1857,7 @@ body {
 }
 
 .practice-badge--due {
-  color: #e0a53f;
+  color: var(--warn);
   background: rgba(224, 165, 63, 0.12);
 }
 
@@ -1874,9 +1937,9 @@ body {
 .practice-save-warning {
   margin: 0;
   padding: 8px 10px;
-  border: 1px solid #d62929;
+  border: 1px solid var(--bad);
   border-radius: 6px;
-  color: #d62929;
+  color: var(--bad);
   font-size: 0.85rem;
 }
 
@@ -1905,11 +1968,11 @@ body {
 }
 
 .practice-prompt--correct {
-  color: #3fbf60;
+  color: var(--good);
 }
 
 .practice-prompt--incorrect {
-  color: #d62929;
+  color: var(--bad);
 }
 
 .practice-feedback {
@@ -2044,11 +2107,11 @@ body {
 }
 
 .practice-history__item--correct .practice-history__mark {
-  color: #3fbf60;
+  color: var(--good);
 }
 
 .practice-history__item--incorrect .practice-history__mark {
-  color: #d62929;
+  color: var(--bad);
 }
 
 .practice-history__san {

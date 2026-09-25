@@ -1,3 +1,5 @@
+import "./theme";
+
 export interface MeResponse {
   authenticated: boolean;
   username?: string;
