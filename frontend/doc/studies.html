@@ -56,11 +56,11 @@
       </section>
 
       <section>
-        <h2>Study list</h2>
+        <h2>Home page</h2>
         <ul>
-          <li>Load the current account's studies and render one card per study, followed by a New study card.</li>
+          <li>The home page lists the current account's studies, one card per study, grouped by side and followed by a New study card. Each card has Edit, Practice and Stats buttons, which open the study page, a practice session and the study's Stats page, and a delete bin.</li>
           <li>Each card shows the study name, up to the first six SAN moves of its main line, and the main-line move count. Append “+ variations” if the tree contains more nodes than the main line. An empty repertoire says “No moves yet.”</li>
-          <li>Selecting a study opens its editor. New study opens a blank editor.</li>
+          <li>New study opens a blank study page.</li>
           <li>If the account has no studies, still show New study; the list need not block on a special empty state.</li>
         </ul>
       </section>
@@ -87,7 +87,7 @@
           <li><strong>Go to start</strong> selects the study's starting point, or the true root when no custom starting point is set. <strong>Delete this move</strong> deletes the selected node and its entire descendant subtree, then selects its parent. Disable deletion at the root.</li>
           <li>Left/Right arrow steps backward/forward along the currently followed branch. Up jumps to the study's starting point; Down follows the selected branch to its end. Click the <code>?</code> button or press <code>?</code> to toggle the shortcut list. Enter in a comment saves and leaves the field; Shift+Enter inserts a newline. Do not intercept navigation keys while an input, select, or textarea has focus, or when a modifier key is held.</li>
           <li>Auto-save the whole tree, side, Explorer settings, and starting point with <code>POST /api/studies</code> / <code>PUT /api/studies/{id}</code> after a short debounce. A new study is created after it has a non-empty name. Show saving/saved/error status, preserve local edits on failure, and retry when the user edits again or reconnects. Links wait for pending edits to save before leaving; browser navigation warns while edits remain unsaved. There are no Cancel or Save buttons.</li>
-          <li>Show a Delete study button at the bottom for saved studies. Require confirmation before <code>DELETE /api/studies/{id}</code>, then return to the study list. Deletion is owner-scoped and removes that study's practice state.</li>
+          <li>Show a Delete study button at the bottom for saved studies. Require confirmation before <code>DELETE /api/studies/{id}</code>, then return to the home page. Deletion is owner-scoped and removes that study's practice state.</li>
         </ul>
       </section>
 
@@ -119,7 +119,7 @@
       <section>
         <h2>Auto-save and errors</h2>
         <p>Study CRUD and calculation data are account-scoped in SQLite. Auto-save edits after a short debounce and show a persistent status. If a save fails, keep the editor state and show the error; retry after another edit or when connectivity returns. Require a non-empty name before creating a new study. Deleting a study requires confirmation and removes its practice history.</p>
-        <p class="subtle">Relevant behavior is implemented across the study list/editor, tree helpers, study API, Explorer service, and shared Stockfish client.</p>
+        <p class="subtle">Relevant behavior is implemented across the home page/study page, tree helpers, study API, Explorer service, and shared Stockfish client.</p>
       </section>
 
     </main>

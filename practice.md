@@ -10,8 +10,8 @@ mode) and [§6 "Mastery & scheduling"](README.md#6-mastery--scheduling) —
 the same relationship [stats.md](stats.md) has to
 [§2 "Core idea"](README.md#2-core-idea): restricted to exactly the tree of
 one study instead of a full profile-wide item bank, and built directly on
-top of the Studies tab and (where set) its
-[starting point](starting-point.md), the same way the Stats tab is.
+top of the study page and (where set) its
+[starting point](starting-point.md), the same way the Stats page is.
 
 **Status: implemented**, per the same "draft it, then build it" process used
 for the starting-point feature. Code lives in `backend/app/practice.py`
@@ -24,7 +24,7 @@ simpler than planned.
 
 ## 1. Motivation
 
-The Studies tab lets you build a repertoire tree; the Stats tab tells you
+The study page lets you build a repertoire tree; the Stats page tells you
 how good that tree is *if you've perfectly memorized it*. Neither one tells
 you whether you actually **have** memorized it, or which specific branch
 you're shakiest on. That's the gap this fills: a place to rehearse the tree
@@ -53,7 +53,7 @@ study's tree — and eventually a real UI — can use directly.
 - A session queue mixing **due** reviews with **new** (never-drilled)
   positions, bounded in size.
 - Starting from the study's [starting point](starting-point.md) when one is
-  set, exactly like the Stats tab's calculations do — same
+  set, exactly like the Stats page's calculations do — same
   `_resolve_start_node_id` fallback-to-root logic, reused rather than
   reimplemented.
 
@@ -257,10 +257,10 @@ the (still-unbuilt) study dashboard.
 
 ## 6. UI
 
-**A new "Practice" tab** in the site nav, alongside Studies and Stats.
+**A new "Practice" tab** in the site nav.
 
 **Practice landing page:** one card per study (same visual language as the
-Studies/Stats list pages), each showing:
+study cards on the home page), each showing:
 - Aggregate knowledge (mean `knowledge(node)` across drill-item nodes).
 - Due count ("6 due for review") and new count ("12 not started").
 - A **Practice** button, disabled only when the study has no moves of its

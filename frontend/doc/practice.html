@@ -51,7 +51,7 @@
 
       <section>
         <h2>Purpose and access</h2>
-        <p>The Stats tab reports how good a study is if perfectly memorized; Practice is where that memorization actually happens. Each session drills exactly one study's own-side moves and updates a per-position knowledge score that decays with time, so the numbers reflect real, current recall rather than "was once learned." Requires Lichess sign-in, same as Studies and Stats.</p>
+        <p>The Stats page reports how good a study is if perfectly memorized; Practice is where that memorization actually happens. Each session drills exactly one study's own-side moves and updates a per-position knowledge score that decays with time, so the numbers reflect real, current recall rather than "was once learned." Requires Lichess sign-in, same as Studies and Stats.</p>
       </section>
 
       <section>
@@ -76,7 +76,7 @@
 
       <section>
         <h2>Session mechanics</h2>
-        <p>A session starts from the study's effective starting point (its custom starting point if one is set, otherwise the tree's real root — same resolution rule the Stats tab uses) and builds a bounded queue (default 20 positions): due positions first, oldest first, then new positions in tree order. Not leverage-ranked; queue order is due-ness only. If that leaves nothing queued but the study has drill items, the queue falls back to a voluntary review of whatever isn't already at a full, rounded 100% knowledge, oldest-practiced first — only if literally everything is at 100% does it fall back further, to reviewing all of them. Practice is never blocked just because the schedule is currently satisfied, but a mostly-mastered line also shouldn't have to be re-answered from its first move just to reach the one position that's actually worth reviewing: since only selected nodes get prompted (everything else is silently auto-played), excluding maxed-out nodes from that fallback is what makes the session start right at the first move that isn't already perfect.</p>
+        <p>A session starts from the study's effective starting point (its custom starting point if one is set, otherwise the tree's real root — same resolution rule the Stats page uses) and builds a bounded queue (default 20 positions): due positions first, oldest first, then new positions in tree order. Not leverage-ranked; queue order is due-ness only. If that leaves nothing queued but the study has drill items, the queue falls back to a voluntary review of whatever isn't already at a full, rounded 100% knowledge, oldest-practiced first — only if literally everything is at 100% does it fall back further, to reviewing all of them. Practice is never blocked just because the schedule is currently satisfied, but a mostly-mastered line also shouldn't have to be re-answered from its first move just to reach the one position that's actually worth reviewing: since only selected nodes get prompted (everything else is silently auto-played), excluding maxed-out nodes from that fallback is what makes the session start right at the first move that isn't already perfect.</p>
         <ul>
           <li>At an own-side position, wait for a move on the board. Only the first attempt is graded: a correct first try applies the knowledge update for a correct answer and continues into that child. A wrong first try applies the update for a wrong answer once, then lets you try again at the same position instead of revealing the answer immediately — a correct retry continues on exactly like a first-try success; a "Show answer" option plays the correct move and moves on for when you're genuinely stuck. Further wrong retries don't grade again.</li>
           <li>At an opponent position, the app plays a reply itself. Every branch that leads to a due or new position gets walked (in order, not chosen at random); branches with nothing left to review in them are skipped entirely rather than visited pointlessly. There is nothing to grade here.</li>
@@ -97,7 +97,7 @@
         <h2>Scope and limits</h2>
         <ul>
           <li>One study per session; no cross-study "everything due today" dashboard yet.</li>
-          <li>No leverage-based queue ordering (the biggest-objective-swing-if-wrong ranking from the Stats tab's own machinery) — due-ness only, for now.</li>
+          <li>No leverage-based queue ordering (the biggest-objective-swing-if-wrong ranking from the Stats page's own machinery) — due-ness only, for now.</li>
           <li>No sparring/play mode — opponent replies are sampled uniformly from the tree, not weighted by real Explorer frequency, since this mode is about rehearsing branches already chosen to prepare for, not discovering realistic ones.</li>
           <li>No knowledge heatmap on the Study editor's move tree yet, though the same move-coloring mechanism the starting-point marker uses would suit one well as a follow-up.</li>
         </ul>

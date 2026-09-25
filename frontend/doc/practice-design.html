@@ -49,12 +49,12 @@
         <a href="practice.html" aria-current="page">Practice</a>
       </nav>
 
-      <p>A design for a tab where you <strong>choose a study, then drill it</strong>: the app quizzes you on your own repertoire's book moves and keeps a per-position "knowledge" score that fades over time, so you always know what is actually solid and what has gone rusty. It is the concrete, single-study version of the ideas in the original CLI-first roadmap, mainly its "Training modes" (puzzle mode) and "Mastery &amp; scheduling" sections. It relates to that roadmap the way the Stats tab does: restricted to exactly the tree of one study instead of a full profile-wide item bank, and built directly on the Studies tab and, where set, its starting point.</p>
+      <p>A design for a tab where you <strong>choose a study, then drill it</strong>: the app quizzes you on your own repertoire's book moves and keeps a per-position "knowledge" score that fades over time, so you always know what is actually solid and what has gone rusty. It is the concrete, single-study version of the ideas in the original CLI-first roadmap, mainly its "Training modes" (puzzle mode) and "Mastery &amp; scheduling" sections. It relates to that roadmap the way the Stats page does: restricted to exactly the tree of one study instead of a full profile-wide item bank, and built directly on the study page and, where set, its starting point.</p>
       <p class="callout"><strong>Status: implemented.</strong> Code lives in <code>backend/app/practice.py</code> (drill-item enumeration, the knowledge score, and the queue, attempt, and summary endpoints), <code>backend/app/store.py</code> (the <code>practice_state</code> table), and <code>frontend/src/practice.ts</code> / <code>practice-session.ts</code> (the list page and drilling session). The rest of this page is the original design; §5's opponent-handling section notes the one place the implementation ended up simpler than planned.</p>
 
       <section>
         <h2>1. Motivation</h2>
-        <p>The Studies tab lets you build a repertoire tree; the Stats tab tells you how good that tree is <em>if you've perfectly memorized it</em>. Neither tells you whether you actually <strong>have</strong> memorized it, or which branch you are shakiest on. Practice fills that gap: a place to rehearse the tree move by move, with a running per-position number, not a vague feeling, for "do I actually know this."</p>
+        <p>The study page lets you build a repertoire tree; the Stats page tells you how good that tree is <em>if you've perfectly memorized it</em>. Neither tells you whether you actually <strong>have</strong> memorized it, or which branch you are shakiest on. Practice fills that gap: a place to rehearse the tree move by move, with a running per-position number, not a vague feeling, for "do I actually know this."</p>
         <p>The "fades with time" part matters as much as the drilling. A position you nailed three weeks ago and haven't looked at since is not equivalent to one you nailed this morning, even though both currently show a perfect streak. Real memory decays, and a practice tool that doesn't model that will happily tell you you're prepared for a line you would blank on over the board. The roadmap already sketches the forgetting-curve machinery this reuses, \(R(t) = e^{-t/\tau}\); this page adapts it for one study's tree.</p>
       </section>
 
@@ -66,7 +66,7 @@
           <li>Drilling only <strong>your own side's</strong> moves, the "expected answer." The opponent's replies are played <em>for</em> you (see §5); there is nothing to know there, since you don't choose them.</li>
           <li>A per-node knowledge score, decaying over time, persisted per (study, node) so it survives closing the tab.</li>
           <li>A session queue mixing <strong>due</strong> reviews with <strong>new</strong> (never-drilled) positions, bounded in size.</li>
-          <li>Starting from the study's starting point when one is set, exactly like the Stats tab's calculations, reusing the same fallback-to-root logic (<code>_resolve_start_node_id</code>) rather than reimplementing it.</li>
+          <li>Starting from the study's starting point when one is set, exactly like the Stats page's calculations, reusing the same fallback-to-root logic (<code>_resolve_start_node_id</code>) rather than reimplementing it.</li>
         </ul>
         <h3>Out of scope for v1</h3>
         <p>Noted so they are not silently forgotten, not because they are bad ideas:</p>
@@ -141,7 +141,7 @@ lastSeenAt  timestamp | null  when it was last answered (correct or not)</code><
       <section>
         <h2>6. UI</h2>
         <p><strong>A new "Practice" tab</strong> in the site nav, alongside Studies and Stats.</p>
-        <p><strong>Practice landing page:</strong> one card per study (same visual language as the Studies and Stats list pages), each showing:</p>
+        <p><strong>Practice landing page:</strong> one card per study (same visual language as the study cards on the home page), each showing:</p>
         <ul>
           <li>Aggregate knowledge (mean \(K\) across drill-item nodes).</li>
           <li>Due count ("6 due for review") and new count ("12 not started").</li>

@@ -1,7 +1,7 @@
 # Study starting point
 
-Companion doc to ["The Studies tab"](README.md#the-studies-tab) and
-["The Stats tab"](README.md#the-stats-tab) / [stats.md](stats.md). Covers a
+Companion doc to ["The study page"](README.md#the-study-page) and
+["The Stats page"](README.md#the-stats-page) / [stats.md](stats.md). Covers a
 new, optional per-study field: which position a study's calculations should
 treat as move one, instead of always the real starting position.
 

@@ -1,6 +1,6 @@
 # Opening Explorer and evaluation caches
 
-Companion to the [Opening Explorer panel](README.md#the-studies-tab) and
+Companion to the [Opening Explorer panel](README.md#the-study-page) and
 [stats.md's three actions](stats.md#4-three-actions). There are two active
 backend SQLite caches in `backend/app/store.py` and a separate browser
 evaluation cache. They have different ownership and freshness rules:

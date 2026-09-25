@@ -1,9 +1,9 @@
 # Stats page
 
-Deep-dive companion to ["The Stats tab"](README.md#the-stats-tab) and the
+Deep-dive companion to ["The Stats page"](README.md#the-stats-page) and the
 general tree-walk idea in [§2 "Core idea"](README.md#2-core-idea). Win
 probability and coverage run in `backend/app/stats.py`; expected evaluation
-runs in `frontend/src/stat.ts`. The stats list is in `frontend/src/stats.ts`.
+runs in `frontend/src/stat.ts`. Study cards on the home page are rendered by `frontend/src/studyCard.ts`.
 
 All three calculations assume the studied side always plays its one prepared
 move. At an opponent turn, the Opening Explorer supplies the frequency of
@@ -39,10 +39,11 @@ study's effective starting node:
 
 The study detail shows win and loss probabilities; draws are the remainder.
 Expected score is `winProbability = winRate + 0.5 * drawProbability`.
-The stats list shows expected score and uses its tier badges (gold at 60%+,
-silver at 55%+, bronze at 50%+, otherwise below breakeven). Its cards link
-to study details; calculations are started on the detail page, not from a
-Calculate/Recalculate button on the list.
+Study cards on the home page show the expected score, and their Stats
+button opens the study's Stats page, whose legend gives the score tiers
+(gold at 60%+, silver at 55%+, bronze at 50%+, otherwise below breakeven).
+Calculations are started on the Stats page; the cards have no
+Calculate/Recalculate button.
 
 ## 2. Coverage
 
