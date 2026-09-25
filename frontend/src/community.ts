@@ -4,7 +4,6 @@ interface Summary {
   players: number;
   studies: number;
   sharedStudies: number;
-  rankedOpenings: number;
   maxUsers: number;
   activeThisWeek: number;
 }
@@ -50,7 +49,6 @@ function renderStats(summary: Summary): string {
       ${card("Players", String(summary.players), "/players.html")}
       ${card("Studies", String(summary.studies))}
       ${card("Shared with the community", String(summary.sharedStudies))}
-      ${card("Ranked openings", String(summary.rankedOpenings))}
       ${card("Active this week", String(summary.activeThisWeek))}
     </div>
   `;
