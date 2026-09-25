@@ -2332,6 +2332,10 @@ body {
 }
 
 /* Header menu: a hamburger on narrow screens (see src/menu.ts). */
+.site-nav .site-nav__logout {
+  display: none;
+}
+
 .menu-toggle {
   display: none;
   flex-shrink: 0;
@@ -2405,6 +2409,14 @@ body {
 
   .theme-toggle {
     margin-left: auto;
+  }
+
+  .site-nav .site-nav__logout {
+    display: block;
+  }
+
+  .site-auth__logout {
+    display: none;
   }
 
   .username {
