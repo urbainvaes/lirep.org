@@ -2726,6 +2726,27 @@ body {
   z-index: 100;
 }
 
-.tool-table td:first-child > a.tool-source {
+.tool-table .tool-source {
   font-size: 0.7rem;
+}
+
+.tool-table .tool-runs a {
+  color: inherit;
+}
+
+.tool-table .price--free {
+  color: var(--good);
+}
+
+.tool-table .price--fee {
+  color: var(--bad-soft);
+}
+
+.tool-table .price.has-more {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.tool-table td:first-child {
+  min-width: 190px;
 }
