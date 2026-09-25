@@ -1,16 +1,31 @@
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { mainLineSans, type StudyTree } from "./tree";
 
+// winProbability and evalCp are computed by two independent backend jobs
+// (see stat.ts's "Update win probability" / "Update expected evaluation"),
+// so either can exist without the other — hence both optional, each with
+// its own calculatedAt.
 interface StudyStats {
-  winProbability: number;
-  // Optional: stats computed before this field existed won't have it —
-  // "Recalculate" fills it in.
+  winProbability?: number;
   coverage?: number[]; // coverage[i] = fraction of games still in-book after move i+1
-  calculatedAt: string;
+  winProbabilityCalculatedAt?: string;
+  nodesEvaluated?: number;
+  evalCp?: number; // expected Stockfish eval (centipawns, studied side's POV) at the end of prep
+  evalMisses?: number; // how many of those leaf positions had no cached cloud eval (counted as 0)
+  evalCalculatedAt?: string;
   database: "lichess" | "masters";
   minRating: number | null;
-  nodesEvaluated: number;
-  explorerCalls: number;
+  explorerCalls?: number;
+}
+
+// A forced mate is capped at this "centipawn" value server-side (see
+// backend/app/stats.py) so it can be averaged with ordinary evals.
+const MATE_SCORE_CP = 100_000;
+
+function formatEval(cp: number): string {
+  if (Math.abs(cp) > MATE_SCORE_CP - 1000) return cp > 0 ? "Forced mate" : "Forced mate against";
+  const pawns = cp / 100;
+  return `${pawns > 0 ? "+" : ""}${pawns.toFixed(2)}`;
 }
 
 interface Study {
@@ -60,16 +75,23 @@ function statCard(study: Study): string {
   const sideDotClass = `side-dot side-dot--${study.side}`;
   const hasMoves = mainLineSans(study.tree).length > 0 || Object.keys(study.tree.nodes).length > 1;
 
-  const scoreHtml = study.stats
-    ? `<div class="stat-card__score">${(study.stats.winProbability * 100).toFixed(1)}% <span class="stat-card__medal">${medalFor(study.stats.winProbability)}</span></div>`
-    : `<div class="stat-card__score stat-card__score--empty">—</div>`;
+  const scoreHtml =
+    study.stats?.winProbability !== undefined
+      ? `<div class="stat-card__score">${(study.stats.winProbability * 100).toFixed(1)}% <span class="stat-card__medal">${medalFor(study.stats.winProbability)}</span></div>`
+      : `<div class="stat-card__score stat-card__score--empty">—</div>`;
 
-  const metaHtml = study.stats
-    ? `<p class="stat-card__meta">
-         ${statsSourceLabel(study.stats)} · ${study.stats.nodesEvaluated} positions evaluated<br />
-         As of ${formatDate(study.stats.calculatedAt)}
-       </p>`
-    : `<p class="stat-card__meta">Not calculated yet.</p>`;
+  const evalHtml =
+    study.stats?.evalCp !== undefined
+      ? `<p class="stat-card__eval">Eval at end of prep: <strong>${formatEval(study.stats.evalCp)}</strong></p>`
+      : "";
+
+  const metaHtml =
+    study.stats?.winProbability !== undefined
+      ? `<p class="stat-card__meta">
+           ${statsSourceLabel(study.stats)} · ${study.stats.nodesEvaluated ?? 0} positions evaluated<br />
+           As of ${formatDate(study.stats.winProbabilityCalculatedAt ?? "")}
+         </p>`
+      : `<p class="stat-card__meta">Not calculated yet.</p>`;
 
   return `
     <div class="stat-card" data-study-id="${study.id}" ${study.stats ? 'tabindex="0" role="button"' : ""}>
@@ -79,6 +101,7 @@ function statCard(study: Study): string {
       </div>
       ${scoreHtml}
       <p class="stat-card__label">Expected score, assuming perfect memorization</p>
+      ${evalHtml}
       ${metaHtml}
       <button
         class="btn btn-secondary stat-card__recalc"
@@ -92,27 +115,66 @@ function statCard(study: Study): string {
   `;
 }
 
+interface JobStatus<T> {
+  status: "running" | "done" | "error";
+  done: number;
+  total: number | null;
+  result: T | null;
+  error: string | null;
+}
+
+async function pollJob<T>(jobId: string, onProgress: (done: number) => void): Promise<T> {
+  for (;;) {
+    const res = await fetch(`/api/jobs/${jobId}`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error("job status fetch failed");
+    const job: JobStatus<T> = await res.json();
+    onProgress(job.done);
+    if (job.status === "done") return job.result as T;
+    if (job.status === "error") throw new Error(job.error ?? "job failed");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+}
+
+// Calculating stats is now two independent background jobs (win probability
+// and expected evaluation — see the Stats detail page, which exposes them as
+// separate buttons since either can run without the other). The list card
+// has no room for that nuance, so "Recalculate" here just runs both, one
+// after the other, and reports whichever one is currently in flight.
 async function recalculate(studyId: number, btn: HTMLButtonElement, card: HTMLElement): Promise<void> {
   const grid = card.parentElement as HTMLElement;
   btn.disabled = true;
-  btn.textContent = "Calculating…";
 
-  try {
-    const res = await fetch(`/api/studies/${studyId}/stats`, {
+  async function runJob(url: string, label: string): Promise<Study> {
+    const startRes = await fetch(url, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
+      body: JSON.stringify({}),
     });
-    if (!res.ok) {
-      btn.textContent = "Failed — try again";
-      btn.disabled = false;
-      return;
-    }
-    const study: Study = await res.json();
-    card.outerHTML = statCard(study);
+    if (!startRes.ok) throw new Error("failed to start job");
+    const { jobId } = await startRes.json();
+    return pollJob<Study>(jobId, (done) => {
+      btn.textContent = `${label}… (${done})`;
+    });
+  }
+
+  let latest: Study | null = null;
+  try {
+    latest = await runJob(`/api/studies/${studyId}/win-probability`, "Win probability");
+    latest = await runJob(`/api/studies/${studyId}/expected-eval`, "Expected eval");
+    card.outerHTML = statCard(latest);
     attachCardHandlers(grid);
-  } catch {
-    btn.textContent = "Failed — try again";
-    btn.disabled = false;
+  } catch (err) {
+    if (latest) {
+      // One half succeeded before the other failed — show that rather than
+      // discarding it, since it's already saved on the backend regardless.
+      card.outerHTML = statCard(latest);
+      attachCardHandlers(grid);
+    } else {
+      btn.textContent = "Failed — try again";
+      btn.title = err instanceof Error ? err.message : "";
+      btn.disabled = false;
+    }
   }
 }
 

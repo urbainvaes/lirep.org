@@ -109,10 +109,14 @@ in-flight search is stopped and its result discarded if you move again
 before it finishes.
 
 **Opening Explorer panel:** below the board, Chesster shows real move
-statistics for whichever position you're currently viewing, pulled live from
+statistics for whichever position you're currently viewing, pulled from
 Lichess's own opening explorer (`GET https://explorer.lichess.org/lichess` or
 `/masters`, which now requires *some* signed-in Lichess account — no special
-scope, just "not anonymous").
+scope, just "not anonymous"). Responses are cached persistently (shared
+across every study, not just yours) rather than fetched fresh every time —
+see **[explorer-cache.md](explorer-cache.md)** for why and how — so the
+panel's header also shows **when** that data was fetched ("Fetched 3h ago",
+exact timestamp on hover).
 
 It's **toggleable and customizable per study** — a small settings row above
 the panel lets you turn it off entirely, or change:
@@ -152,67 +156,18 @@ against real opposition?" It's a first, simplified implementation of the
 you've built, rather than the full Markov-chain expansion over the whole
 opening space that §2 describes.
 
-**Why "expected score" and not "win probability":** a draw counts as half a
-point, same as chess scoring itself (and same as Lichess's own "expected
-score" stat on profile pages). A single number that only counted wins as
-"success" would throw away real information — a repertoire that draws 80% of
-the time isn't equivalent to one that loses 80% of the time, even though
-neither "wins."
+A study's detail page adds two more views onto the same tree walk: a
+**coverage chart** (how often real games are still following your prep, move
+by move) and the **expected Stockfish evaluation at the end of your prep**
+(via Lichess's free Cloud Eval API) — plus the study's Opening Explorer
+settings, editable right there, so you can recalculate all three against a
+different database/rating/speed pool without leaving the page.
 
-**The algorithm** (implemented in `backend/app/stats.py`), walking the
-study's tree from the root:
-
-1. **At a finished game** (checkmate/stalemate/etc., detected with
-   `python-chess`): score 1 if the studied side won, 0 if they lost, 0.5 for
-   a draw.
-2. **At a position where it's the studied side's move:** assume **perfect
-   memorization** — they always play the tree's recorded move. Score = the
-   score of that child position.
-3. **At a position where it's the opponent's move:** fetch the Opening
-   Explorer's move list for this exact position (same database/rating
-   settings as the study's `explorerSettings`), and take a weighted average
-   over *all* of the opponent's real replies, weighted by how often each is
-   actually played:
-   - If a reply matches a branch you've prepared, recurse into it.
-   - If a reply isn't in your tree, your preparation ends right there — its
-     contribution is that single move's own win/draw/loss rate (which the
-     explorer already reports per move), not a recursive expansion.
-
-**Explicit assumptions / simplifications, since this is easy to get wrong
-silently:**
-- **You always play your one prepared move.** The editor enforces this by
-  construction (see "Editing" above): a position where it's the studied
-  side's move can only ever have one recorded child. There's never an
-  ambiguous "which of my own alternatives would I actually pick" case for
-  this calculation to guess at.
-- **Leaving your own prep uses a neutral estimate, not a guess.** If the
-  tree ends on *your* move (you haven't decided how to continue), the score
-  there falls back to the position's overall explorer statistics — i.e. what
-  happens on average from that position across the whole population — rather
-  than assuming any specific continuation.
-- **The explorer's move list is capped** (its own default is the top ~12
-  moves per position). Extremely rare replies outside that list aren't
-  individually accounted for; in practice they're a small fraction of games
-  at any well-populated position.
-- **Ratings are current, not historical**, unless you've pinned a specific
-  threshold on the study (see the explorer settings above) — the "auto"
-  default re-resolves your rating bucket every time you recalculate.
-- **No caching across studies or across time.** Each recalculation walks the
-  whole tree fresh (positions repeated *within* one run, e.g. via
-  transpositions, are cached for that run only).
-
-**Why it's a manual, per-study "Recalculate" button, not automatic:** the
-algorithm makes one Opening Explorer request per position in your tree where
-it's the opponent's move (plus occasionally one more for the "left your own
-prep" fallback), made **sequentially** (each depends on knowing which
-branches to expand next) rather than in parallel. For a tree with dozens of
-opponent branches, that's dozens of sequential HTTP round-trips to Lichess —
-seconds, not milliseconds. Recomputing this on every page load (or after
-every single move while editing) would make the app feel slow for no benefit,
-since a repertoire doesn't change from one page view to the next. The result
-is cached on the study (`stats: {winProbability, calculatedAt, database,
-minRating, nodesEvaluated, explorerCalls}`) and only recomputed when you
-explicitly ask for it.
+See **[stats.md](stats.md)** for the full write-up: the algorithm, every
+stat's exact definition, all the assumptions/simplifications baked in
+(perfect memorization, capped explorer move lists, sparse cloud-eval
+coverage, etc.), why recalculation is manual rather than automatic, and a
+list of stats that would make sense to add next.
 
 Not built yet: the `hit` objective (P(reach +N)) from §2 below, and the
 practice/puzzle mode from §5 — the tree you build in Studies is the

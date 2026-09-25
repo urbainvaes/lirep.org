@@ -8,9 +8,11 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerUrl,
   fetchExplorerDefaults,
+  ratingOptionsHtml,
   renderExplorer,
   renderExplorerError,
   renderExplorerLoading,
+  speedCheckboxesHtml,
   type ExplorerData,
   type ExplorerDefaults,
   type ExplorerSettings,
@@ -97,35 +99,6 @@ function uciToSan(chess: Chess, uci: string): string {
   const clone = new Chess(chess.fen());
   const move = clone.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
   return move ? move.san : uci;
-}
-
-function ratingOptionsHtml(buckets: number[], selected: number | null): string {
-  const options = [`<option value="auto"${selected === null ? " selected" : ""}>My current rating</option>`];
-  for (const bucket of buckets) {
-    const label = bucket === 0 ? "Any rating" : `${bucket}+`;
-    options.push(`<option value="${bucket}"${selected === bucket ? " selected" : ""}>${label}</option>`);
-  }
-  return options.join("");
-}
-
-const SPEED_LABELS: Record<ExplorerSpeed, string> = {
-  bullet: "Bullet",
-  blitz: "Blitz",
-  rapid: "Rapid",
-  classical: "Classical",
-};
-
-function speedCheckboxesHtml(allSpeeds: ExplorerSpeed[], selected: ExplorerSpeed[], disabled: boolean): string {
-  return allSpeeds
-    .map(
-      (speed) => `
-        <label class="speed-checkbox">
-          <input type="checkbox" value="${speed}" ${selected.includes(speed) ? "checked" : ""} ${disabled ? "disabled" : ""} />
-          ${SPEED_LABELS[speed]}
-        </label>
-      `,
-    )
-    .join("");
 }
 
 function renderEditor(main: HTMLElement, existing: Study | null, explorerDefaults: ExplorerDefaults | null): void {

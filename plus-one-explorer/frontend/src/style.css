@@ -128,6 +128,15 @@ body {
   border-color: var(--text-dim);
 }
 
+.btn-warning {
+  background: #a5680f;
+  color: var(--text-strong);
+}
+
+.btn-warning:hover {
+  background: #c07a12;
+}
+
 .site-main {
   max-width: 1100px;
   margin: 0 auto;
@@ -398,6 +407,9 @@ body {
 }
 
 .stat-page__header h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   color: var(--text-strong);
   font-size: 1.4rem;
@@ -409,6 +421,251 @@ body {
   font-weight: 700;
   line-height: 1.1;
   margin-top: 16px;
+}
+
+.stat-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin: 16px 0 26px;
+}
+
+.stat-metric-card {
+  flex: 1 1 240px;
+  background: var(--header-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 22px 20px;
+}
+
+.stat-metric-card .stat-detail__score {
+  margin-top: 0;
+}
+
+.stat-metric-card .stat-card__meta {
+  margin-bottom: 0;
+}
+
+/* The score-tier chess piece, shown before the study name. A single glyph,
+   colored gold/silver/bronze/gray via a gradient text-fill for a "shiny"
+   metallic look instead of a flat emoji medal. */
+.piece-badge-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.piece-badge {
+  display: inline-block;
+  font-size: 1.9rem;
+  line-height: 1;
+  background-image: linear-gradient(120deg, var(--piece-c1), var(--piece-c2), var(--piece-c1));
+  background-size: 220% auto;
+  background-position: left center;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  transition:
+    transform 0.15s ease,
+    background-position 0.6s ease;
+}
+
+.piece-badge-btn:hover .piece-badge {
+  transform: scale(1.12) rotate(-4deg);
+  background-position: right center;
+}
+
+.piece-badge--sm {
+  font-size: 1.15rem;
+}
+
+.piece-badge--gold {
+  --piece-c1: #fff3b0;
+  --piece-c2: #c9950c;
+}
+
+.piece-badge--silver {
+  --piece-c1: #f4f4f4;
+  --piece-c2: #9a9a9a;
+}
+
+.piece-badge--bronze {
+  --piece-c1: #f0b27a;
+  --piece-c2: #8b4a1e;
+}
+
+.piece-badge--none {
+  --piece-c1: #8a8a8a;
+  --piece-c2: #55555a;
+  filter: none;
+}
+
+.piece-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--header-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin: 10px 0 4px;
+}
+
+.piece-legend__title {
+  margin: 0 0 2px;
+  color: var(--text-strong);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.piece-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.stat-card__eval {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.stat-card__eval strong {
+  color: var(--text-strong);
+}
+
+/* Scoped to the Stats detail page's explorer-settings block, deliberately
+   looser than the compact `.study-card--explorer` version of the same
+   controls, which has to fit in a narrower editor card. */
+.explorer-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 14px 0 24px;
+}
+
+.explorer-settings-panel .analysis-header__settings {
+  gap: 18px;
+}
+
+.explorer-settings-panel select {
+  padding: 7px 14px;
+}
+
+.explorer-settings-panel .speed-checkboxes {
+  gap: 22px;
+  margin-bottom: 0;
+}
+
+.explorer-settings-panel .speed-checkbox {
+  gap: 7px;
+}
+
+.stat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  margin: 20px 0 28px;
+}
+
+.stat-actions--single {
+  margin-bottom: 8px;
+}
+
+.stat-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+  flex: 1 1 240px;
+}
+
+.stat-action .stat-card__meta {
+  margin: 0;
+}
+
+.stat-card__meta--warning {
+  color: #e0a53f;
+}
+
+.eval-update-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(63, 191, 96, 0.15);
+  color: #3fbf60;
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-bar__track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  width: 0%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.progress-bar__label {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.progress-bar__label--error {
+  color: #e05252;
+  white-space: normal;
+}
+
+.progress-bar--error .progress-bar__track {
+  display: none;
+}
+
+.progress-bar--indeterminate .progress-bar__fill {
+  width: 35%;
+  animation: progress-bar-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes progress-bar-indeterminate {
+  0% {
+    margin-left: 0%;
+  }
+  50% {
+    margin-left: 65%;
+  }
+  100% {
+    margin-left: 0%;
+  }
 }
 
 .stat-detail__chart-title {
@@ -589,7 +846,8 @@ body {
   white-space: nowrap;
 }
 
-.analysis-header select {
+.analysis-header select,
+.analysis-header__settings select {
   background: var(--panel-bg);
   border: 1px solid var(--border);
   color: var(--text);
@@ -598,7 +856,8 @@ body {
   font-size: 0.85rem;
 }
 
-.analysis-header select:disabled {
+.analysis-header select:disabled,
+.analysis-header__settings select:disabled {
   opacity: 0.4;
 }
 
@@ -689,6 +948,11 @@ body {
 .explorer-opening {
   color: var(--text);
   font-weight: 600;
+}
+
+.explorer-fetched-at {
+  white-space: nowrap;
+  cursor: help;
 }
 
 .explorer-rows {

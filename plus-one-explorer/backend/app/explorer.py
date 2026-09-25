@@ -1,6 +1,9 @@
+from datetime import UTC, datetime
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
+from . import store
 from .auth import ACCOUNT_URL
 from .config import HTTP_TIMEOUT
 
@@ -41,6 +44,42 @@ def _ratings_from(min_rating: int) -> str:
     return ",".join(str(b) for b in RATING_BUCKETS if b >= min_rating)
 
 
+async def _resolve_min_rating(client: httpx.AsyncClient, headers: dict[str, str], username: str | None) -> int:
+    """Resolves "My current rating" (the auto minRating mode) to a bucket.
+
+    Cached per-user in the database (store.rating_cache /
+    RATING_CACHE_TTL_SECONDS) — persisted, not in-memory, specifically so a
+    backend restart can't wipe a still-fresh resolution and force a live
+    account call it didn't actually need. Two benefits:
+
+    1. Fewer account calls: a whole editing session no longer means one
+       Lichess account request per position visited, just one per TTL window.
+    2. Graceful degradation: if a *refresh* attempt (past the TTL) gets rate
+       limited, this falls back to the stale cached bucket rather than
+       failing the request outright — a rating bucket that's an hour or two
+       stale is virtually always still correct, and "probably still right"
+       beats "definitely fails" when the alternative is refusing to serve
+       Explorer data that's sitting right there in cache. See
+       explorer-cache.md.
+    """
+    if username:
+        fresh = store.get_rating_cache(username)
+        if fresh is not None:
+            return fresh
+
+    account_resp = await client.get(ACCOUNT_URL, headers=headers)
+    if account_resp.status_code != 200:
+        stale = store.get_rating_cache(username, allow_stale=True) if username else None
+        if stale is not None:
+            return stale  # stale beats failing a request that might be a cache hit anyway
+        raise HTTPException(status_code=502, detail="lichess account fetch failed")
+
+    bucket = _bucket_for(_reference_rating(account_resp.json().get("perfs", {})))
+    if username:
+        store.set_rating_cache(username, bucket, datetime.now(UTC).isoformat())
+    return bucket
+
+
 def _shape_moves(data: dict) -> list[dict]:
     return [
         {
@@ -54,7 +93,7 @@ def _shape_moves(data: dict) -> list[dict]:
     ]
 
 
-def _shape_response(database: str, min_rating: int | None, data: dict) -> dict:
+def _shape_response(database: str, min_rating: int | None, data: dict, fetched_at: str) -> dict:
     opening = data.get("opening")
     return {
         "database": database,
@@ -66,6 +105,7 @@ def _shape_response(database: str, min_rating: int | None, data: dict) -> dict:
             "black": data.get("black", 0),
         },
         "moves": _shape_moves(data),
+        "fetchedAt": fetched_at,
     }
 
 
@@ -77,7 +117,9 @@ async def fetch_explorer(
     min_rating: int | None,
     speeds: str,
 ) -> dict:
-    """Shared by the live /api/explorer endpoint and stats.py's recalculation."""
+    """Raw, uncached fetch — see fetch_explorer_cached below, which every
+    caller (the live /api/explorer endpoint and stats.py's recalculation)
+    should use instead."""
     if database == "masters":
         resp = await client.get(MASTERS_EXPLORER_URL, params={"fen": fen}, headers=headers)
     else:
@@ -87,21 +129,58 @@ async def fetch_explorer(
             params={"fen": fen, "speeds": speeds, "ratings": _ratings_from(min_rating)},
             headers=headers,
         )
+    if resp.status_code == 429:
+        raise HTTPException(
+            status_code=429,
+            detail="rate limited by lichess's opening explorer (429) — please wait a minute before trying again",
+        )
     if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="lichess explorer fetch failed")
+        raise HTTPException(status_code=502, detail=f"lichess explorer fetch failed ({resp.status_code})")
     return resp.json()
+
+
+async def fetch_explorer_cached(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    fen: str,
+    database: str,
+    min_rating: int | None,
+    speeds: str,
+) -> tuple[dict, str]:
+    """(data, fetchedAt ISO timestamp). Persisted across studies *and* users:
+    a position's real-world move frequencies don't depend on who's asking, so
+    the cache key is just the exact query Lichess would see (see
+    store.EXPLORER_CACHE_TTL_SECONDS for the staleness window). This is what
+    keeps repeated "Calculate scores" runs, and different studies that share
+    early-game positions, from re-fetching the same data over and over — see
+    explorer-cache.md for the full writeup and why this matters for staying
+    under Lichess's (undocumented) rate limit.
+    """
+    ratings = _ratings_from(min_rating) if database != "masters" else ""
+    cache_key = f"{database}|{ratings}|{speeds}|{fen}"
+    cached = store.get_explorer_cache(cache_key)
+    if cached is not None:
+        return cached["response"], cached["fetchedAt"]
+
+    data = await fetch_explorer(client, headers, fen, database, min_rating, speeds)
+    fetched_at = datetime.now(UTC).isoformat()
+    store.set_explorer_cache(cache_key, data, fetched_at)
+    return data, fetched_at
 
 
 @router.get("/api/explorer-defaults")
 async def explorer_defaults(request: Request) -> dict:
     """Rating buckets for the UI's picker, plus the bucket for the signed-in player's current rating."""
     token = request.session.get("access_token")
+    username = request.session.get("username")
     default_min_rating = _bucket_for(DEFAULT_REFERENCE_RATING)
     if token:
+        headers = {"Authorization": f"Bearer {token}"}
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            account_resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {token}"})
-        if account_resp.status_code == 200:
-            default_min_rating = _bucket_for(_reference_rating(account_resp.json().get("perfs", {})))
+            try:
+                default_min_rating = await _resolve_min_rating(client, headers, username)
+            except HTTPException:
+                pass  # keep the generic default rather than failing the whole picker
     return {
         "ratingBuckets": list(RATING_BUCKETS),
         "defaultMinRating": default_min_rating,
@@ -121,19 +200,16 @@ async def explorer(
     token = request.session.get("access_token")
     if not token:
         raise HTTPException(status_code=401, detail="not authenticated")
+    username = request.session.get("username")
 
     headers = {"Authorization": f"Bearer {token}"}
 
-    min_rating: int | None = None
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         if database != "masters" and minRating is None:
-            account_resp = await client.get(ACCOUNT_URL, headers=headers)
-            if account_resp.status_code != 200:
-                raise HTTPException(status_code=502, detail="lichess account fetch failed")
-            min_rating = _bucket_for(_reference_rating(account_resp.json().get("perfs", {})))
+            min_rating = await _resolve_min_rating(client, headers, username)
         else:
             min_rating = minRating
 
-        data = await fetch_explorer(client, headers, fen, database, min_rating, speeds)
+        data, fetched_at = await fetch_explorer_cached(client, headers, fen, database, min_rating, speeds)
 
-    return _shape_response(database, None if database == "masters" else min_rating, data)
+    return _shape_response(database, None if database == "masters" else min_rating, data, fetched_at)

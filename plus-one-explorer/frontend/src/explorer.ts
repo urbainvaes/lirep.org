@@ -38,6 +38,36 @@ export interface ExplorerData {
   opening: string | null;
   totals: { white: number; draws: number; black: number };
   moves: ExplorerMove[];
+  fetchedAt: string;
+}
+
+export function ratingOptionsHtml(buckets: number[], selected: number | null): string {
+  const options = [`<option value="auto"${selected === null ? " selected" : ""}>My current rating</option>`];
+  for (const bucket of buckets) {
+    const label = bucket === 0 ? "Any rating" : `${bucket}+`;
+    options.push(`<option value="${bucket}"${selected === bucket ? " selected" : ""}>${label}</option>`);
+  }
+  return options.join("");
+}
+
+export const SPEED_LABELS: Record<ExplorerSpeed, string> = {
+  bullet: "Bullet",
+  blitz: "Blitz",
+  rapid: "Rapid",
+  classical: "Classical",
+};
+
+export function speedCheckboxesHtml(allSpeeds: ExplorerSpeed[], selected: ExplorerSpeed[], disabled: boolean): string {
+  return allSpeeds
+    .map(
+      (speed) => `
+        <label class="speed-checkbox">
+          <input type="checkbox" value="${speed}" ${selected.includes(speed) ? "checked" : ""} ${disabled ? "disabled" : ""} />
+          ${SPEED_LABELS[speed]}
+        </label>
+      `,
+    )
+    .join("");
 }
 
 export async function fetchExplorerDefaults(): Promise<ExplorerDefaults | null> {
@@ -62,6 +92,20 @@ function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);
+}
+
+// This data is served from a persistent, cross-study cache (see
+// explorer-cache.md) rather than fetched fresh every time, so it's worth
+// showing how stale it might be rather than implying it's always live.
+function formatFetchedAt(iso: string): string {
+  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
 export function renderExplorerLoading(panel: HTMLElement): void {
@@ -106,11 +150,13 @@ export function renderExplorer(panel: HTMLElement, data: ExplorerData, onPlay: (
     .join("");
 
   const source = data.database === "masters" ? "Masters" : `Players rated ${data.minRating ?? "?"}+`;
+  const fetchedAtDate = new Date(data.fetchedAt);
 
   panel.innerHTML = `
     <div class="explorer-header">
       <span>${source}</span>
       ${data.opening ? `<span class="explorer-opening">${escapeHtml(data.opening)}</span>` : ""}
+      <span class="explorer-fetched-at" title="Fetched ${fetchedAtDate.toLocaleString()}">Fetched ${formatFetchedAt(data.fetchedAt)}</span>
     </div>
     <div class="explorer-rows">${rows}</div>
   `;
