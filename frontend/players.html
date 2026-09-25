@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        document.documentElement.dataset.theme =
+          t === "light" || t === "dark" ? t : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      } catch (e) {}
+    </script>
+    <meta name="description" content="Everyone who has joined lirep.org during the beta." />
+    <title>Players · lirep.org</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#e4e1dd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#2e2a24" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="Lirep" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-title" href="/">
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
+          <span class="site-name">lirep<span class="tld">.org</span></span>
+        </a>
+        <nav class="site-nav">
+          <a href="/studies.html">Studies</a>
+          <a href="/stats.html">Stats</a>
+          <a href="/practice.html">Practice</a>
+          <a href="/community.html" aria-current="page">Community</a>
+          <a href="/doc/index.html">Doc</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <div class="site-auth" id="auth-area">
+          <a class="btn btn-primary" href="/auth/login">Sign in</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="site-main" id="players-main">
+      <div class="empty-state"><p>Loading…</p></div>
+    </main>
+    <script type="module" src="/src/players.ts"></script>
+  </body>
+</html>

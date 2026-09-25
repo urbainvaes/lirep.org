@@ -256,6 +256,24 @@ def touch_user(username: str) -> None:
             )
 
 
+def list_users() -> list[dict[str, Any]]:
+    """Everyone registered, in registration order, with how many of their
+    studies are shared."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT u.id, u.username, u.created_at,
+                   (SELECT COUNT(*) FROM studies s
+                     WHERE s.owner = u.username COLLATE NOCASE AND s.shared = 1) AS shared
+            FROM users u ORDER BY u.id
+            """
+        ).fetchall()
+    return [
+        {"number": row["id"], "username": row["username"], "joined": row["created_at"], "sharedStudies": row["shared"]}
+        for row in rows
+    ]
+
+
 def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] | None:
     with _connect() as conn:
         cur = conn.execute(

@@ -4,6 +4,7 @@ chose to share, plus importing one into your own account."""
 from fastapi import APIRouter, HTTPException, Request
 
 from . import store
+from .config import MAX_USERS
 
 router = APIRouter()
 
@@ -66,7 +67,14 @@ def summary() -> dict:
         if (e := _entry(owner, study, None))["winProbability"] is not None
     ]
     counts["rankedOpenings"] = len(ranked)
+    counts["maxUsers"] = MAX_USERS
     return counts
+
+
+@router.get("/api/community/players")
+def players() -> dict:
+    """Everyone registered, numbered in registration order."""
+    return {"maxUsers": MAX_USERS, "players": store.list_users()}
 
 
 @router.get("/api/community/openings")

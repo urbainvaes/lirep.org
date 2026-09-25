@@ -5,6 +5,7 @@ interface Summary {
   studies: number;
   sharedStudies: number;
   rankedOpenings: number;
+  maxUsers: number;
   activeThisWeek: number;
 }
 
@@ -40,11 +41,13 @@ function settingsLabel(opening: Opening): string {
 }
 
 function renderStats(summary: Summary): string {
-  const card = (label: string, value: string): string =>
-    `<div class="community-stat"><span>${label}</span><strong>${value}</strong></div>`;
+  const card = (label: string, value: string, href?: string): string =>
+    href
+      ? `<a class="community-stat community-stat--link" href="${href}" title="See the list of players"><span>${label}</span><strong>${value}</strong></a>`
+      : `<div class="community-stat"><span>${label}</span><strong>${value}</strong></div>`;
   return `
     <div class="community-stats">
-      ${card("Players", String(summary.players))}
+      ${card("Players", String(summary.players), "/players.html")}
       ${card("Studies", String(summary.studies))}
       ${card("Shared with the community", String(summary.sharedStudies))}
       ${card("Ranked openings", String(summary.rankedOpenings))}

@@ -11,6 +11,7 @@ interface ProfileResponse {
   username: string;
   title?: string | null;
   userNumber: number;
+  maxUsers: number;
   ratings: Partial<Record<"bullet" | "blitz" | "rapid" | "classical", RatingInfo>>;
 }
 
@@ -107,7 +108,8 @@ function renderProfile(
   main.innerHTML = `
     <div class="profile-header">
       <h1>${titlePrefix}${escapeHtml(profile.username)}</h1>
-      <p class="profile-subtitle">Lirep user #${profile.userNumber}</p>
+      <p class="profile-subtitle">Lirep user #${profile.userNumber}${profile.maxUsers ? `/${profile.maxUsers}` : ""}
+        ${profile.maxUsers ? `<span class="beta-tag" title="This beta is limited to ${profile.maxUsers} users">beta limit</span>` : ""}</p>
     </div>
 
     <section class="profile-section">

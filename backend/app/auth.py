@@ -234,6 +234,7 @@ async def profile(request: Request) -> dict:
         "username": data["username"],
         "title": data.get("title"),
         "userNumber": register_user(data["username"]),
+        "maxUsers": MAX_USERS,
         "ratings": ratings,
     }
 
