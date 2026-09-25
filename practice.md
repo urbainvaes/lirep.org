@@ -98,6 +98,23 @@ specifies, just applied from the first correct answer rather than only
 after reaching `c = 3`. `τ` starts at `τ₀` (a per-profile constant, §7 —
 defaulted to 1 day) on a position's very first correct answer.
 
+**`τ` keeps doubling even once `c` is already at its cap.** The two update
+rules are independent: `c`'s cap only stops the *streak counter* from
+climbing past 3, it doesn't stop `τ` from continuing to grow on every
+correct answer after that. Concretely: you're at `c = 3` with some `τ`, and
+— whatever `R(t)` currently is, even well below 100% — you answer correctly
+again. The result is `c = 3` (unchanged, still capped) and `τ` doubled
+again; `lastSeenAt` becomes now, so `R(t) = exp(0) = 100%` at that instant,
+and the displayed score is `(3/3) · 100% = 100%` regardless of what it was
+a moment before you answered. What the *prior*, decayed `R(t)` value
+actually did was determine whether the position showed up as due for you to
+answer in the first place (§5) — once you answer it, correctly, that stale
+number is simply superseded by a fresh one. This is standard spaced-
+repetition behavior (a mature item's interval keeps growing every time it's
+successfully recalled, not just until it first reaches "known") — it just
+isn't obvious from the `c ∈ {0,1,2,3}` capped-counter framing above, so it's
+worth being explicit about it here.
+
 **On a wrong answer:** `c` drops to 0 and `τ` resets to `τ₀` — a lapse means
 next time really is "starting over" for spacing purposes, not just a
 streak ding. (§6's original wording — "a lapse costs one streak step, not
@@ -293,3 +310,17 @@ the existing one already does the job.
   file yet, and inventing that plumbing just for two constants is premature.
 - Uniform vs. frequency-weighted opponent sampling (§5) — noted as a v1
   simplification above; revisit once practice mode is actually used.
+- **Should "known" (`c = 3`) and "memory" (`R(t)`) be shown as two separate
+  numbers instead of one blended `knowledge(node)`?** They're already
+  tracked as two independent fields (§3) — the blending into a single `%`
+  is purely a display choice, not something baked into the data model. The
+  case for splitting them: right now a faded-but-once-mastered position
+  (`c = 3`, `R(t) = 40%` → shows 40%) and a fresh-but-shallow one (`c = 1`,
+  `R(t) ≈ 100%` → shows 33%) land on visually similar numbers for very
+  different reasons — one is a mastered position that needs a refresher,
+  the other has never really been proven. A UI that showed "✓ known, 40%
+  fresh" versus "learning (1/3), 33%" would make that distinction legible
+  without doing any math in your head. The case against: it's two numbers
+  to parse instead of one, in a UI that's already showing a lot of state
+  (progress, prompt, history, engine panel). Not decided; the blended
+  version is what's shipped.
