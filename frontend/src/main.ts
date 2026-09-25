@@ -1,5 +1,5 @@
 import { fetchMe, renderAuthArea } from "./layout";
-import { renderStudyCardWithActions, renderStudyGroups, renderNewStudyCard, type StudyCardData } from "./studyCard";
+import { bindStudyDelete, renderStudyCardWithActions, renderStudyGroups, renderNewStudyCard, type StudyCardData } from "./studyCard";
 
 async function init(): Promise<void> {
   const me = await fetchMe();
@@ -26,9 +26,11 @@ async function init(): Promise<void> {
     // Keep the new-study action available if loading fails.
   }
 
-  grid.innerHTML = `
-    ${renderStudyGroups(studies, renderStudyCardWithActions, "studies-grid", renderNewStudyCard)}
-  `;
+  const render = (): void => {
+    grid.innerHTML = renderStudyGroups(studies, renderStudyCardWithActions, "studies-grid", renderNewStudyCard);
+  };
+  render();
+  bindStudyDelete(grid, studies, render);
 }
 
 init();

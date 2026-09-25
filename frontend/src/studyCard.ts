@@ -65,29 +65,30 @@ export function openingMovesHtml(study: StudyCardData): string {
   return rows.join("");
 }
 
-function renderStudyCardContent(study: StudyCardData): string {
-  const side = study.side === "white" ? "white" : "black";
+function renderStudyCardContent(study: StudyCardData, deletable: boolean): string {
   const score = study.stats?.winProbability;
   const scoreLabel = score === undefined ? "—" : `${(score * 100).toFixed(1)}%`;
 
   return `
     <div class="study-card__header">
       <h3>${escapeHtml(study.name)}</h3>
-      <span class="study-card__side">${side === "white" ? "♙ White" : "♟ Black"}</span>
+      ${deletable ? `<button class="study-card__delete" type="button" data-delete-study="${study.id}" aria-label="Delete ${escapeHtml(study.name)}" title="Delete study">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>
+      </button>` : ""}
     </div>
     <div class="study-card__score"><span>Expected score</span><strong>${scoreLabel}</strong></div>
     <div class="study-card__line">${openingMovesHtml(study)}</div>
   `;
 }
 
-export function renderStudyCard(study: StudyCardData, href: string): string {
-  return `<a class="study-card study-card--summary" href="${href}">${renderStudyCardContent(study)}</a>`;
+export function renderStudyCard(study: StudyCardData, href: string, deletable = false): string {
+  return `<a class="study-card study-card--summary" href="${href}">${renderStudyCardContent(study, deletable)}</a>`;
 }
 
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
     <article class="study-card study-card--summary">
-      ${renderStudyCardContent(study)}
+      ${renderStudyCardContent(study, true)}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
         <a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>
@@ -95,4 +96,31 @@ export function renderStudyCardWithActions(study: StudyCardData): string {
       </div>
     </article>
   `;
+}
+
+/** Handles clicks on a card's bin button: confirm, DELETE, then drop the study and re-render. */
+export function bindStudyDelete(
+  grid: HTMLElement,
+  studies: StudyCardData[],
+  rerender: () => void,
+): void {
+  grid.addEventListener("click", async (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-delete-study]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = Number(button.dataset.deleteStudy);
+    const index = studies.findIndex((study) => study.id === id);
+    if (index < 0 || !window.confirm(`Delete "${studies[index].name}"? This cannot be undone.`)) return;
+    button.disabled = true;
+    try {
+      const res = await fetch(`/api/studies/${id}`, { method: "DELETE", credentials: "same-origin" });
+      if (!res.ok) throw new Error("Delete failed");
+      studies.splice(index, 1);
+      rerender();
+    } catch {
+      button.disabled = false;
+      window.alert("Could not delete the study. Please try again.");
+    }
+  });
 }

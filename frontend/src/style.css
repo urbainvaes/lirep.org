@@ -360,10 +360,28 @@ body {
   margin: 0;
 }
 
-.study-card__side {
+.study-card__delete {
+  display: inline-flex;
   flex-shrink: 0;
-  color: var(--text-dim);
-  font-size: 0.75rem;
+  align-self: center;
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #b86a6a;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.study-card__delete:hover {
+  color: #d62929;
+  opacity: 1;
+  background: rgba(214, 41, 41, 0.14);
+}
+
+.study-card__delete:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .study-card__score {
