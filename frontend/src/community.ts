@@ -69,7 +69,7 @@ function renderRow(opening: Opening, signedIn: boolean): string {
         <strong>${escapeHtml(opening.name)}</strong>
         <div class="community-sub">${opening.moves} ${opening.moves === 1 ? "move" : "moves"} · ${opening.lines} ${opening.lines === 1 ? "line" : "lines"}</div>
       </td>
-      <td><a class="community-owner" href="https://lichess.org/@/${encodeURIComponent(opening.owner)}" target="_blank" rel="noopener noreferrer">${escapeHtml(opening.owner)}</a></td>
+      <td><a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">${escapeHtml(opening.owner)}</a></td>
       <td class="community-score">${opening.winProbability === null ? "—" : percent(opening.winProbability)}</td>
       <td class="community-settings">${escapeHtml(opening.winProbability === null ? (opening.reason ?? "Not ranked yet") : settingsLabel(opening))}</td>
       <td class="community-action">${action}</td>
@@ -117,7 +117,7 @@ function render(main: HTMLElement, summary: Summary, openings: Opening[], signed
           <p class="profile-subtitle">
             Up to ten shared openings per side, best score first. The expected score is the win percentage plus half
             of the draw percentage, if you always play the prepared moves and opponents reply as in the Explorer.
-            Only openings evaluated with Lichess's Explorer are listed. Names link to Lichess profiles.
+            Only openings evaluated with Lichess's Explorer are listed. Names open their Lirep profiles.
           </p>
         </div>
       </div>

@@ -27,7 +27,7 @@ function render(main: HTMLElement, data: PlayersResponse): void {
       (player) => `
       <tr>
         <td class="community-rank">${player.number}</td>
-        <td><a class="community-owner" href="https://lichess.org/@/${encodeURIComponent(player.username)}" target="_blank" rel="noopener noreferrer">${escapeHtml(player.username)}</a></td>
+        <td><a class="community-owner" href="/player.html?u=${encodeURIComponent(player.username)}">${escapeHtml(player.username)}</a></td>
         <td>${player.sharedStudies}</td>
         <td class="community-settings">${escapeHtml(formatJoined(player.joined))}</td>
       </tr>`,
@@ -41,7 +41,7 @@ function render(main: HTMLElement, data: PlayersResponse): void {
         <h2>Players ${data.players.length}${limit}
           ${data.maxUsers ? `<span class="beta-tag" title="This beta is limited to ${data.maxUsers} users">beta limit</span>` : ""}
         </h2>
-        <p class="profile-subtitle">Everyone who has signed in during the beta, in order of arrival. Names link to Lichess profiles.</p>
+        <p class="profile-subtitle">Everyone who has signed in during the beta, in order of arrival. Names open their Lirep profiles.</p>
       </div>
     </div>
     <div class="community-table-wrap">

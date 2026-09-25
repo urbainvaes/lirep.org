@@ -2324,6 +2324,40 @@ body {
   text-decoration: underline;
 }
 
+.lichess-link {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 6px;
+  color: var(--text-strong);
+  text-decoration: none;
+}
+
+/* Lichess's own knight logo (its vector favicon, which Lichess permits for
+   referring to lichess.org), drawn as a mask so it follows the text colour in
+   both themes. */
+.lichess-link__icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background-color: currentColor;
+  -webkit-mask-image: url("/lichess-logo.svg");
+  mask-image: url("/lichess-logo.svg");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.lichess-link:hover {
+  color: var(--primary-hover);
+}
+
+.lichess-link:hover .lichess-link__icon {
+  background-color: var(--primary-hover);
+}
+
 .explorer-player {
   width: 9.5rem;
   padding: 4px 8px;
@@ -2506,4 +2540,9 @@ body {
 
 .community-stat--link strong {
   color: var(--primary);
+}
+
+/* The player page starts closer to the navbar than the other pages. */
+#player-main {
+  padding-top: 24px;
 }

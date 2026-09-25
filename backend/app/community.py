@@ -77,6 +77,21 @@ def players() -> dict:
     return {"maxUsers": MAX_USERS, "players": store.list_users()}
 
 
+@router.get("/api/community/players/{username}")
+def player(username: str, request: Request, includeLirep: bool = True) -> dict:
+    """A public profile: when they joined and the studies they chose to share."""
+    user = store.get_user(username)
+    if user is None:
+        raise HTTPException(status_code=404, detail="not found")
+    me = request.session.get("username")
+    studies = [
+        _entry(owner, study, me, includeLirep)
+        for owner, study in store.list_shared_studies()
+        if owner.lower() == user["username"].lower()
+    ]
+    return {"maxUsers": MAX_USERS, **user, "studies": studies}
+
+
 @router.get("/api/community/openings")
 def openings(request: Request, includeLirep: bool = False) -> list[dict]:
     """Up to LEADERBOARD_SIZE ranked studies per side, best score first. Only

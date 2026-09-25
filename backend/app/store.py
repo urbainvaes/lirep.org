@@ -274,6 +274,15 @@ def list_users() -> list[dict[str, Any]]:
     ]
 
 
+def get_user(username: str) -> dict[str, Any] | None:
+    """A registered user (matched case-insensitively), or None."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, username, created_at FROM users WHERE username = ? COLLATE NOCASE", (username,)
+        ).fetchone()
+    return {"number": row["id"], "username": row["username"], "joined": row["created_at"]} if row else None
+
+
 def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] | None:
     with _connect() as conn:
         cur = conn.execute(
