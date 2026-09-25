@@ -31,7 +31,9 @@
     (source
      (origin
        (method url-fetch)
-       (uri (pypi-uri "chess" version))
+       ;; Explicit URL: `pypi-uri` moved between modules across Guix revisions.
+       (uri (string-append "https://files.pythonhosted.org/packages/source/c/"
+                           "chess/chess-" version ".tar.gz"))
        (sha256
         (base32 "0fdv4mnvlvl2qj8yaf6awmhkfs5d2wqmgamxjl301czxg1b3xd58"))))
     (build-system pyproject-build-system)
