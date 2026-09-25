@@ -57,12 +57,15 @@ def _sans_to(tree: dict, node_id: int) -> list[str]:
     return sans
 
 
-def _score_from_wdl(white: int, draws: int, black: int, side: Literal["white", "black"]) -> float | None:
+def _outcome_probabilities(
+    white: int, draws: int, black: int, side: Literal["white", "black"]
+) -> tuple[float, float, float] | None:
     games = white + draws + black
     if games == 0:
         return None
     wins = white if side == "white" else black
-    return (wins + 0.5 * draws) / games
+    losses = black if side == "white" else white
+    return wins / games, draws / games, losses / games
 
 
 class _Evaluator:
@@ -188,7 +191,9 @@ class _Evaluator:
         store.set_cloud_eval_cache(fen, cp, fetched_at)
         return cp
 
-    async def score(self, tree: dict, node_id: int, side: Literal["white", "black"]) -> float:
+    async def outcomes(
+        self, tree: dict, node_id: int, side: Literal["white", "black"]
+    ) -> tuple[float, float, float]:
         self.nodes_evaluated += 1
         board = chess.Board()
         for san in _sans_to(tree, node_id):
@@ -197,8 +202,8 @@ class _Evaluator:
         outcome = board.outcome()
         if outcome is not None:
             if outcome.winner is None:
-                return 0.5
-            return 1.0 if outcome.winner == (side == "white") else 0.0
+                return 0.0, 1.0, 0.0
+            return (1.0, 0.0, 0.0) if outcome.winner == (side == "white") else (0.0, 0.0, 1.0)
 
         studied_side_to_move = (board.turn == chess.WHITE) == (side == "white")
         node = _get_node(tree, node_id)
@@ -209,10 +214,12 @@ class _Evaluator:
                 # Fall back to the position's overall explorer stats as a
                 # neutral estimate of "what happens from here on average".
                 data = await self._fetch(board.fen())
-                value = _score_from_wdl(data.get("white", 0), data.get("draws", 0), data.get("black", 0), side)
-                return value if value is not None else 0.5
+                value = _outcome_probabilities(
+                    data.get("white", 0), data.get("draws", 0), data.get("black", 0), side
+                )
+                return value if value is not None else (0.5, 0.0, 0.5)
             # Perfect memorization: always play the main-line (first) child.
-            return await self.score(tree, node["children"][0], side)
+            return await self.outcomes(tree, node["children"][0], side)
 
         # Opponent's move: weight each prepared reply by its real frequency;
         # anything the tree doesn't cover ends prep at that exact move.
@@ -220,10 +227,10 @@ class _Evaluator:
         moves = data.get("moves", [])
         total_games = sum(m["white"] + m["draws"] + m["black"] for m in moves)
         if total_games == 0:
-            return 0.5
+            return 0.5, 0.0, 0.5
 
         children_by_san = {_get_node(tree, child_id)["san"]: child_id for child_id in node["children"]}
-        expected = 0.0
+        expected = [0.0, 0.0, 0.0]
         for move in moves:
             games = move["white"] + move["draws"] + move["black"]
             if games == 0:
@@ -231,13 +238,14 @@ class _Evaluator:
             weight = games / total_games
             child_id = children_by_san.get(move["san"])
             if child_id is not None:
-                value = await self.score(tree, child_id, side)
+                value = await self.outcomes(tree, child_id, side)
             else:
-                value = _score_from_wdl(move["white"], move["draws"], move["black"], side)
+                value = _outcome_probabilities(move["white"], move["draws"], move["black"], side)
                 if value is None:
                     continue
-            expected += weight * value
-        return expected
+            for index, probability in enumerate(value):
+                expected[index] += weight * probability
+        return expected[0], expected[1], expected[2]
 
     async def coverage(self, tree: dict, start_node_id: int, side: Literal["white", "black"]) -> list[float]:
         """Coverage[i] = probability a real game (sampled the same way as `score`)
@@ -522,7 +530,10 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
             evaluator = _Evaluator(
                 client, headers, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
             )
-            win_probability = await evaluator.score(study["tree"], start_node_id, study["side"])
+            win_rate, draw_probability, loss_probability = await evaluator.outcomes(
+                study["tree"], start_node_id, study["side"]
+            )
+            win_probability = win_rate + 0.5 * draw_probability
             coverage = await evaluator.coverage(study["tree"], start_node_id, study["side"])
 
         explorer_settings = study["explorerSettings"]
@@ -530,6 +541,8 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
         stats.update(
             {
                 "winProbability": win_probability,
+                "winRate": win_rate,
+                "lossProbability": loss_probability,
                 "coverage": coverage,
                 "winProbabilityCalculatedAt": datetime.now(UTC).isoformat(),
                 "database": database,

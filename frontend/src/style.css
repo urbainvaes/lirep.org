@@ -581,6 +581,29 @@ body {
   margin-bottom: 0;
 }
 
+.stat-outcome-pair {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.stat-outcome-pair .stat-detail__score {
+  margin-top: 0;
+}
+
+.stat-loss-probability {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.stat-loss-probability strong {
+  color: var(--text-strong);
+  font-size: 1.2rem;
+}
+
 /* The score-tier chess piece, shown before the study name. A single glyph,
    colored gold/silver/bronze/gray via a gradient text-fill for a "shiny"
    metallic look instead of a flat emoji medal. */
@@ -759,7 +782,13 @@ body {
 .eval-update-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.eval-count {
+  color: var(--text-dim);
+  font-size: 0.8rem;
 }
 
 .status-check {

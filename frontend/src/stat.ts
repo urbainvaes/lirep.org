@@ -22,6 +22,8 @@ import { mainLineSans, sanPathTo, type StudyTree } from "./tree";
 // optional, each paired with its own calculatedAt timestamp.
 interface StudyStats {
   winProbability?: number;
+  winRate?: number;
+  lossProbability?: number;
   coverage?: number[]; // coverage[i] = fraction of games still in-book after the opponent's (i+1)th move
   winProbabilityCalculatedAt?: string;
   nodesEvaluated?: number; // set together with winProbability, by the same job
@@ -175,45 +177,63 @@ async function evaluatePosition(engine: Engine, chess: Chess): Promise<number | 
   return null;
 }
 
-// Every tree node, plus every "opponent played something you didn't prepare
-// for" position `eval_score` would otherwise need to ask Lichess's Cloud
-// Eval API for live (see backend/app/stats.py) — discovered here using the
-// same (already-cached) Opening Explorer data that calculation itself uses,
-// so no extra Explorer load either. Returns the FENs found this way so the
-// caller can show a real "N positions found" count before evaluating starts.
-async function findOffTreePositions(
+interface RequiredEvaluations {
+  nodeIds: Set<string>;
+  offTreeFens: Set<string>;
+}
+
+// Follow the expected-evaluation tree walk and collect only the positions at
+// its frontier: prepared-side leaves, opponent nodes with no games, and
+// positions one opponent move beyond the prepared tree.
+async function findRequiredEvaluations(
   tree: StudyTree,
+  startNodeId: number,
   side: "white" | "black",
   settings: ExplorerSettings,
-): Promise<Set<string>> {
-  const fens = new Set<string>();
-  for (const nodeIdStr of Object.keys(tree.nodes)) {
-    const nodeId = Number(nodeIdStr);
-    const chess = new Chess();
-    for (const san of sanPathTo(tree, nodeId)) chess.move(san);
-    if (chess.isGameOver()) continue;
+): Promise<RequiredEvaluations> {
+  const nodeIds = new Set<string>();
+  const offTreeFens = new Set<string>();
 
+  async function walk(nodeId: number, chess: Chess): Promise<void> {
+    if (chess.isGameOver()) return;
+    const node = tree.nodes[nodeId];
     const studiedSideToMove = (chess.turn() === "w") === (side === "white");
-    if (studiedSideToMove) continue; // only opponent positions can go "off tree"
 
-    try {
-      const res = await fetch(explorerUrl(chess.fen(), settings), { credentials: "same-origin" });
-      if (!res.ok) continue; // best-effort discovery: skip rather than abort the whole run
-      const data: ExplorerData = await res.json();
-      const node = tree.nodes[nodeId];
-      const childSans = new Set(node.children.map((childId) => tree.nodes[childId].san));
-      for (const move of data.moves) {
-        if (childSans.has(move.san)) continue;
+    if (studiedSideToMove) {
+      if (node.children.length === 0) nodeIds.add(String(nodeId));
+      else {
+        const childId = node.children[0];
         const child = new Chess(chess.fen());
-        child.move(move.san);
-        fens.add(child.fen());
+        child.move(tree.nodes[childId].san);
+        await walk(childId, child);
       }
-    } catch {
-      // Network hiccup on our own (cached) /api/explorer — skip this node's
-      // off-tree moves rather than fail the whole discovery pass over it.
+      return;
+    }
+
+    const res = await fetch(explorerUrl(chess.fen(), settings), { credentials: "same-origin" });
+    if (!res.ok) throw new Error("failed to find required positions in Opening Explorer");
+    const data: ExplorerData = await res.json();
+    const totalGames = data.moves.reduce((total, move) => total + move.white + move.draws + move.black, 0);
+    if (totalGames === 0) {
+      nodeIds.add(String(nodeId));
+      return;
+    }
+
+    const childrenBySan = new Map(node.children.map((childId) => [tree.nodes[childId].san, childId]));
+    for (const move of data.moves) {
+      if (move.white + move.draws + move.black === 0) continue;
+      const childId = childrenBySan.get(move.san);
+      const child = new Chess(chess.fen());
+      child.move(move.san);
+      if (childId === undefined) offTreeFens.add(child.fen());
+      else await walk(childId, child);
     }
   }
-  return fens;
+
+  const start = new Chess();
+  for (const san of sanPathTo(tree, startNodeId)) start.move(san);
+  await walk(startNodeId, start);
+  return { nodeIds, offTreeFens };
 }
 
 // Bulk-checks the shared, global, FEN-keyed eval cache (backend
@@ -241,34 +261,45 @@ async function lookupEvalCache(fens: string[]): Promise<Record<string, number>> 
   }
 }
 
-// Evaluates every position in the tree, plus every off-tree opponent
-// continuation `eval_score` would otherwise need Cloud Eval for, with the
-// same Stockfish WASM engine used for live analysis in the Study editor —
-// entirely in the browser, like Lichess's own analysis board. Incremental:
-// a tree node already in `existingByNode`, or an off-tree position already
-// in the shared cache (`lookupEvalCache`), is reused as-is rather than
-// recomputed — re-running this after nothing's changed does virtually no
-// work. No server round-trip per *newly computed* position, so no external
-// rate limit and no "sparse coverage" misses there: local Stockfish can
-// always produce a value.
+// Evaluate only frontier positions expected evaluation will consume. Existing
+// node evals and globally cached off-tree evals are reused; checkpoint batches
+// so leaving the page doesn't discard the whole run.
 async function calculateEvaluationsLocally(
   tree: StudyTree,
+  startNodeId: number,
   side: "white" | "black",
   settings: ExplorerSettings,
   existingByNode: Record<string, number | null>,
+  onPlan: (ready: number, required: number, work: number) => void,
   onProgress: (done: number, total: number) => void,
+  onCheckpoint: (
+    byNode: Record<string, number | null>,
+    byFen: Record<string, number | null>,
+    misses: number,
+    ready: number,
+  ) => Promise<void>,
 ): Promise<{ byNode: Record<string, number | null>; byFen: Record<string, number | null>; misses: number }> {
-  const nodeIds = Object.keys(tree.nodes);
-  const offTreeFens = [...(await findOffTreePositions(tree, side, settings))];
+  const required = await findRequiredEvaluations(tree, startNodeId, side, settings);
+  const nodeIds = [...required.nodeIds];
+  const offTreeFens = [...required.offTreeFens];
   const cachedOffTree = await lookupEvalCache(offTreeFens);
 
   const nodeIdsToCompute = nodeIds.filter((id) => !(id in existingByNode));
   const offTreeFensToCompute = offTreeFens.filter((fen) => !(fen in cachedOffTree));
   const total = nodeIdsToCompute.length + offTreeFensToCompute.length;
+  const requiredTotal = nodeIds.length + offTreeFens.length;
+  const initiallyReady = requiredTotal - total;
   let done = 0;
+  onPlan(initiallyReady, requiredTotal, total);
 
   const byNode: Record<string, number | null> = { ...existingByNode };
   const byFen: Record<string, number | null> = { ...cachedOffTree };
+  const readyCount = () =>
+    nodeIds.filter((id) => id in byNode).length + offTreeFens.filter((fen) => fen in byFen).length;
+  const missCount = () =>
+    nodeIds.filter((id) => byNode[id] === null).length + offTreeFens.filter((fen) => byFen[fen] === null).length;
+  const checkpoint = async () =>
+    onCheckpoint(byNode, byFen, missCount(), readyCount());
   const engine = new Engine();
   try {
     for (const nodeId of nodeIdsToCompute) {
@@ -277,11 +308,13 @@ async function calculateEvaluationsLocally(
       byNode[nodeId] = await evaluatePosition(engine, chess);
       done += 1;
       onProgress(done, total);
+      if (done % 5 === 0) await checkpoint();
     }
     for (const fen of offTreeFensToCompute) {
       byFen[fen] = await evaluatePosition(engine, new Chess(fen));
       done += 1;
       onProgress(done, total);
+      if (done % 5 === 0) await checkpoint();
     }
   } finally {
     engine.terminate();
@@ -293,7 +326,7 @@ async function calculateEvaluationsLocally(
   for (const id of Object.keys(byNode)) {
     if (!(id in tree.nodes)) delete byNode[id];
   }
-  const misses = Object.values(byNode).filter((v) => v === null).length + Object.values(byFen).filter((v) => v === null).length;
+  const misses = missCount();
   return { byNode, byFen, misses };
 }
 
@@ -339,16 +372,6 @@ function scoreTier(winProbability: number | undefined): ScoreTier {
 function pieceBadgeHtml(tier: ScoreTier, size: "" | "sm" = ""): string {
   const sizeClass = size ? ` piece-badge--${size}` : "";
   return `<span class="piece-badge piece-badge--${tier}${sizeClass}">♚</span>`;
-}
-
-// True once every current tree position has a stored evaluation — i.e.
-// "Update evaluations" has run since the last time the tree changed. Purely
-// structural: doesn't care whether any off-tree positions are covered too,
-// since that's the part "Update expected evaluation" can still fall back on
-// live Cloud Eval for regardless.
-function evalsAreCurrent(tree: StudyTree, evals: StudyEvals | null): boolean {
-  if (!evals) return false;
-  return Object.keys(tree.nodes).every((id) => id in evals.byNode);
 }
 
 // null when there's nothing to say (no starting point set, or it's just the
@@ -507,15 +530,25 @@ function renderPage(
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
   const tier = scoreTier(stats?.winProbability);
-  const evalsCurrent = evalsAreCurrent(study.tree, evals);
+  const savedEvalCount = evals ? Object.keys(evals.byNode).length + (evals.offTreeCount ?? 0) : 0;
   const startPoint = describeStartPoint(study.tree, study.startNodeId);
   const startPointNote = startPoint ? ` — from move ${startPoint} onward` : "";
 
   const winProbCardHtml =
-    stats?.winProbability !== undefined
-      ? `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
-         <p class="stat-card__label">Win probability${startPointNote}</p>
-         <p class="stat-card__meta">Expected score, assuming perfect memorization<br>${statsSourceLabel(stats)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`
+    stats?.winRate !== undefined && stats.lossProbability !== undefined
+      ? (() => {
+          const drawProbability = Math.max(0, Math.min(1, 1 - stats.winRate! - stats.lossProbability!));
+          return `<div class="stat-outcome-pair">
+              <div class="stat-detail__score">${(stats.winRate * 100).toFixed(1)}%</div>
+              <div class="stat-loss-probability" aria-label="Loss probability ${(stats.lossProbability * 100).toFixed(1)}%"><strong>${(stats.lossProbability * 100).toFixed(1)}%</strong></div>
+            </div>
+            <p class="stat-card__label">Win probability${startPointNote}</p>
+            <p class="stat-card__meta">Draws are the remaining probability. Expected score ${((stats.winProbability ?? stats.winRate + drawProbability / 2) * 100).toFixed(1)}% · ${statsSourceLabel(stats)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
+        })()
+      : stats?.winProbability !== undefined
+        ? `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
+           <p class="stat-card__label">Expected score${startPointNote}</p>
+           <p class="stat-card__meta">Recalculate to show win/draw/loss probabilities.</p>`
       : `<div class="stat-detail__score stat-card__score--empty">—</div>
          <p class="stat-card__label">Win probability${startPointNote}</p>
          <p class="stat-card__meta">Not calculated yet.</p>`;
@@ -541,7 +574,6 @@ function renderPage(
        <p class="stat-card__meta">No practice positions yet.</p>`;
 
   main.innerHTML = `
-    <a class="btn btn-secondary" href="/stats.html">&larr; Back to Stats</a>
     <div class="stat-page">
       <div class="stat-page__header">
         <h1>
@@ -573,14 +605,14 @@ function renderPage(
             <button id="evals-btn" class="btn btn-secondary" type="button" ${hasMoves ? "" : "disabled"}>
               Update evaluations
             </button>
-            ${evalsCurrent ? `<span class="status-check" title="Up to date with the current tree">✓</span>` : ""}
+            <span id="evals-count" class="eval-count" aria-live="polite">${savedEvalCount} saved evaluations; click to check required positions</span>
           </div>
           <p class="stat-card__meta">
             ${
               evals
                 ? (() => {
                     const total = Object.keys(evals.byNode).length + (evals.offTreeCount ?? 0);
-                    return `${total} position${total === 1 ? "" : "s"} evaluated${evals.misses ? `, ${evals.misses} failed` : ""} · as of ${formatDate(evals.calculatedAt)}${evalsCurrent ? "" : " · tree has changed since — you may want to update"}`;
+                    return `${total} position${total === 1 ? "" : "s"} evaluated${evals.misses ? `, ${evals.misses} failed` : ""} · as of ${formatDate(evals.calculatedAt)}`;
                   })()
                 : "Not calculated yet."
             }
@@ -693,23 +725,41 @@ function renderPage(
     const progress = document.getElementById("evals-progress") as HTMLElement;
     const fill = document.getElementById("evals-progress-fill") as HTMLElement;
     const label = document.getElementById("evals-progress-label") as HTMLElement;
+    const count = document.getElementById("evals-count") as HTMLElement;
+    let readyPositions = 0;
+    let initialReadyPositions = 0;
+    let requiredPositions = 0;
+    let planReady = false;
 
     allActionButtons().forEach((el) => (el.disabled = true));
     btn.textContent = "Calculating…";
     progress.hidden = false;
     progress.classList.add("progress-bar--indeterminate");
     fill.style.width = "0%";
-    label.textContent = "Finding positions to evaluate…";
+    label.textContent = "Finding required positions…";
     label.classList.remove("progress-bar__label--error");
     progress.classList.remove("progress-bar--error");
 
     try {
       const { byNode, byFen, misses } = await calculateEvaluationsLocally(
         study.tree,
+        study.startNodeId !== null && study.startNodeId in study.tree.nodes ? study.startNodeId : study.tree.rootId,
         study.side,
         readSettingsFromDom(),
         study.evals?.byNode ?? {},
+        (ready, required, work) => {
+          planReady = true;
+          readyPositions = ready;
+          initialReadyPositions = ready;
+          requiredPositions = required;
+          count.textContent = `${ready} / ${required} required positions ready (${required - ready} to calculate)`;
+          progress.classList.remove("progress-bar--indeterminate");
+          fill.style.width = work === 0 ? "100%" : "0%";
+          label.textContent = work === 0 ? "Already up to date" : `0 / ${work}`;
+        },
         (done, total) => {
+          const calculated = Math.min(requiredPositions, initialReadyPositions + done);
+          count.textContent = `${calculated} / ${requiredPositions} required positions calculated (${requiredPositions - calculated} remaining)`;
           progress.classList.remove("progress-bar--indeterminate");
           if (total === 0) {
             fill.style.width = "100%";
@@ -719,7 +769,19 @@ function renderPage(
           fill.style.width = `${Math.round((done / total) * 100)}%`;
           label.textContent = `${done} / ${total}`;
         },
+        async (byNode, byFen, misses, ready) => {
+          const res = await fetch(`/api/studies/${study.id}/evals`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ byNode, byFen, misses }),
+          });
+          if (!res.ok) throw new Error("failed to save evaluation checkpoint");
+          readyPositions = ready;
+          count.textContent = `${ready} / ${requiredPositions} required positions saved (${requiredPositions - ready} remaining)`;
+        },
       );
+      count.textContent = `${requiredPositions} / ${requiredPositions} required positions calculated (0 remaining)`;
       const res = await fetch(`/api/studies/${study.id}/evals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -730,6 +792,9 @@ function renderPage(
       const updated: Study = await res.json();
       renderPage(main, updated, explorerDefaults, knowledge);
     } catch (err) {
+      if (planReady) {
+        count.textContent = `${readyPositions} / ${requiredPositions} required positions saved (${requiredPositions - readyPositions} remaining)`;
+      }
       btn.textContent = "Update evaluations";
       btn.disabled = false;
       others.forEach((el) => (el.disabled = false));

@@ -11,18 +11,19 @@ README. They differ only in what value a leaf gets and how values combine:
 
 | Stat | Leaf value | Combine rule |
 | --- | --- | --- |
-| Expected score | 1 / 0.5 / 0 (win/draw/loss) or the position's W/D/L rate | weighted average by real move frequency |
+| Expected score (with win/loss probabilities) | Win/draw/loss distribution or the position's expected score | weighted average by real move frequency |
 | Coverage | 1 if still in-book, dropped otherwise | probability mass still following the tree |
 | Expected eval | Stockfish cp (local Stockfish, or Cloud Eval as a fallback) | weighted average by real move frequency |
 
-**Expected score and Coverage are 100% Opening Explorer-derived — always.**
-Every number either of them produces comes from Explorer win/draw/loss
+**Expected score (including its win/loss probabilities) and Coverage are 100% Opening Explorer-derived — always.**
+Every number they produce comes from Explorer win/draw/loss
 counts (plus deterministic chess rules for an outright checkmate/stalemate
 in the tree, which needs no external data at all). Neither ever calls
 Stockfish or the Cloud Eval API, not even as a fallback, not even for a move
-outside your tree — `_score_from_wdl` in `stats.py` computes a win rate
-directly from the Explorer's own per-move counts, which is *already*
-everything needed for that move's contribution. This is a deliberate,
+outside your tree — `_outcome_probabilities` in `stats.py` propagates the
+win/draw/loss distribution directly from the Explorer's own counts. Expected
+score is win probability plus half the draw probability; the UI shows win and
+loss probabilities and treats the remainder as draws. This is a deliberate,
 load-bearing design choice, not an accident of how the code happens to be
 written today: **these two stats must never be approximated from an engine
 evaluation** (e.g. by inverting Lichess's cp→win% formula, quoted in the main
@@ -48,15 +49,15 @@ would throw away real information: a repertoire that draws 80% of the time
 isn't equivalent to one that loses 80% of the time, even though neither
 "wins."
 
-**The algorithm**, walking the tree from the root (`_Evaluator.score` in
+**The algorithm**, walking the tree from the root (`_Evaluator.outcomes` in
 `stats.py`):
 
 1. **At a finished game** (checkmate/stalemate/etc., detected with
-   `python-chess`): score 1 if the studied side won, 0 if they lost, 0.5 for
-   a draw.
+   `python-chess`): assign all probability to the actual win, draw, or loss.
 2. **At a position where it's the studied side's move:** assume **perfect
    memorization** — they always play the tree's recorded move (there's only
-   ever one, see "Assumptions" below). Score = the score of that child.
+   ever one, see "Assumptions" below). The outcome distribution is that of
+   the child.
 3. **At a position where it's the opponent's move:** fetch the Opening
    Explorer's move list for this exact position (same database/rating/speed
    settings as the study's `explorerSettings`), and take a weighted average
@@ -64,8 +65,13 @@ isn't equivalent to one that loses 80% of the time, even though neither
    actually played:
    - If a reply matches a branch you've prepared, recurse into it.
    - If a reply isn't in your tree, your preparation ends right there — its
-     contribution is that single move's own win/draw/loss rate (which the
-     explorer already reports per move), not a recursive expansion.
+      contribution is that single move's own win/draw/loss distribution (which
+      the explorer already reports per move), not a recursive expansion.
+
+Win and loss probabilities are shown together on the expected-score card; draw
+probability is their remainder. These outcomes are saved by the same **Update
+win probability** action. Older saved calculations gain outcome probabilities
+the next time that action is run.
 
 ## 2. Coverage
 
@@ -105,13 +111,13 @@ prepared move; the moment the opponent plays something there's no prepared
 follow-up for, evaluate the resulting position with Stockfish, weighted by
 how often that opponent move is actually played.
 
-Walking the tree exactly like `score()` does (`_Evaluator.eval_score` in
+Walking the tree exactly like `outcomes()` does (`_Evaluator.eval_score` in
 `stats.py`):
 
 1. **Studied side's move:** recurse into the one prepared child. No choice,
    no Stockfish needed.
 2. **Opponent's move:** for each of their real replies (from the same
-   Opening Explorer response `score()` already fetches at this position,
+    Opening Explorer response `outcomes()` already fetches at this position,
    weighted by frequency):
    - **in your tree** → recurse; the eval bubbles up from further down the
      line, same process.
@@ -126,7 +132,7 @@ Walking the tree exactly like `score()` does (`_Evaluator.eval_score` in
    both just evaluate that position directly, no weighting to do.
 
 **No additional Opening Explorer calls are needed for this stat.** Step 2
-reuses the *exact same* Explorer response `score()`/`coverage()` already
+reuses the *exact same* Explorer response `outcomes()`/`coverage()` already
 fetch at that position (same FEN, same in-run cache) — it already lists
 every real reply and its frequency, which is everything needed to decide
 what to recurse into and what to hand to Stockfish. The only genuinely new
@@ -344,6 +350,8 @@ Cached on the study row as two separate columns, matching the two buttons:
 // stats — from "Calculate scores", depends on explorerSettings
 {
   "winProbability": 0.5276,
+  "winRate": 0.3714,
+  "lossProbability": 0.3162,
   "coverage": [0.253, 0.164, 0.068, 0.053, 0.035, 0.0008],
   "evalCp": 34.2,
   "evalMisses": 1,

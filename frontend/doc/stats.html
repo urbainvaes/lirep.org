@@ -55,7 +55,7 @@
 
       <section>
         <h2>Study detail screen</h2>
-        <p>Open at <code>stat.html?id={studyId}</code>. Show Back to Stats, the tier badge and legend toggle, study name, and Playing White/Black badge. Show two metric cards, calculation actions, Explorer settings, then coverage chart. Every metric and chart must identify if its calculation begins at a custom starting point.</p>
+        <p>Open at <code>stat.html?id={studyId}</code>. Show the tier badge and legend toggle, study name, and Playing White/Black badge. Show two metric cards, calculation actions, Explorer settings, then coverage chart. Every metric and chart must identify if its calculation begins at a custom starting point.</p>
         <h3>Metric cards</h3>
         <ul>
           <li><strong>Win probability</strong> is displayed as a percentage but means expected score: a win = 1, draw = 0.5, loss = 0, from the studied side's perspective. Include source, evaluated-position count, and timestamp.</li>
@@ -77,8 +77,8 @@
       <section>
         <h2>Three independent actions</h2>
         <h3>Update evaluations</h3>
-        <p>This action evaluates engine positions locally in the browser with the same Stockfish WASM worker used by the study editor. It does not calculate a metric; it prepares reusable evaluations for expected evaluation. First discover off-tree opponent replies by reading Explorer data at each opponent-to-move node. Then evaluate every tree node and every discovered off-tree resulting position. Reuse existing study node evaluations and globally cached FEN evaluations; only calculate missing positions. Save node evaluations to this study and off-tree evaluations to the shared global FEN cache.</p>
-        <p>Show an indeterminate “Finding positions to evaluate…” phase, then an exact percentage/count for remaining engine work. If there is nothing new, report “Already up to date.” Show a check when every current tree node has an evaluation; this status is structural and does not guarantee every off-tree reply is cached. After edits, stale node evaluations are not current and the user may update them again.</p>
+        <p>This action prepares only the engine evaluations required by the expected-evaluation walk. Starting at the effective starting node, follow the studied side's prepared move and the opponent's Explorer-weighted replies. Evaluate a nonterminal studied-side leaf, an opponent position with no Explorer games, or an opponent reply that exits the tree. Reuse saved node evaluations and globally cached FEN evaluations; do not evaluate unrelated tree nodes. Checkpoint results every five positions and save the final results, so a later run can resume from saved evaluations. Save node evaluations to this study and off-tree evaluations to the shared global FEN cache.</p>
+        <p>Show “Finding required positions…” while walking the tree and Explorer, then show how many of the required positions are already available and how many need calculation. Show exact progress for remaining engine work and report “Already up to date” when there is none.</p>
         <h3>Update win probability</h3>
         <p>Start a backend job that calculates expected score and coverage from Explorer data. It does not call Stockfish or Cloud Eval. Save only its fields and timestamp, independently of expected evaluation. Explorer lookups use a persistent cross-study cache with a 24-hour TTL.</p>
         <h3>Update expected evaluation</h3>
@@ -99,7 +99,7 @@
       <section>
         <h2>Coverage chart and caching</h2>
         <p>Render a responsive line chart with percentage on the vertical axis and the studied opponent's move number on the horizontal axis. Hovering near the line shows opponent move number, coverage percentage, and number of remembered moves at that depth. If no coverage is stored, show an explanatory empty state and require recalculation to populate it.</p>
-        <p>Explorer responses and rating resolutions persist in SQLite across backend restarts. Successful engine evaluations are cached by FEN globally; study tree-node evaluations are stored on the study. Backend calculation jobs are in-memory and do not survive a process restart. Process one Explorer request at a time and fail fast on 429 with a wait-a-minute message.</p>
+        <p>Explorer responses and rating resolutions persist in SQLite across backend restarts. Successful engine evaluations are cached by FEN globally; required study tree-node evaluations are stored on the study. Backend calculation jobs are in-memory and do not survive a process restart. Process one Explorer request at a time and fail fast on 429 with a wait-a-minute message.</p>
       </section>
 
       <section>
