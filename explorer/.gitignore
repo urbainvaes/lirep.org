@@ -1,0 +1,10 @@
+/data/*.pgn.zst
+/data/*.part
+/data/*.sha256
+!/data/*.pgn.zst.sha256
+/data/*.log
+/db/
+/server.log
+/import.log
+/upstream/target/
+/upstream/import-pgn/target/

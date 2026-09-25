@@ -122,7 +122,10 @@ function renderEditor(
   explorerDefaults: ExplorerDefaults | null,
   newStudySide: "white" | "black",
 ): void {
-  const settings: ExplorerSettings = existing?.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
+  const settings: ExplorerSettings = existing?.explorerSettings ?? {
+    ...DEFAULT_EXPLORER_SETTINGS,
+    source: explorerDefaults?.defaultSource ?? DEFAULT_EXPLORER_SETTINGS.source,
+  };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
@@ -171,9 +174,13 @@ function renderEditor(
               <span class="analysis-label" data-icon="" aria-hidden="true">Opening Explorer</span>
             </label>
             <div class="analysis-header__settings">
-              <select id="explorer-database" ${settings.enabled ? "" : "disabled"}>
+              <select id="explorer-source" aria-label="Explorer data source" ${settings.enabled ? "" : "disabled"}>
+                <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
+                <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
+              </select>
+              <select id="explorer-database" aria-label="Lichess database" ${settings.enabled && settings.source === "lichess" ? "" : "disabled"}>
                 <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
-                <option value="masters" ${settings.database === "masters" ? "selected" : ""}>Masters</option>
+                <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
               </select>
               <select
                 id="explorer-min-rating"
@@ -213,6 +220,7 @@ function renderEditor(
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
   const explorerPanelEl = document.getElementById("explorer-panel") as HTMLElement;
   const explorerEnabledEl = document.getElementById("explorer-enabled") as HTMLInputElement;
+  const explorerSourceEl = document.getElementById("explorer-source") as HTMLSelectElement;
   const explorerDatabaseEl = document.getElementById("explorer-database") as HTMLSelectElement;
   const explorerMinRatingEl = document.getElementById("explorer-min-rating") as HTMLSelectElement;
   const explorerSpeedsEl = document.getElementById("explorer-speeds") as HTMLElement;
@@ -559,23 +567,36 @@ function renderEditor(
     }
   });
 
-  function setSpeedControlsDisabled(disabled: boolean): void {
-    explorerMinRatingEl.disabled = disabled;
+  function updateExplorerControls(): void {
+    explorerSourceEl.disabled = !settings.enabled;
+    explorerDatabaseEl.disabled = !settings.enabled || settings.source === "lirep";
+    explorerDatabaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = settings.source === "lirep";
+    const playerPoolEnabled = settings.enabled && settings.database === "lichess";
+    explorerMinRatingEl.disabled = !playerPoolEnabled;
     explorerSpeedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
-      cb.disabled = disabled;
+      cb.disabled = !playerPoolEnabled;
     });
   }
 
   explorerEnabledEl.addEventListener("change", () => {
     settings.enabled = explorerEnabledEl.checked;
-    explorerDatabaseEl.disabled = !settings.enabled;
-    setSpeedControlsDisabled(!settings.enabled || settings.database !== "lichess");
+    updateExplorerControls();
+    void updateExplorer(positionAt(tree, currentId).fen());
+  });
+
+  explorerSourceEl.addEventListener("change", () => {
+    settings.source = explorerSourceEl.value as ExplorerSettings["source"];
+    if (settings.source === "lirep" && settings.database === "masters") {
+      settings.database = "lichess";
+      explorerDatabaseEl.value = "lichess";
+    }
+    updateExplorerControls();
     void updateExplorer(positionAt(tree, currentId).fen());
   });
 
   explorerDatabaseEl.addEventListener("change", () => {
     settings.database = explorerDatabaseEl.value as ExplorerSettings["database"];
-    setSpeedControlsDisabled(!settings.enabled || settings.database !== "lichess");
+    updateExplorerControls();
     void updateExplorer(positionAt(tree, currentId).fen());
   });
 

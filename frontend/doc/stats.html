@@ -38,7 +38,7 @@
 
       <section>
         <h2>Purpose and access</h2>
-        <p>Stats evaluate a saved study against a selected pool of real games. The studied side is assumed to remember and always play its prepared move. Opponent replies are weighted by their frequency in the Lichess Opening Explorer.</p>
+        <p>Stats evaluate a saved study against a selected pool of real games. The studied side is assumed to remember and always play its prepared move. Opponent replies are weighted by their frequency in the selected Lirep or Lichess Explorer source.</p>
         <p>Both the Stats list and detail page require Lichess sign-in. Show a sign-in prompt when signed out and “Study not found” when a requested ID is unavailable to the account.</p>
       </section>
 
@@ -47,7 +47,7 @@
         <ul>
           <li>Load the account's studies. Show an empty state with a New study link when there are none.</li>
           <li>Render one card per study with its score-tier chess-piece badge, study name, studied side, and expected score as a percentage. Until calculated, show a dash and “Not calculated yet.”</li>
-          <li>When score exists, show its Explorer source (Players and minimum rating, or Masters), number of positions evaluated, and calculation time. If expected evaluation exists, show it too.</li>
+          <li>When score exists, show its Explorer source (Lirep or Lichess Players/Masters, including minimum rating for Players), number of positions evaluated, and calculation time. If expected evaluation exists, show it too.</li>
           <li>The score badge tiers are gold at 60%+, silver at 55%+, bronze at 50%+, and unbadged/below breakeven under 50%. The piece badge on a calculated card opens the study detail page. A card with no calculated score does not open.</li>
           <li>Each card has Calculate or Recalculate. Disable the button while working. It starts the win-probability job and then the expected-evaluation job in sequence, updating the button label with current progress. If the first succeeds and second fails, retain and display the successful result instead of discarding it.</li>
         </ul>
@@ -88,7 +88,7 @@
 
       <section>
         <h2>Explorer settings</h2>
-        <p>Show the study's editable settings on the detail page. Changing the controls alone does not trigger calculation. The next win-probability or expected-evaluation action sends the selected settings and saves them as the study's new settings (not a temporary preview), so subsequent views and calculations use them.</p>
+        <p>Show the study's editable settings on the detail page, including Lirep/Lichess data source. Lirep uses its local rated-game archive and has no Masters database; Lichess offers Players and Masters. Changing the controls alone does not trigger calculation. The next win-probability or expected-evaluation action sends the selected settings and saves them as the study's new settings (not a temporary preview), so subsequent views and calculations use them.</p>
         <ul>
           <li>Players or Masters database. Masters disables rating and speed controls.</li>
           <li>For Players, select “My current rating” (stored as automatic/null) or a fixed rating threshold. Automatic mode resolves the current rating to its Explorer bucket and includes that and higher buckets. Reference rating order is Rapid, Blitz, Classical; default to 1500 if unrated.</li>

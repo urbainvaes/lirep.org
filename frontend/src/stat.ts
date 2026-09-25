@@ -30,6 +30,7 @@ interface StudyStats {
   evalCp?: number; // expected Stockfish eval (centipawns, studied side's POV) at the end of prep
   evalMisses?: number; // how many of those leaf positions had no cached cloud eval (counted as 0)
   evalCalculatedAt?: string;
+  source?: "lirep" | "lichess";
   database: "lichess" | "masters";
   minRating: number | null;
   speeds?: ExplorerSpeed[];
@@ -344,8 +345,10 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function statsSourceLabel(stats: StudyStats): string {
-  return stats.database === "masters" ? "Masters" : `Players ${stats.minRating ?? "?"}+`;
+function statsSourceLabel(stats: StudyStats, fallbackSource: ExplorerSettings["source"]): string {
+  const provider = (stats.source ?? fallbackSource) === "lirep" ? "Lirep (Mar 2016)" : "Lichess";
+  const database = stats.database === "masters" ? "Masters" : `Players ${stats.minRating ?? "?"}+`;
+  return `${provider} ${database}`;
 }
 
 // Gamification tiers for the expected score. 50% is breakeven for any
@@ -504,13 +507,14 @@ function renderCoverageChart(
 }
 
 function readSettingsFromDom(): ExplorerSettings {
+  const source = (document.getElementById("stat-source") as HTMLSelectElement).value as ExplorerSettings["source"];
   const database = (document.getElementById("stat-database") as HTMLSelectElement).value as ExplorerSettings["database"];
   const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
   const minRating = minRatingEl.value === "auto" ? null : Number(minRatingEl.value);
   const speeds = Array.from(
     document.querySelectorAll<HTMLInputElement>("#stat-speeds input:checked"),
   ).map((cb) => cb.value as ExplorerSpeed);
-  return { enabled: true, database, minRating, speeds };
+  return { enabled: true, source, database, minRating, speeds };
 }
 
 function renderPage(
@@ -543,7 +547,7 @@ function renderPage(
               <div class="stat-loss-probability" aria-label="Loss probability ${(stats.lossProbability * 100).toFixed(1)}%"><strong>${(stats.lossProbability * 100).toFixed(1)}%</strong></div>
             </div>
             <p class="stat-card__label">Win probability${startPointNote}</p>
-            <p class="stat-card__meta">Draws are the remaining probability. Expected score ${((stats.winProbability ?? stats.winRate + drawProbability / 2) * 100).toFixed(1)}% · ${statsSourceLabel(stats)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
+            <p class="stat-card__meta">Draws are the remaining probability. Expected score ${((stats.winProbability ?? stats.winRate + drawProbability / 2) * 100).toFixed(1)}% · ${statsSourceLabel(stats, settings.source)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
         })()
       : stats?.winProbability !== undefined
         ? `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
@@ -659,9 +663,13 @@ function renderPage(
         <p class="stat-card__meta">These settings determine which replies are weighted in recalculated scores.</p>
         <div class="explorer-settings-panel">
           <div class="analysis-header__settings">
-            <select id="stat-database">
+            <select id="stat-source" aria-label="Explorer data source">
+              <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
+              <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
+            </select>
+            <select id="stat-database" aria-label="Lichess database" ${settings.source === "lirep" ? "disabled" : ""}>
               <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
-              <option value="masters" ${settings.database === "masters" ? "selected" : ""}>Masters</option>
+              <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
             </select>
             <select id="stat-min-rating" ${settings.database === "lichess" ? "" : "disabled"}>
               ${ratingOptionsHtml(ratingBuckets, settings.minRating)}
@@ -696,16 +704,26 @@ function renderPage(
   });
 
   const databaseEl = document.getElementById("stat-database") as HTMLSelectElement;
+  const sourceEl = document.getElementById("stat-source") as HTMLSelectElement;
   const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
   const speedsEl = document.getElementById("stat-speeds") as HTMLElement;
 
-  databaseEl.addEventListener("change", () => {
-    const isLichess = databaseEl.value === "lichess";
-    minRatingEl.disabled = !isLichess;
+  function updateExplorerControls(): void {
+    databaseEl.disabled = sourceEl.value === "lirep";
+    databaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = sourceEl.value === "lirep";
+    const playersSelected = databaseEl.value === "lichess";
+    minRatingEl.disabled = !playersSelected;
     speedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
-      cb.disabled = !isLichess;
+      cb.disabled = !playersSelected;
     });
+  }
+
+  sourceEl.addEventListener("change", () => {
+    if (sourceEl.value === "lirep" && databaseEl.value === "masters") databaseEl.value = "lichess";
+    updateExplorerControls();
   });
+
+  databaseEl.addEventListener("change", updateExplorerControls);
 
   speedsEl.addEventListener("change", (e) => {
     const target = e.target as HTMLInputElement;

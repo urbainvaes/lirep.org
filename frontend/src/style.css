@@ -1109,6 +1109,7 @@ body {
 
 .analysis-header__settings {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

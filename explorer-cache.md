@@ -49,7 +49,8 @@ sits in front of every real Lichess Explorer request. Both call sites above
 go through the same function, `fetch_explorer_cached` in `explorer.py` — no
 more duplicated fetch logic between `explorer.py` and `stats.py`.
 
-**Cache key:** `f"{database}|{ratings}|{speeds}|{fen}"`, where `ratings` is
+**Cache key:** `f"{source}|{database}|{ratings}|{speeds}|{fen}"`, where
+`source` is `lirep` or `lichess`, and `ratings` is
 the exact comma-joined bucket list Lichess would see (e.g. `1600,1800,2000,2200,2500`),
 not just the `minRating` threshold — so two settings that resolve to the same
 underlying Lichess query hit the same cache entry, but a different threshold

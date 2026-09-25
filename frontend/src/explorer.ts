@@ -4,6 +4,7 @@ export type ExplorerSpeed = "bullet" | "blitz" | "rapid" | "classical";
 
 export interface ExplorerSettings {
   enabled: boolean;
+  source: "lirep" | "lichess";
   database: "lichess" | "masters";
   /** null = always use the signed-in player's current rating; a number pins a specific bucket. */
   minRating: number | null;
@@ -12,6 +13,7 @@ export interface ExplorerSettings {
 
 export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
   enabled: true,
+  source: "lichess",
   database: "lichess",
   minRating: null,
   speeds: ["blitz", "rapid", "classical"],
@@ -22,6 +24,8 @@ export interface ExplorerDefaults {
   defaultMinRating: number;
   speeds: ExplorerSpeed[];
   defaultSpeeds: ExplorerSpeed[];
+  defaultSource: ExplorerSettings["source"];
+  lirepAvailable: boolean;
 }
 
 export interface ExplorerMove {
@@ -33,6 +37,7 @@ export interface ExplorerMove {
 }
 
 export interface ExplorerData {
+  source: ExplorerSettings["source"];
   database: "lichess" | "masters";
   minRating: number | null;
   opening: string | null;
@@ -80,7 +85,7 @@ export async function fetchExplorerDefaults(): Promise<ExplorerDefaults | null> 
 }
 
 export function explorerUrl(fen: string, settings: ExplorerSettings): string {
-  const params = new URLSearchParams({ fen, database: settings.database });
+  const params = new URLSearchParams({ fen, source: settings.source, database: settings.database });
   if (settings.database === "lichess") {
     if (settings.minRating !== null) params.set("minRating", String(settings.minRating));
     params.set("speeds", settings.speeds.join(","));
@@ -149,7 +154,11 @@ export function renderExplorer(panel: HTMLElement, data: ExplorerData, onPlay: (
     })
     .join("");
 
-  const source = data.database === "masters" ? "Masters" : `Players rated ${data.minRating ?? "?"}+`;
+  const source = data.source === "lirep"
+    ? "Lirep · Mar 2016"
+    : data.database === "masters"
+      ? "Lichess Masters"
+      : `Lichess Players rated ${data.minRating ?? "?"}+`;
   const fetchedAtDate = new Date(data.fetchedAt);
 
   panel.innerHTML = `

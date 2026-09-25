@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from . import store
 from .auth import ACCOUNT_URL
-from .config import HTTP_TIMEOUT
+from .config import DEFAULT_EXPLORER_SOURCE, HTTP_TIMEOUT, LOCAL_LICHESS_EXPLORER_URL
 
 LICHESS_EXPLORER_URL = "https://explorer.lichess.org/lichess"
 MASTERS_EXPLORER_URL = "https://explorer.lichess.org/masters"
@@ -93,10 +94,13 @@ def _shape_moves(data: dict) -> list[dict]:
     ]
 
 
-def _shape_response(database: str, min_rating: int | None, data: dict, fetched_at: str) -> dict:
+def _shape_response(
+    source: str, database: str, min_rating: int | None, data: dict, fetched_at: str
+) -> dict:
     opening = data.get("opening")
     return {
         "database": database,
+        "source": source,
         "minRating": min_rating,
         "opening": opening["name"] if opening else None,
         "totals": {
@@ -113,6 +117,7 @@ async def fetch_explorer(
     client: httpx.AsyncClient,
     headers: dict[str, str],
     fen: str,
+    source: Literal["lirep", "lichess"],
     database: str,
     min_rating: int | None,
     speeds: str,
@@ -120,7 +125,17 @@ async def fetch_explorer(
     """Raw, uncached fetch — see fetch_explorer_cached below, which every
     caller (the live /api/explorer endpoint and stats.py's recalculation)
     should use instead."""
-    if database == "masters":
+    if source == "lirep":
+        if not LOCAL_LICHESS_EXPLORER_URL:
+            raise HTTPException(status_code=503, detail="Lirep Explorer is not configured")
+        if database == "masters":
+            raise HTTPException(status_code=400, detail="Masters is only available from Lichess")
+        assert min_rating is not None
+        resp = await client.get(
+            f"{LOCAL_LICHESS_EXPLORER_URL}/lichess",
+            params={"fen": fen, "speeds": speeds, "ratings": _ratings_from(min_rating)},
+        )
+    elif database == "masters":
         resp = await client.get(MASTERS_EXPLORER_URL, params={"fen": fen}, headers=headers)
     else:
         assert min_rating is not None
@@ -143,13 +158,14 @@ async def fetch_explorer_cached(
     client: httpx.AsyncClient,
     headers: dict[str, str],
     fen: str,
+    source: Literal["lirep", "lichess"],
     database: str,
     min_rating: int | None,
     speeds: str,
 ) -> tuple[dict, str]:
     """(data, fetchedAt ISO timestamp). Persisted across studies *and* users:
     a position's real-world move frequencies don't depend on who's asking, so
-    the cache key is just the exact query Lichess would see (see
+    the cache key is the provider plus its exact query (see
     store.EXPLORER_CACHE_TTL_SECONDS for the staleness window). This is what
     keeps repeated "Calculate scores" runs, and different studies that share
     early-game positions, from re-fetching the same data over and over — see
@@ -157,12 +173,12 @@ async def fetch_explorer_cached(
     under Lichess's (undocumented) rate limit.
     """
     ratings = _ratings_from(min_rating) if database != "masters" else ""
-    cache_key = f"{database}|{ratings}|{speeds}|{fen}"
+    cache_key = f"{source}|{database}|{ratings}|{speeds}|{fen}"
     cached = store.get_explorer_cache(cache_key)
     if cached is not None:
         return cached["response"], cached["fetchedAt"]
 
-    data = await fetch_explorer(client, headers, fen, database, min_rating, speeds)
+    data = await fetch_explorer(client, headers, fen, source, database, min_rating, speeds)
     fetched_at = datetime.now(UTC).isoformat()
     store.set_explorer_cache(cache_key, data, fetched_at)
     return data, fetched_at
@@ -186,6 +202,8 @@ async def explorer_defaults(request: Request) -> dict:
         "defaultMinRating": default_min_rating,
         "speeds": list(ALL_SPEEDS),
         "defaultSpeeds": list(DEFAULT_SPEEDS),
+        "defaultSource": DEFAULT_EXPLORER_SOURCE,
+        "lirepAvailable": bool(LOCAL_LICHESS_EXPLORER_URL),
     }
 
 
@@ -193,6 +211,7 @@ async def explorer_defaults(request: Request) -> dict:
 async def explorer(
     fen: str,
     request: Request,
+    source: Literal["lirep", "lichess"] = DEFAULT_EXPLORER_SOURCE,
     database: str = "lichess",
     minRating: int | None = None,
     speeds: str = ",".join(DEFAULT_SPEEDS),
@@ -205,11 +224,15 @@ async def explorer(
     headers = {"Authorization": f"Bearer {token}"}
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        if source == "lirep" and not LOCAL_LICHESS_EXPLORER_URL:
+            raise HTTPException(status_code=503, detail="Lirep Explorer is not configured")
+        if source == "lirep" and database == "masters":
+            raise HTTPException(status_code=400, detail="Masters is only available from Lichess")
         if database != "masters" and minRating is None:
             min_rating = await _resolve_min_rating(client, headers, username)
         else:
             min_rating = minRating
 
-        data, fetched_at = await fetch_explorer_cached(client, headers, fen, database, min_rating, speeds)
+        data, fetched_at = await fetch_explorer_cached(client, headers, fen, source, database, min_rating, speeds)
 
-    return _shape_response(database, None if database == "masters" else min_rating, data, fetched_at)
+    return _shape_response(source, database, None if database == "masters" else min_rating, data, fetched_at)

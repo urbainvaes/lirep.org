@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from . import jobs, store
-from .config import HTTP_TIMEOUT
+from .config import DEFAULT_EXPLORER_SOURCE, HTTP_TIMEOUT
 from .explorer import DEFAULT_SPEEDS, _resolve_min_rating, fetch_explorer_cached
 from .studies import ExplorerSettings
 
@@ -81,6 +81,7 @@ class _Evaluator:
         self,
         client: httpx.AsyncClient,
         headers: dict[str, str],
+        source: Literal["lirep", "lichess"],
         database: Literal["lichess", "masters"],
         min_rating: int | None,
         speeds: str,
@@ -88,6 +89,7 @@ class _Evaluator:
     ) -> None:
         self.client = client
         self.headers = headers
+        self.source = source
         self.database = database
         self.min_rating = min_rating
         self.speeds = speeds
@@ -117,7 +119,7 @@ class _Evaluator:
         self.explorer_calls += 1
         self._report_progress()
         data, _fetched_at = await fetch_explorer_cached(
-            self.client, self.headers, fen, self.database, self.min_rating, self.speeds
+            self.client, self.headers, fen, self.source, self.database, self.min_rating, self.speeds
         )
         self.cache[fen] = data
         return data
@@ -475,15 +477,20 @@ async def lookup_eval_cache(request: Request, payload: EvalCacheLookupIn) -> dic
 
 async def _resolve_explorer_settings(
     job_id: str, owner: str, study: dict, headers: dict[str, str]
-) -> tuple[Literal["lichess", "masters"], int | None, str] | None:
-    """(database, min_rating, speeds) for this study's saved explorer
+) -> tuple[Literal["lirep", "lichess"], Literal["lichess", "masters"], int | None, str] | None:
+    """(source, database, min_rating, speeds) for this study's saved explorer
     settings, resolving "my current rating" if needed. Shared by both the
     win-probability and expected-eval jobs, which otherwise duplicated this
     exact setup. Fails the job and returns None on error, so a caller can
     just `if result is None: return`."""
     explorer_settings = study["explorerSettings"]
+    source: Literal["lirep", "lichess"] = explorer_settings.get("source", DEFAULT_EXPLORER_SOURCE)
     database: Literal["lichess", "masters"] = explorer_settings.get("database", "lichess")
     speeds = ",".join(explorer_settings.get("speeds") or DEFAULT_SPEEDS)
+
+    if source == "lirep" and database == "masters":
+        jobs.fail(job_id, "Masters data is only available from Lichess")
+        return None
 
     min_rating = explorer_settings.get("minRating")
     if database == "lichess" and min_rating is None:
@@ -493,7 +500,7 @@ async def _resolve_explorer_settings(
             except HTTPException as exc:
                 jobs.fail(job_id, str(exc.detail))
                 return None
-    return database, min_rating, speeds
+    return source, database, min_rating, speeds
 
 
 def _resolve_start_node_id(study: dict) -> int:
@@ -524,11 +531,11 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
         resolved = await _resolve_explorer_settings(job_id, owner, study, headers)
         if resolved is None:
             return
-        database, min_rating, speeds = resolved
+        source, database, min_rating, speeds = resolved
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             evaluator = _Evaluator(
-                client, headers, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
+                client, headers, source, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
             )
             win_rate, draw_probability, loss_probability = await evaluator.outcomes(
                 study["tree"], start_node_id, study["side"]
@@ -545,6 +552,7 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
                 "lossProbability": loss_probability,
                 "coverage": coverage,
                 "winProbabilityCalculatedAt": datetime.now(UTC).isoformat(),
+                "source": source,
                 "database": database,
                 "minRating": min_rating,
                 "speeds": explorer_settings.get("speeds", list(DEFAULT_SPEEDS)),
@@ -581,13 +589,13 @@ async def _run_expected_eval_job(job_id: str, owner: str, study_id: int, token: 
         resolved = await _resolve_explorer_settings(job_id, owner, study, headers)
         if resolved is None:
             return
-        database, min_rating, speeds = resolved
+        source, database, min_rating, speeds = resolved
 
         stored_evals: dict[str, float | None] = (study.get("evals") or {}).get("byNode", {})
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             evaluator = _Evaluator(
-                client, headers, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
+                client, headers, source, database, min_rating, speeds, on_progress=lambda n: jobs.set_progress(job_id, n)
             )
             eval_cp = await evaluator.eval_score(study["tree"], start_node_id, study["side"], stored_evals)
 
@@ -598,6 +606,7 @@ async def _run_expected_eval_job(job_id: str, owner: str, study_id: int, token: 
                 "evalCp": eval_cp,
                 "evalMisses": evaluator.eval_misses,
                 "evalCalculatedAt": datetime.now(UTC).isoformat(),
+                "source": source,
                 "database": database,
                 "minRating": min_rating,
                 "speeds": explorer_settings.get("speeds", list(DEFAULT_SPEEDS)),

@@ -29,3 +29,7 @@ SESSION_SECRET = os.getenv("SESSION_SECRET") or secrets.token_hex(32)
 # enough that a brief network blip can fail an otherwise-fine login. Used for
 # every httpx.AsyncClient() that talks to lichess.org.
 HTTP_TIMEOUT = 10.0
+
+# Optional local Lichess Explorer base URL, e.g. http://127.0.0.1:9002.
+LOCAL_LICHESS_EXPLORER_URL = os.getenv("LOCAL_LICHESS_EXPLORER_URL", "").rstrip("/")
+DEFAULT_EXPLORER_SOURCE = "lirep" if LOCAL_LICHESS_EXPLORER_URL else "lichess"

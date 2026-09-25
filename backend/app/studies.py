@@ -1,19 +1,32 @@
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from . import store
+from .config import DEFAULT_EXPLORER_SOURCE
 
 router = APIRouter()
 
 
 class ExplorerSettings(BaseModel):
     enabled: bool = True
+    source: Literal["lirep", "lichess"] = DEFAULT_EXPLORER_SOURCE
     database: Literal["lichess", "masters"] = "lichess"
     # None means "always use my current rating" rather than a fixed value pinned to the study.
     minRating: int | None = None
     speeds: list[Literal["bullet", "blitz", "rapid", "classical"]] = ["blitz", "rapid", "classical"]
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_source_for_saved_settings(cls, values: object) -> object:
+        if isinstance(values, dict):
+            values = dict(values)
+            if "source" not in values:
+                values["source"] = "lichess" if values.get("database") == "masters" else DEFAULT_EXPLORER_SOURCE
+            if values["source"] == "lirep" and values.get("database") == "masters":
+                values["database"] = "lichess"
+        return values
 
 
 class StudyIn(BaseModel):

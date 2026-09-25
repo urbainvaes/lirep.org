@@ -4,10 +4,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .config import DEFAULT_EXPLORER_SOURCE
+
 DB_PATH = Path(__file__).resolve().parent.parent / "lirep.db"
 
 DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {
     "enabled": True,
+    "source": DEFAULT_EXPLORER_SOURCE,
     "database": "lichess",
     "minRating": None,
     "speeds": ["blitz", "rapid", "classical"],
@@ -16,8 +19,8 @@ DEFAULT_SIDE = "white"
 
 # A position's real-world move frequencies shift slowly, so a day-old cached
 # Opening Explorer response is still practically accurate — and it's shared
-# across every study and user, since the cache key is just the exact query
-# (fen + database + ratings + speeds), not tied to any one study.
+# across every study and user, keyed by provider and query (fen + database +
+# ratings + speeds), not tied to any one study.
 EXPLORER_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 # How long a resolved "my current rating" bucket is trusted before
@@ -145,10 +148,12 @@ def init_db() -> None:
 def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
     # Merged with defaults so older rows saved before a new explorerSettings
     # field existed (e.g. "speeds") still come back with a sensible value.
-    explorer_settings = {
-        **DEFAULT_EXPLORER_SETTINGS,
-        **(json.loads(row["explorer_settings"]) if row["explorer_settings"] else {}),
-    }
+    saved_explorer_settings = json.loads(row["explorer_settings"]) if row["explorer_settings"] else {}
+    explorer_settings = {**DEFAULT_EXPLORER_SETTINGS, **saved_explorer_settings}
+    if "source" not in saved_explorer_settings and explorer_settings["database"] == "masters":
+        explorer_settings["source"] = "lichess"
+    if explorer_settings["source"] == "lirep" and explorer_settings["database"] == "masters":
+        explorer_settings["database"] = "lichess"
     return {
         "id": row["id"],
         "name": row["name"],
