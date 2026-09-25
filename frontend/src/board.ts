@@ -23,6 +23,20 @@ export function computeDests(chess: Chess): Dests {
   return dests;
 }
 
+const MOVE_SOUNDS = {
+  move: new Audio("https://lichess1.org/assets/sound/standard/Move.mp3"),
+  capture: new Audio("https://lichess1.org/assets/sound/standard/Capture.mp3"),
+  check: new Audio("https://lichess1.org/assets/sound/standard/Check.mp3"),
+};
+
+export function playMoveSound(move: ReturnType<Chess["move"]>, chess: Chess): void {
+  const sound = chess.isCheck() ? MOVE_SOUNDS.check : move.isCapture() ? MOVE_SOUNDS.capture : MOVE_SOUNDS.move;
+  sound.currentTime = 0;
+  void sound.play().catch(() => {
+    // Browsers may block sound until the user interacts with the page.
+  });
+}
+
 /** A bare chessground board. Position/turn/dests are pushed in via api.set() by the caller. */
 export function createBoard(el: HTMLElement, onMove: (orig: Key, dest: Key) => void, orientation: Color = "white"): Api {
   return Chessground(el, {

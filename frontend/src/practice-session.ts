@@ -2,7 +2,7 @@ import type { Api } from "@lichess-org/chessground/api";
 import type { Color, Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
-import { applyBoardTheme, computeDests, createBoard, toColor } from "./board";
+import { applyBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
 import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { positionAt, type StudyTree } from "./tree";
@@ -361,6 +361,7 @@ function renderSession(main: HTMLElement, study: Study, steps: Step[]): void {
     const chess = positionAt(tree, parentId);
     const move = chess.move({ from: orig, to: dest, promotion: "q" });
     if (!move) return;
+    playMoveSound(move, chess);
     const expectedSan = tree.nodes[nodeId].san as string;
     const correct = move.san === expectedSan;
     if (!firstAttemptGraded) {

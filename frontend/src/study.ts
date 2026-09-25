@@ -2,7 +2,7 @@ import type { Api } from "@lichess-org/chessground/api";
 import type { Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
-import { applyLichessBoardTheme, computeDests, createBoard, toColor } from "./board";
+import { applyLichessBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
 import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
 import {
   DEFAULT_EXPLORER_SETTINGS,
@@ -432,6 +432,7 @@ function renderEditor(
       reportConflict(conflict);
       return;
     }
+    playMoveSound(move, chess);
     goTo(addMove(tree, currentId, move.san));
     scheduleAutoSave();
   }
@@ -446,6 +447,7 @@ function renderEditor(
       reportConflict(conflict);
       return;
     }
+    playMoveSound(move, chess);
     goTo(addMove(tree, currentId, move.san));
     scheduleAutoSave();
   }
@@ -484,6 +486,7 @@ function renderEditor(
       reportConflict(conflict);
       return;
     }
+    playMoveSound(move, chess);
     goTo(addMove(tree, currentId, move.san));
     scheduleAutoSave();
   }
