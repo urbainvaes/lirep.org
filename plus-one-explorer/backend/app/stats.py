@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from . import store
 from .auth import ACCOUNT_URL
 from .explorer import (
-    EXPLORER_SPEEDS,
+    DEFAULT_SPEEDS,
     LICHESS_EXPLORER_URL,
     MASTERS_EXPLORER_URL,
     _bucket_for,
@@ -74,11 +74,13 @@ class _Evaluator:
         headers: dict[str, str],
         database: Literal["lichess", "masters"],
         min_rating: int | None,
+        speeds: str,
     ) -> None:
         self.client = client
         self.headers = headers
         self.database = database
         self.min_rating = min_rating
+        self.speeds = speeds
         self.cache: dict[str, dict[str, Any]] = {}
         self.explorer_calls = 0
         self.nodes_evaluated = 0
@@ -93,7 +95,7 @@ class _Evaluator:
             assert self.min_rating is not None
             resp = await self.client.get(
                 LICHESS_EXPLORER_URL,
-                params={"fen": fen, "speeds": EXPLORER_SPEEDS, "ratings": _ratings_from(self.min_rating)},
+                params={"fen": fen, "speeds": self.speeds, "ratings": _ratings_from(self.min_rating)},
                 headers=self.headers,
             )
         if resp.status_code != 200:
@@ -168,6 +170,7 @@ async def recalculate_stats(study_id: int, request: Request) -> dict:
 
     explorer_settings = study["explorerSettings"]
     database: Literal["lichess", "masters"] = explorer_settings.get("database", "lichess")
+    speeds = ",".join(explorer_settings.get("speeds") or DEFAULT_SPEEDS)
 
     min_rating = explorer_settings.get("minRating")
     if database == "lichess" and min_rating is None:
@@ -178,7 +181,7 @@ async def recalculate_stats(study_id: int, request: Request) -> dict:
         min_rating = _bucket_for(_reference_rating(account_resp.json().get("perfs", {})))
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        evaluator = _Evaluator(client, headers, database, min_rating)
+        evaluator = _Evaluator(client, headers, database, min_rating, speeds)
         win_probability = await evaluator.score(study["tree"], study["tree"]["rootId"], study["side"])
 
     stats = {

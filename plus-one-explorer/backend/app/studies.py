@@ -13,6 +13,7 @@ class ExplorerSettings(BaseModel):
     database: Literal["lichess", "masters"] = "lichess"
     # None means "always use my current rating" rather than a fixed value pinned to the study.
     minRating: int | None = None
+    speeds: list[Literal["bullet", "blitz", "rapid", "classical"]] = ["blitz", "rapid", "classical"]
 
 
 class StudyIn(BaseModel):

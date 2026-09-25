@@ -35,7 +35,7 @@ function formatDate(iso: string): string {
 }
 
 function statsSourceLabel(stats: StudyStats): string {
-  return stats.database === "masters" ? "Masters games" : `Lichess players ${stats.minRating ?? "?"}+`;
+  return stats.database === "masters" ? "Masters" : `Players ${stats.minRating ?? "?"}+`;
 }
 
 function statCard(study: Study): string {

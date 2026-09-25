@@ -14,6 +14,7 @@ import {
   type ExplorerData,
   type ExplorerDefaults,
   type ExplorerSettings,
+  type ExplorerSpeed,
 } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { addMove, createEmptyTree, deleteSubtree, renderTree, sanPathTo, type StudyTree } from "./tree";
@@ -107,9 +108,30 @@ function ratingOptionsHtml(buckets: number[], selected: number | null): string {
   return options.join("");
 }
 
+const SPEED_LABELS: Record<ExplorerSpeed, string> = {
+  bullet: "Bullet",
+  blitz: "Blitz",
+  rapid: "Rapid",
+  classical: "Classical",
+};
+
+function speedCheckboxesHtml(allSpeeds: ExplorerSpeed[], selected: ExplorerSpeed[], disabled: boolean): string {
+  return allSpeeds
+    .map(
+      (speed) => `
+        <label class="speed-checkbox">
+          <input type="checkbox" value="${speed}" ${selected.includes(speed) ? "checked" : ""} ${disabled ? "disabled" : ""} />
+          ${SPEED_LABELS[speed]}
+        </label>
+      `,
+    )
+    .join("");
+}
+
 function renderEditor(main: HTMLElement, existing: Study | null, explorerDefaults: ExplorerDefaults | null): void {
   const settings: ExplorerSettings = existing?.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
+  const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
   main.innerHTML = `
     <div class="study-editor">
@@ -126,12 +148,47 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
           <option value="black" ${existing?.side === "black" ? "selected" : ""}>Playing Black</option>
         </select>
       </div>
-      <div class="study-board-row">
-        <div id="board" class="study-board"></div>
-        <div class="study-side">
+      <div class="study-grid">
+        <div class="study-card study-card--board">
+          <div id="board" class="study-board"></div>
+        </div>
+
+        <div class="study-card study-card--moves">
           <div id="tree-view" class="tree-view"></div>
           <p class="tree-hint">Click a move to jump there. Play a different move from any point to start a variation.</p>
-          <div class="engine-row">
+          <div class="study-actions">
+            <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
+            <button id="delete-btn" class="btn btn-secondary" type="button">Delete this move</button>
+          </div>
+        </div>
+
+        <div class="study-card study-card--explorer">
+          <div class="analysis-header">
+            <label class="explorer-toggle">
+              <input type="checkbox" id="explorer-enabled" ${settings.enabled ? "checked" : ""} />
+              Opening Explorer
+            </label>
+            <div class="analysis-header__settings">
+              <select id="explorer-database" ${settings.enabled ? "" : "disabled"}>
+                <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
+                <option value="masters" ${settings.database === "masters" ? "selected" : ""}>Masters</option>
+              </select>
+              <select
+                id="explorer-min-rating"
+                ${settings.enabled && settings.database === "lichess" ? "" : "disabled"}
+              >
+                ${ratingOptionsHtml(ratingBuckets, settings.minRating)}
+              </select>
+            </div>
+          </div>
+          <div class="speed-checkboxes" id="explorer-speeds">
+            ${speedCheckboxesHtml(allSpeeds, settings.speeds, !settings.enabled || settings.database !== "lichess")}
+          </div>
+          <div id="explorer-panel" class="explorer-panel" ${settings.enabled ? "" : "hidden"}></div>
+        </div>
+
+        <div class="study-card study-card--engine">
+          <div class="analysis-header">
             <label class="explorer-toggle">
               <input type="checkbox" id="engine-enabled" />
               Stockfish
@@ -139,30 +196,8 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
             <span id="engine-status" class="engine-eval"></span>
           </div>
           <div id="engine-panel" class="engine-panel" hidden></div>
-          <div class="study-actions">
-            <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
-            <button id="delete-btn" class="btn btn-secondary" type="button">Delete this move</button>
-          </div>
         </div>
       </div>
-
-      <div class="explorer-settings">
-        <label class="explorer-toggle">
-          <input type="checkbox" id="explorer-enabled" ${settings.enabled ? "checked" : ""} />
-          Opening explorer
-        </label>
-        <select id="explorer-database" ${settings.enabled ? "" : "disabled"}>
-          <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Lichess players</option>
-          <option value="masters" ${settings.database === "masters" ? "selected" : ""}>Masters games</option>
-        </select>
-        <select
-          id="explorer-min-rating"
-          ${settings.enabled && settings.database === "lichess" ? "" : "disabled"}
-        >
-          ${ratingOptionsHtml(ratingBuckets, settings.minRating)}
-        </select>
-      </div>
-      <div id="explorer-panel" class="explorer-panel" ${settings.enabled ? "" : "hidden"}></div>
 
       <div class="study-save-row">
         <a class="btn btn-secondary" href="/studies.html">Cancel</a>
@@ -178,6 +213,7 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
   const explorerEnabledEl = document.getElementById("explorer-enabled") as HTMLInputElement;
   const explorerDatabaseEl = document.getElementById("explorer-database") as HTMLSelectElement;
   const explorerMinRatingEl = document.getElementById("explorer-min-rating") as HTMLSelectElement;
+  const explorerSpeedsEl = document.getElementById("explorer-speeds") as HTMLElement;
   const engineEnabledEl = document.getElementById("engine-enabled") as HTMLInputElement;
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
@@ -313,21 +349,40 @@ function renderEditor(main: HTMLElement, existing: Study | null, explorerDefault
     goTo(parentId);
   });
 
+  function setSpeedControlsDisabled(disabled: boolean): void {
+    explorerMinRatingEl.disabled = disabled;
+    explorerSpeedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
+      cb.disabled = disabled;
+    });
+  }
+
   explorerEnabledEl.addEventListener("change", () => {
     settings.enabled = explorerEnabledEl.checked;
     explorerDatabaseEl.disabled = !settings.enabled;
-    explorerMinRatingEl.disabled = !settings.enabled || settings.database !== "lichess";
+    setSpeedControlsDisabled(!settings.enabled || settings.database !== "lichess");
     void updateExplorer(positionAt(tree, currentId).fen());
   });
 
   explorerDatabaseEl.addEventListener("change", () => {
     settings.database = explorerDatabaseEl.value as ExplorerSettings["database"];
-    explorerMinRatingEl.disabled = !settings.enabled || settings.database !== "lichess";
+    setSpeedControlsDisabled(!settings.enabled || settings.database !== "lichess");
     void updateExplorer(positionAt(tree, currentId).fen());
   });
 
   explorerMinRatingEl.addEventListener("change", () => {
     settings.minRating = explorerMinRatingEl.value === "auto" ? null : Number(explorerMinRatingEl.value);
+    void updateExplorer(positionAt(tree, currentId).fen());
+  });
+
+  explorerSpeedsEl.addEventListener("change", (e) => {
+    const target = e.target as HTMLInputElement;
+    if (target.type !== "checkbox") return;
+    const speed = target.value as ExplorerSpeed;
+    if (!target.checked && settings.speeds.length === 1 && settings.speeds[0] === speed) {
+      target.checked = true; // always keep at least one speed selected
+      return;
+    }
+    settings.speeds = target.checked ? [...settings.speeds, speed] : settings.speeds.filter((s) => s !== speed);
     void updateExplorer(positionAt(tree, currentId).fen());
   });
 

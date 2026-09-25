@@ -108,9 +108,9 @@ scope, just "not anonymous").
 
 It's **toggleable and customizable per study** — a small settings row above
 the panel lets you turn it off entirely, or change:
-- **Database:** Lichess players (default) or Masters games. Masters has no
-  rating filter (it's already an elite-only dataset), so the rating picker
-  disables itself in that mode.
+- **Database:** "Players" (default, all rated Lichess games) or "Masters".
+  Masters has no rating filter (it's already an elite-only dataset), so the
+  rating picker and speed checkboxes both disable themselves in that mode.
 - **Minimum rating:** defaults to **"My current rating"** — dynamically
   resolved *each time* to the bracket containing your current rating and
   every bracket above it (e.g. a 1734 rating → `1600,1800,2000,2200,2500`),
@@ -118,14 +118,19 @@ the panel lets you turn it off entirely, or change:
   is unrated (1500 default if none are established). Pick a specific
   threshold instead (e.g. "2000+") to pin it — that fixed value is then
   saved with the study instead of tracking your rating over time.
-- Games are always filtered to blitz/rapid/classical speeds (bullet/
-  ultraBullet excluded as noisier; correspondence excluded as too rare).
+- **Speeds:** a checkbox per format — Bullet, Blitz, Rapid, Classical
+  (ultra-bullet and correspondence aren't offered at all: too noisy / too
+  rare to be worth the UI clutter). Blitz + Rapid + Classical are checked by
+  default; at least one must stay checked.
 
 These settings are saved as part of the study (`explorerSettings`:
-`{enabled, database, minRating}`, where `minRating: null` means "always use
-my current rating"), so each study remembers its own explorer configuration.
+`{enabled, database, minRating, speeds}`, where `minRating: null` means
+"always use my current rating"), so each study remembers its own explorer
+configuration — and the **Stats tab's** recalculation uses these same
+settings too, not a separate hardcoded set.
 
-Each row shows a move with its white/draw/black bar and total game count at
+Each row shows a move with its white/draw/black bar, the same three
+percentages spelled out in text under the bar, and the total game count at
 your level; **clicking a row plays that move**, adding it to the tree exactly
 like playing it on the board — so building a repertoire out of what strong
 players actually play is a couple of clicks, not manual entry.

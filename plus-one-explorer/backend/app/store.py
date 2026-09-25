@@ -5,7 +5,12 @@ from typing import Any
 
 DB_PATH = Path(__file__).resolve().parent.parent / "chesster.db"
 
-DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {"enabled": True, "database": "lichess", "minRating": None}
+DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {
+    "enabled": True,
+    "database": "lichess",
+    "minRating": None,
+    "speeds": ["blitz", "rapid", "classical"],
+}
 DEFAULT_SIDE = "white"
 
 
@@ -70,11 +75,17 @@ def init_db() -> None:
 
 
 def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
+    # Merged with defaults so older rows saved before a new explorerSettings
+    # field existed (e.g. "speeds") still come back with a sensible value.
+    explorer_settings = {
+        **DEFAULT_EXPLORER_SETTINGS,
+        **(json.loads(row["explorer_settings"]) if row["explorer_settings"] else {}),
+    }
     return {
         "id": row["id"],
         "name": row["name"],
         "tree": json.loads(row["tree"]),
-        "explorerSettings": json.loads(row["explorer_settings"]) if row["explorer_settings"] else DEFAULT_EXPLORER_SETTINGS,
+        "explorerSettings": explorer_settings,
         "side": row["side"] or DEFAULT_SIDE,
         "stats": json.loads(row["stats"]) if row["stats"] else None,
         "created_at": row["created_at"],
