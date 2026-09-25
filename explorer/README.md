@@ -1,9 +1,12 @@
 # Local Lichess Opening Explorer
 
-This directory holds a local Lichess opening-explorer instance and the March
-2016 archive of 5,801,234 rated standard games used to seed it. At about 1.04
-GB compressed, this older month is intended as a test dataset, not a substitute
-for Lichess's full historical Explorer.
+This directory holds a local Lichess opening-explorer instance and the
+February and March 2016 archives of rated standard games (about 10.7 million
+games, the March archive alone 5,801,234) used to seed it. At about 2 GB
+compressed in total, these older months are intended as a test dataset, not a
+substitute for Lichess's full historical Explorer. Other months can be added
+with `download-month.sh YYYY-MM` and `import-month.sh YYYY-MM`; expect roughly
+5 GB of database per month of 2016 data.
 
 The games are published by Lichess under CC0. The Explorer implementation is
 the upstream `lichess-org/lila-openingexplorer` project, licensed AGPL-3.0-or-

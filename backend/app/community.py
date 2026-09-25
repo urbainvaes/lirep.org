@@ -24,7 +24,7 @@ def _entry(owner: str, study: dict, me: str | None, include_lirep: bool = False,
     Explorer are comparable, so only those get a score and a rank; the rest are
     listed with the reason they are not ranked yet. Each scored row carries the
     settings that produced it. With include_lirep, scores calculated with the
-    local Lirep Explorer (a one-month, 2016 sample) are ranked too."""
+    local Lirep Explorer (a two-month, 2016 sample) are ranked too."""
     stats = study.get("stats") or {}
     settings = study["explorerSettings"]
     probability = stats.get("winProbability")

@@ -101,7 +101,7 @@ function renderTable(openings: Opening[], signedIn: boolean, side: "white" | "bl
 
 const LIREP_HELP =
   "Lirep is this site's own Explorer. It is built from Lichess's public game database, but holds only " +
-  "a few months of games (" + LIREP_DATASET.replace("Lichess games, ", "") + "), a much smaller and older sample " +
+  "a few months of games (" + LIREP_DATASET.replace("Lichess games, ", "") + ", about 10.7 million rated games), a much smaller and older sample " +
   "than the full Lichess Explorer. Scores calculated with it are less reliable and not comparable with the " +
   "Lichess Explorer's scores, so they are left out of the leaderboard unless you include them here.";
 
