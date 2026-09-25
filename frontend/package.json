@@ -15,6 +15,7 @@
   "dependencies": {
     "@lichess-org/chessground": "^10.2.0",
     "chart.js": "^4.5.1",
-    "chess.js": "^1.4.0"
+    "chess.js": "^1.4.0",
+    "katex": "^0.18.9"
   }
 }

@@ -30,6 +30,7 @@ export default defineConfig({
         "doc/studies": resolve(__dirname, "doc/studies.html"),
         "doc/stats": resolve(__dirname, "doc/stats.html"),
         "doc/practice": resolve(__dirname, "doc/practice.html"),
+        "doc/practice-design": resolve(__dirname, "doc/practice-design.html"),
       },
     },
   },

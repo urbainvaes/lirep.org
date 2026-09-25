@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Full design write-up for the Lirep.org Practice tab." />
+    <title>Practice design — Lirep.org Guide</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-title" href="/">
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
+          <span class="site-name">lirep<span class="tld">.org</span></span>
+        </a>
+        <nav class="site-nav">
+          <a href="/studies.html">Studies</a>
+          <a href="/stats.html">Stats</a>
+          <a href="/practice.html">Practice</a>
+          <a href="/doc/index.html">Doc</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <div class="site-auth" id="auth-area">
+          <a class="btn btn-primary" href="/auth/login">Sign in</a>
+        </div>
+      </div>
+    </header>
+    <main class="site-main doc-main">
+      <h1 class="page-title">Practice design</h1>
+      <p class="doc-intro">The full design write-up behind the Practice tab: motivation, scope, knowledge score, data model, session mechanics, and open questions.</p>
+      <nav aria-label="Documentation">
+        <a href="index.html">Overview</a>
+        <a href="studies.html">Studies</a>
+        <a href="stats.html">Stats</a>
+        <a href="practice.html" aria-current="page">Practice</a>
+      </nav>
+
+      <p>A design for a tab where you <strong>choose a study, then drill it</strong>: the app quizzes you on your own repertoire's book moves and keeps a per-position "knowledge" score that fades over time, so you always know what is actually solid and what has gone rusty. It is the concrete, single-study version of the ideas in the original CLI-first roadmap, mainly its "Training modes" (puzzle mode) and "Mastery &amp; scheduling" sections. It relates to that roadmap the way the Stats tab does: restricted to exactly the tree of one study instead of a full profile-wide item bank, and built directly on the Studies tab and, where set, its starting point.</p>
+      <p class="callout"><strong>Status: implemented.</strong> Code lives in <code>backend/app/practice.py</code> (drill-item enumeration, the knowledge score, and the queue, attempt, and summary endpoints), <code>backend/app/store.py</code> (the <code>practice_state</code> table), and <code>frontend/src/practice.ts</code> / <code>practice-session.ts</code> (the list page and drilling session). The rest of this page is the original design; §5's opponent-handling section notes the one place the implementation ended up simpler than planned.</p>
+
+      <section>
+        <h2>1. Motivation</h2>
+        <p>The Studies tab lets you build a repertoire tree; the Stats tab tells you how good that tree is <em>if you've perfectly memorized it</em>. Neither tells you whether you actually <strong>have</strong> memorized it, or which branch you are shakiest on. Practice fills that gap: a place to rehearse the tree move by move, with a running per-position number, not a vague feeling, for "do I actually know this."</p>
+        <p>The "fades with time" part matters as much as the drilling. A position you nailed three weeks ago and haven't looked at since is not equivalent to one you nailed this morning, even though both currently show a perfect streak. Real memory decays, and a practice tool that doesn't model that will happily tell you you're prepared for a line you would blank on over the board. The roadmap already sketches the forgetting-curve machinery this reuses, \(R(t) = e^{-t/\tau}\); this page adapts it for one study's tree.</p>
+      </section>
+
+      <section>
+        <h2>2. Scope for v1</h2>
+        <h3>In scope</h3>
+        <ul>
+          <li>Practicing exactly one study's tree at a time, matching how Stats works (no cross-study session in v1).</li>
+          <li>Drilling only <strong>your own side's</strong> moves, the "expected answer." The opponent's replies are played <em>for</em> you (see §5); there is nothing to know there, since you don't choose them.</li>
+          <li>A per-node knowledge score, decaying over time, persisted per (study, node) so it survives closing the tab.</li>
+          <li>A session queue mixing <strong>due</strong> reviews with <strong>new</strong> (never-drilled) positions, bounded in size.</li>
+          <li>Starting from the study's starting point when one is set, exactly like the Stats tab's calculations, reusing the same fallback-to-root logic (<code>_resolve_start_node_id</code>) rather than reimplementing it.</li>
+        </ul>
+        <h3>Out of scope for v1</h3>
+        <p>Noted so they are not silently forgotten, not because they are bad ideas:</p>
+        <ul>
+          <li>Play mode: sparring against Explorer-sampled opponent play with a value trajectory. Practice's opponent handling (§5) is deliberately much dumber.</li>
+          <li>The <code>hit</code> objective and leverage-based queue ordering. v1 orders the queue by due-ness only, not by "biggest objective swing if you get this wrong"; leverage needs the Stats-tab machinery wired in as a ranking signal, a reasonable v2.</li>
+          <li>Cross-study dashboards ("everything due today, across all studies").</li>
+          <li>Any visualization of knowledge <em>on</em> the Study editor's move tree. A heatmap coloring moves by freshness would read nicely there, reusing the same <code>.tree-move</code> styling hook as the starting-point marker, once the underlying score exists to visualize.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. The knowledge score</h2>
+        <p>Adapted from the roadmap's mastery model with one small change: the roadmap only starts decaying a move <em>after</em> it is fully known (\(c = 3\)). Here, every position drilled at least once decays continuously from its first correct answer. A half-learned position going stale is exactly as real as a fully learned one going stale, and a flat, non-decaying number for it would hide that.</p>
+        <p>Each <strong>drill item</strong> is one tree node where it is the studied side to move (the tree already guarantees only one of your own moves there to ask about). It carries:</p>
+<pre><code>streak      c ∈ {0,1,2,3}     consecutive correct answers
+stability   τ (days)          how slowly this item currently forgets
+lastSeenAt  timestamp | null  when it was last answered (correct or not)</code></pre>
+        <p><strong>On a correct answer:</strong> \(c\) increases by 1 (capped at 3), and \(\tau\) doubles, the same half-life-regression rule as the roadmap, applied from the first correct answer rather than only after reaching \(c = 3\). \(\tau\) starts at \(\tau_0\) (a per-profile constant, defaulted to 1 day) on a position's very first correct answer.</p>
+        <p><strong>\(\tau\) keeps doubling even once \(c\) is at its cap.</strong> The two update rules are independent: the cap only stops the <em>streak counter</em> from climbing past 3; it doesn't stop \(\tau\) from growing on every later correct answer. Concretely: you are at \(c = 3\) with some \(\tau\) and, whatever \(R(t)\) currently is, even well below 100%, you answer correctly again. The result is \(c = 3\) (unchanged) and \(\tau\) doubled again; <code>lastSeenAt</code> becomes now, so \(R(t) = e^{0} = 100\%\) at that instant, and the displayed score is \(\tfrac{3}{3} \cdot 100\% = 100\%\) regardless of what it was a moment before. What the <em>prior</em>, decayed \(R(t)\) did was determine whether the position showed up as due in the first place (§5); once you answer it correctly, that stale number is superseded by a fresh one. This is standard spaced-repetition behavior (a mature item's interval keeps growing with every successful recall, not just until it first reaches "known"); it just isn't obvious from the capped-counter framing, so it is worth being explicit.</p>
+        <p><strong>On a wrong answer:</strong> \(c\) drops to 0 and \(\tau\) resets to \(\tau_0\). A lapse means next time really is "starting over" for spacing purposes, not just a streak ding. (The roadmap's original wording, "a lapse costs one streak step, not the whole climb," described lapsing <em>after</em> mastery, i.e. \(c: 3 \to 2\). Resetting fully on any wrong answer is the simpler, harsher rule; §8 flags it as worth revisiting once there is real usage to look at.)</p>
+        <p><strong>Retention</strong> at any moment, with \(t\) the days since <code>lastSeenAt</code>:</p>
+        $$R(t) = e^{-t/\tau}.$$
+        <p>This is the part that fades: 100% right after a correct answer, decaying continuously from there, faster for low-\(\tau\) (fresh, fragile) items than high-\(\tau\) (well-rehearsed) ones.</p>
+        <p><strong>The displayed knowledge score</strong> for a node:</p>
+        $$K = \begin{cases} \text{“Not started”} & \text{if } \mathrm{lastSeenAt} \text{ is null},\\[4pt] \dfrac{c}{3}\, R(t) \times 100\% & \text{otherwise.} \end{cases}$$
+        <p>The \(c/3\) factor matters: a position answered correctly <em>once</em> today (\(c = 1\), \(R \approx 100\%\)) shows <strong>33%</strong>, not 100%, since one rep isn't mastery just because it's recent. A position mastered weeks ago and gone stale (\(c = 3\), \(R = 40\%\)) shows <strong>40%</strong>: faded mastery is genuinely worse than fresh partial progress, and the score should say so.</p>
+        <p>A node becomes <strong>due for review</strong> once \(R(t)\) drops below a threshold (default 80%, named <code>retention_floor</code> in the roadmap). That is what populates the practice queue (§5), independent of the number currently displayed for it.</p>
+      </section>
+
+      <section>
+        <h2>4. Data model</h2>
+        <p>New, and separate from the study's <code>tree</code> blob. It changes far more often than the tree structure (every practice rep, not every edit and save), so it doesn't belong inside the JSON tree the way <code>startNodeId</code> does. Like the Explorer cache tables, it gets its own SQLite table, one row per (owner, study, node):</p>
+<pre><code>CREATE TABLE practice_state (
+  owner        TEXT NOT NULL,
+  study_id     INTEGER NOT NULL,
+  node_id      INTEGER NOT NULL,
+  streak       INTEGER NOT NULL DEFAULT 0,
+  tau_days     REAL NOT NULL DEFAULT 1.0,
+  last_seen_at TEXT,          -- NULL until first attempt
+  PRIMARY KEY (owner, study_id, node_id)
+)</code></pre>
+        <p>The knowledge score \(K\) (§3) is computed on read from these three columns plus "now" and never stored as a number itself, so changing \(\tau_0\) or the decay formula later needs no migration, just recomputation.</p>
+        <p><strong>Staleness on tree edits:</strong> deleting a subtree orphans its <code>practice_state</code> rows (nothing references a <code>node_id</code> that no longer exists in the tree). They are simply ignored and can be swept in a periodic cleanup rather than deleted transactionally at delete time. Re-adding "the same" move later gets a <strong>new</strong> <code>node_id</code> (ids are never reused; see <code>nextId</code> in <code>tree.ts</code>) and therefore starts with no practice history. That is intentional: if you deleted a line and rebuilt it, treating it as a brand-new thing to learn is the honest answer, rather than carrying over a stale streak from a branch that structurally doesn't exist anymore.</p>
+      </section>
+
+      <section>
+        <h2>5. Session mechanics</h2>
+        <p><strong>Starting a session</strong> picks a study and builds a queue:</p>
+        <ol>
+          <li>Every drill-item node (studied side to move) reachable from the study's effective starting point that is either <strong>due</strong> (\(R(t) &lt;\) <code>retention_floor</code>) or <strong>new</strong> (<code>lastSeenAt</code> is null).</li>
+          <li>Capped at a session-size setting (default 20): an Anki-style bounded session, not "clear the whole backlog every time."</li>
+          <li>v1 ordering: due items first (oldest <code>lastSeenAt</code> first), then new items in tree order. <strong>Not</strong> leverage-ranked (§2); that is a deliberately simple starting point, not a claim that due-order is optimal.</li>
+          <li>If that leaves the queue empty (nothing due, nothing new) but the study does have drill items, the queue falls back to <strong>all</strong> of them, oldest <code>lastSeenAt</code> first: a voluntary review rather than an empty session. Practice is opt-in on demand, and the schedule shouldn't lock you out just because it is satisfied for now.</li>
+        </ol>
+        <p><strong>Walking the tree during a session:</strong></p>
+        <ul>
+          <li>At a <strong>studied-side node</strong> (a queue item), show the position and wait for a move on the board.
+            <ul>
+              <li><strong>Correct</strong> (matches the tree's recorded SAN): apply the §3 update for a correct answer, show brief positive feedback, and continue into that child.</li>
+              <li><strong>Incorrect</strong>: apply the §3 update for a wrong answer (once), then let you try again at the same position instead of revealing the answer immediately. A wrong retry just prompts again; a correct retry continues into that child exactly like a first-try correct answer. A <strong>"Show answer"</strong> option (available once the first attempt has been graded) plays the correct move and moves on, for when you are genuinely stuck: a session should eventually finish the line rather than dead-end on one mistake, but shouldn't yank the answer away before a real second attempt. Only the <em>first</em> attempt at a position is graded (recorded in the knowledge score and the session history); further retries don't grade again, so guessing repeatedly can't inflate the score.</li>
+            </ul>
+          </li>
+          <li>At an <strong>opponent node</strong>, the app picks the reply for you: no waiting, no grading, since you're not the one deciding these.
+            <p><strong>As shipped</strong>, this ended up simpler than sampling. The frontend precomputes which branches contain a due or new item (a node is "relevant" if it is selected or has a selected descendant) and walks every relevant branch deterministically, skipping irrelevant ones entirely. A branch with nothing due or new wouldn't have been sampled usefully anyway, and a branch <em>with</em> something due can't be skipped without losing that review, so there was nothing left to sample: every branch worth visiting gets visited, every other branch gets skipped, and no randomness is needed. Frequency-weighting (the original idea) remains future work if this ever needs to prioritize <em>which</em> of several relevant branches to show first, rather than just "all of them."</p>
+          </li>
+          <li>At a <strong>leaf</strong> (end of the prepared line, or the position leaves the tree entirely), the line is done; move to the next queued item.</li>
+        </ul>
+        <p><strong>Ending a session:</strong> when the queue is empty, or you stop early. Either way, a short summary (items seen, correct and incorrect, and the study's new aggregate knowledge, the mean \(K\) over all drill-item nodes) matches the "Moves known / Due for review" counters the roadmap names for the still-unbuilt study dashboard.</p>
+      </section>
+
+      <section>
+        <h2>6. UI</h2>
+        <p><strong>A new "Practice" tab</strong> in the site nav, alongside Studies and Stats.</p>
+        <p><strong>Practice landing page:</strong> one card per study (same visual language as the Studies and Stats list pages), each showing:</p>
+        <ul>
+          <li>Aggregate knowledge (mean \(K\) across drill-item nodes).</li>
+          <li>Due count ("6 due for review") and new count ("12 not started").</li>
+          <li>A <strong>Practice</strong> button, disabled only when the study has no moves of its own to drill at all. Practice is never gated by the schedule: having nothing due or new just means a session falls back to a voluntary review of everything, oldest-practiced first, rather than refusing to start. Tracking knowledge as a fading, ongoing number (§3) is defeated by a hard stop that says "come back later."</li>
+        </ul>
+        <p><strong>Session view:</strong> reuses the Study editor's board component (same chessground instance, same piece and board theme lookup) with the Opening Explorer panel hidden; this view is about recall, not looking up real games. Below the board: the current queue position (e.g. "Item 4 of 20") and, after each attempt, a brief correct or incorrect indicator with the SAN either way, plus a running history of every position attempted this session with its resulting knowledge score, so the scoring mechanism stays legible rather than a black box.</p>
+        <p class="callout"><strong>As shipped</strong>, the Study editor's Stockfish toggle isn't hidden after all. It is carried over as an explicit "explore this position" option, available at any point in the session (the prompt, mid-retry, or after an answer). It is read-only here (arrows and a ranked eval list, no click-to-play): practice is about answering from memory, not searching for a better move, but understanding <em>why</em> a missed move was right is squarely in scope, and re-deriving the Study editor's whole analysis panel for that would have been wasted effort when the existing one already does the job.</p>
+      </section>
+
+      <section>
+        <h2>7. Implementation notes</h2>
+        <ul>
+          <li><code>backend/app/store.py</code>: new <code>practice_state</code> table (§4), migrated in like every other table added incrementally; <code>get_practice_state</code> / <code>upsert_practice_state</code> / bulk <code>get_practice_states(owner, study_id)</code>, following the existing <code>get_*_cache</code> / <code>set_*_cache</code> naming pattern (even though this isn't a cache, it is the closest existing convention).</li>
+          <li><code>backend/app/practice.py</code>: pure functions for the §3 update rules and \(K\), plus queue-building (§5), kept separate from the <code>_Evaluator</code> backward-induction walk in <code>stats.py</code>, since practice walks the tree <em>forward</em> (starting point toward leaves) rather than backward from leaves.</li>
+          <li><code>frontend/</code>: <code>practice.html</code> (+ <code>practice.ts</code>) for the landing page, and a session view, either its own page or a mode of <code>study.html</code>, given how much board, theme, and move-tree plumbing it can share.</li>
+          <li>Reuses <code>_resolve_start_node_id</code> from <code>stats.py</code> (§2) rather than duplicating the "fall back to tree root if the stored id is gone" logic a third time.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>8. Open questions</h2>
+        <ul>
+          <li>Is full streak-reset-on-any-wrong-answer (§3) too harsh in practice? Anki and most SRS tools are gentler on lapses after real mastery. Easy to tune once there is a real study to test against; flagged so it isn't forgotten as "the simple version, not necessarily the right one."</li>
+          <li>Should \(\tau_0\) and <code>retention_floor</code> be per-profile settings from day one, or hard-coded until there is a reason to expose them? Leaning toward hard-coded for v1: nothing else in the shipped web app reads a profile file yet, and inventing that plumbing just for two constants is premature.</li>
+          <li>Uniform vs. frequency-weighted opponent sampling (§5): a v1 simplification; revisit once practice mode is actually used.</li>
+          <li><strong>Should "known" (\(c = 3\)) and "memory" (\(R(t)\)) be shown as two separate numbers instead of one blended \(K\)?</strong> They are already tracked as two independent fields (§3); blending them into a single percentage is purely a display choice. The case for splitting: a faded-but-once-mastered position (\(c = 3\), \(R = 40\%\), shown as 40%) and a fresh-but-shallow one (\(c = 1\), \(R \approx 100\%\), shown as 33%) land on similar numbers for very different reasons: one needs a refresher, the other has never really been proven. A UI showing "✓ known, 40% fresh" versus "learning (1/3), 33%" would make that legible without doing math in your head. The case against: two numbers to parse instead of one, in a UI already showing a lot of state (progress, prompt, history, engine panel). Not decided; the blended version is what shipped.</li>
+        </ul>
+      </section>
+
+      <p><a class="doc-link" href="practice.html"><span aria-hidden="true">←</span> Back to Practice</a></p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/doc-math.ts"></script>
+  </body>
+</html>

@@ -37,8 +37,6 @@
         <a href="practice.html" aria-current="page">Practice</a>
       </nav>
 
-      <p class="callout">See <code>practice.md</code> in the repository for the full design write-up this implements, including the data model and remaining open questions.</p>
-
       <section>
         <h2>Purpose and access</h2>
         <p>The Stats tab reports how good a study is if perfectly memorized; Practice is where that memorization actually happens. Each session drills exactly one study's own-side moves and updates a per-position knowledge score that decays with time, so the numbers reflect real, current recall rather than "was once learned." Requires Lichess sign-in, same as Studies and Stats.</p>
@@ -55,9 +53,13 @@
       <section>
         <h2>Knowledge score</h2>
         <p>Tracked per position — one own-side decision node in the tree, since the tree already guarantees exactly one prepared reply there. Not tracked for opponent nodes; there is nothing to know about a move you don't choose.</p>
-        <p>Each position carries a streak (0–3 consecutive correct answers), a stability value in days, and the timestamp of its last attempt. A correct answer increments the streak and doubles the stability; a wrong answer resets both the streak and the stability to their starting values. Retention at any moment is <code>exp(−t / stability)</code>, where <code>t</code> is days since the last attempt — 100% right after a correct answer, decaying continuously afterward, faster for low-stability (fresh) positions than high-stability (well-rehearsed) ones.</p>
+        <p>Each position carries a streak (0–3 consecutive correct answers), a stability value in days, and the timestamp of its last attempt. A correct answer increments the streak and doubles the stability; a wrong answer resets both the streak and the stability to their starting values. Retention at any moment is
+        $$r = e^{-t/s},$$
+        where \(t\) is days since the last attempt — 100% right after a correct answer, decaying continuously afterward, faster for low-stability (fresh) positions than high-stability (well-rehearsed) ones.</p>
         <p>The streak cap and the stability growth are independent: once the streak is already at 3, a further correct answer leaves it at 3 but still doubles the stability. So answering correctly always resets retention to 100% at that instant — regardless of how low it had decayed to beforehand, since that decayed value only ever mattered for whether the position was due for review in the first place — and correctly answering a fully-known position repeatedly keeps extending how long it takes to become due again, not just until it first reaches streak 3.</p>
-        <p>The displayed knowledge score is <code>(streak / 3) × retention</code>, or "Not started" if never attempted. A position answered correctly once today shows 33%, not 100% — one repetition is progress, not mastery. A position mastered weeks ago and gone stale can show less than a position learned yesterday; a faded mastery is genuinely worse than fresh partial progress, and the number should say so. A position becomes due for review once its retention drops below a fixed threshold (80%), independent of the number currently shown for it.</p>
+        <p>The displayed knowledge score is
+        $$K = \frac{\text{streak}}{3} \times r,$$
+        or "Not started" if never attempted. A position answered correctly once today shows 33%, not 100% — one repetition is progress, not mastery. A position mastered weeks ago and gone stale can show less than a position learned yesterday; a faded mastery is genuinely worse than fresh partial progress, and the number should say so. A position becomes due for review once its retention drops below a fixed threshold (80%), independent of the number currently shown for it.</p>
       </section>
 
       <section>
@@ -88,7 +90,10 @@
         </ul>
       </section>
 
+      <p><a class="doc-link" href="practice-design.html">Full design write-up <span aria-hidden="true">→</span></a></p>
+
     </main>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/doc-math.ts"></script>
   </body>
 </html>
