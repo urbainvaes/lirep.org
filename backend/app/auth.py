@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -30,6 +30,14 @@ def _new_pkce_pair() -> tuple[str, str]:
     verifier = _b64url(secrets.token_bytes(32))
     challenge = _b64url(hashlib.sha256(verifier.encode("ascii")).digest())
     return verifier, challenge
+
+
+def _sign_in_error(message: str) -> RedirectResponse:
+    # A full-page redirect to a static frontend page with a plain-English
+    # explanation, instead of leaving the browser on /auth/callback showing
+    # this backend's raw JSON error body (which is what a raised
+    # HTTPException would render here).
+    return RedirectResponse(f"{FRONTEND_URL}/sign-in-error.html?message={quote(message)}")
 
 
 @router.get("/auth/login")
@@ -63,36 +71,42 @@ async def callback(
         # Lichess sends this instead of `code` whenever authorization didn't
         # succeed (denied consent, invalid scope, etc.) — surface the real
         # reason instead of failing on a missing `code` param.
-        raise HTTPException(status_code=400, detail=f"lichess authorization failed: {error_description or error}")
+        return _sign_in_error(f"Lichess sign-in was not completed: {error_description or error}")
 
     if not code or not state:
-        raise HTTPException(status_code=400, detail="missing code or state in lichess redirect")
+        return _sign_in_error("Lichess sign-in did not complete correctly. Please try again.")
 
     expected_state = request.session.pop("oauth_state", None)
     verifier = request.session.pop("oauth_verifier", None)
     if not expected_state or state != expected_state or not verifier:
-        raise HTTPException(status_code=400, detail="invalid oauth state")
+        return _sign_in_error("Your sign-in session expired or is invalid. Please try again.")
 
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-        token_resp = await client.post(
-            TOKEN_URL,
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "code_verifier": verifier,
-                "redirect_uri": REDIRECT_URI,
-                "client_id": LICHESS_CLIENT_ID,
-            },
-        )
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            token_resp = await client.post(
+                TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "code_verifier": verifier,
+                    "redirect_uri": REDIRECT_URI,
+                    "client_id": LICHESS_CLIENT_ID,
+                },
+            )
+    except httpx.HTTPError:
+        return _sign_in_error("Could not reach lichess.org to complete sign-in. Please try again in a moment.")
     if token_resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="lichess token exchange failed")
+        return _sign_in_error("lichess.org rejected the sign-in request. Please try again.")
 
     access_token = token_resp.json()["access_token"]
 
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-        account_resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {access_token}"})
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            account_resp = await client.get(ACCOUNT_URL, headers={"Authorization": f"Bearer {access_token}"})
+    except httpx.HTTPError:
+        return _sign_in_error("Could not reach lichess.org to fetch your account. Please try again in a moment.")
     if account_resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="lichess account fetch failed")
+        return _sign_in_error("Could not retrieve your lichess.org account details. Please try again.")
 
     request.session["access_token"] = access_token
     request.session["username"] = account_resp.json()["username"]

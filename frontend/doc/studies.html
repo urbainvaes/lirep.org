@@ -5,17 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Detailed behavior and interaction guide for Lirep.org Studies." />
     <title>Studies — Lirep.org Guide</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <header class="doc-header">
-      <div>
-        <p class="eyebrow">Lirep.org · Product behavior</p>
-        <h1>Studies</h1>
-        <p>Behavior specification for the repertoire list and study editor.</p>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-title" href="/">
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
+          <span class="site-name">lirep<span class="tld">.org</span></span>
+        </a>
+        <nav class="site-nav">
+          <a href="/studies.html">Studies</a>
+          <a href="/stats.html">Stats</a>
+          <a href="/doc/index.html">Doc</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <div class="site-auth" id="auth-area">
+          <a class="btn btn-primary" href="/auth/login">Sign in</a>
+        </div>
       </div>
     </header>
-    <main>
+    <main class="site-main doc-main">
+      <h1 class="page-title">Studies</h1>
+      <p class="doc-intro">Detailed behavior for the repertoire list and study editor.</p>
       <nav aria-label="Documentation">
         <a href="index.html">Overview</a>
         <a href="studies.html" aria-current="page">Studies</a>
@@ -92,7 +104,7 @@
         <p class="subtle">Relevant behavior is implemented across the study list/editor, tree helpers, study API, Explorer service, and shared Stockfish client.</p>
       </section>
 
-      <footer><span>Lirep.org · Behavior guide</span><a href="stats.html">Next: Stats →</a></footer>
     </main>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

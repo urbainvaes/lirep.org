@@ -3,19 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Studies · lirep.org</title>
+    <title>lirep.org</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <header class="site-header">
       <div class="site-header__inner">
         <a class="site-title" href="/">
-          <img class="site-icon" src="/logos/rook.png" alt="" />
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
           <span class="site-name">lirep<span class="tld">.org</span></span>
         </a>
         <nav class="site-nav">
           <a href="/studies.html">Studies</a>
           <a href="/stats.html">Stats</a>
+          <a href="/doc/index.html">Doc</a>
+          <a href="/about.html">About</a>
         </nav>
         <div class="site-auth" id="auth-area">
           <a class="btn btn-primary" href="/auth/login">Sign in</a>
@@ -24,14 +26,11 @@
     </header>
 
     <main class="site-main">
-      <h1 class="page-title">Studies</h1>
-      <div class="studies-grid" id="studies-grid">
-        <div class="empty-state">
-          <p>Loading studies…</p>
-        </div>
+      <div class="empty-state">
+        <p>Content coming soon.</p>
       </div>
     </main>
 
-    <script type="module" src="/src/studies.ts"></script>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

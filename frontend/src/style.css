@@ -67,16 +67,33 @@ body {
 }
 
 .site-title .site-icon {
+  display: inline-block;
   height: 40px;
   width: 40px;
-  /* Source artwork is black-on-transparent; invert so the rook reads
-     against the dark header instead of disappearing into it. */
-  filter: invert(1);
+  /* Source artwork is black-on-transparent; rendered as a mask filled with
+     the current text color instead of an <img>, so the icon always matches
+     the wordmark's color (including on hover) the same way lichess.org's
+     own icon-font logo does. */
+  background-color: currentColor;
+  -webkit-mask-image: url("/logos/rook.png");
+  mask-image: url("/logos/rook.png");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  mask-mode: alpha;
 }
 
 .site-title .tld {
   color: var(--text-dim);
   font-weight: 400;
+}
+
+.site-title:hover,
+.site-title:hover .tld {
+  color: var(--primary-hover);
 }
 
 .site-nav {
@@ -276,11 +293,71 @@ body {
 }
 
 .study-card__line {
-  margin: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
   font-family: "Courier New", monospace;
   font-size: 0.85rem;
   color: var(--text);
   overflow-wrap: anywhere;
+}
+
+.study-card--summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.study-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.study-card__header h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.study-card__side {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.study-card__score {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.study-card__score strong {
+  color: var(--primary);
+  font-size: 1.05rem;
+}
+
+.study-card__move-line {
+  display: block;
+  min-height: 1.4em;
+  white-space: nowrap;
+}
+
+.study-card__line .tree-move {
+  padding: 0;
+  cursor: inherit;
+}
+
+.study-card__line .study-card__start {
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.78rem;
 }
 
 .study-card__meta {
@@ -311,7 +388,7 @@ body {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
 }
 
@@ -745,9 +822,9 @@ body {
   align-items: center;
   padding: 0 12px;
   background: var(--panel-bg);
-  border: 1px solid #e2903f;
+  border: 1px solid #e0c93f;
   border-radius: 6px;
-  color: #e2903f;
+  color: #e0c93f;
   font-size: 0.85rem;
   white-space: nowrap;
 }
@@ -823,7 +900,7 @@ body {
 
 /* The study's starting point (see starting-point.md). */
 .tree-move--start-point {
-  color: #e2903f;
+  color: #e0c93f;
 }
 
 .tree-variation {
@@ -1088,4 +1165,169 @@ body {
   margin-top: 12px;
   color: #d62929;
   text-align: right;
+}
+
+.error-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 32px 28px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid #d62929;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.error-page__title {
+  margin: 0 0 12px;
+  color: var(--text-strong);
+  font-size: 1.4rem;
+}
+
+.error-page__message {
+  margin: 0 0 24px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.error-page__actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.doc-main {
+  max-width: 900px;
+  padding-top: 40px;
+}
+
+.doc-intro {
+  max-width: 680px;
+  margin: -12px 0 20px;
+  color: var(--text-dim);
+  font-size: 1.05rem;
+}
+
+.doc-section {
+  padding: 22px 24px;
+  margin: 16px 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.doc-section h2,
+.doc-main h2 {
+  margin: 0 0 10px;
+  color: var(--text-strong);
+  font-size: 1.2rem;
+}
+
+.doc-section h3,
+.doc-main h3 {
+  margin: 18px 0 6px;
+  color: var(--text-strong);
+  font-size: 1rem;
+}
+
+.doc-section p,
+.doc-section li,
+.doc-main > section p,
+.doc-main > section li {
+  line-height: 1.65;
+}
+
+.doc-section ul,
+.doc-section ol,
+.doc-main > section ul,
+.doc-main > section ol {
+  padding-left: 22px;
+}
+
+.doc-section a,
+.doc-main a {
+  color: var(--primary-hover);
+}
+
+.doc-link {
+  display: inline-flex;
+  gap: 8px;
+  margin-top: 8px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.doc-link:hover,
+.doc-main nav a:hover {
+  color: var(--text-strong);
+}
+
+.doc-callout,
+.doc-main .callout {
+  padding: 12px 14px;
+  border-left: 3px solid var(--primary);
+  background: var(--header-bg);
+}
+
+.doc-main > nav[aria-label="Documentation"] {
+  display: flex;
+  gap: 18px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.doc-main > nav a {
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.doc-main > nav a[aria-current="page"] {
+  color: var(--text-strong);
+}
+
+.doc-main > section {
+  padding: 22px 24px;
+  margin: 16px 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.doc-main > section h2 {
+  margin-bottom: 8px;
+  color: var(--text-strong);
+}
+
+.doc-main code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--header-bg);
+  color: var(--text-strong);
+  font-size: 0.9em;
+}
+
+.doc-main footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 20px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .doc-main {
+    padding: 28px 16px;
+  }
+
+  .doc-section {
+    padding: 18px 16px;
+  }
+
+  .doc-main > section {
+    padding: 18px 16px;
+  }
 }

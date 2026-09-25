@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Guide to using lirep.org." />
+    <title>Documentation · lirep.org</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-title" href="/">
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
+          <span class="site-name">lirep<span class="tld">.org</span></span>
+        </a>
+        <nav class="site-nav">
+          <a href="/studies.html">Studies</a>
+          <a href="/stats.html">Stats</a>
+          <a href="/doc/index.html" aria-current="page">Doc</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <div class="site-auth" id="auth-area">
+          <a class="btn btn-primary" href="/auth/login">Sign in</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="site-main doc-main">
+      <h1 class="page-title">Documentation</h1>
+      <p class="doc-intro">Lirep helps you build an opening repertoire, compare it with real games, and see how well your preparation holds up.</p>
+
+      <section class="doc-section">
+        <h2>Getting started</h2>
+        <ol>
+          <li>Sign in with your Lichess account.</li>
+          <li>Create a study and choose whether you are preparing for White or Black.</li>
+          <li>Add moves on the board, or select popular replies from Opening Explorer.</li>
+          <li>Save the study, then calculate its statistics on the Stats page.</li>
+        </ol>
+      </section>
+
+      <section class="doc-section">
+        <h2>Studies</h2>
+        <p>A study is a named repertoire tree with a main line and variations. Play moves on the board or click the move list to navigate. Opponent moves can branch; your own prepared position has one reply, keeping the repertoire unambiguous.</p>
+        <ul>
+          <li>Set an optional starting point to calculate stats from a later position.</li>
+          <li>Browse Lichess player or Masters games, filter player ratings and time controls, and add Explorer moves with one click.</li>
+          <li>Enable Stockfish for local analysis and ranked candidate moves.</li>
+          <li>Explorer settings are saved per study. The studied side is fixed when the study is created.</li>
+        </ul>
+        <a class="doc-link" href="/doc/studies.html">Detailed Studies behavior <span aria-hidden="true">→</span></a>
+      </section>
+
+      <section class="doc-section">
+        <h2>Stats</h2>
+        <p>Calculations follow the study tree and weight opponent replies by their frequency in the selected Lichess Explorer pool. The studied player is assumed to know and play prepared moves.</p>
+        <ul>
+          <li><strong>Expected score:</strong> expected fraction of a point from real-game win/draw/loss results.</li>
+          <li><strong>Coverage:</strong> how often games remain inside the prepared tree, move by move.</li>
+          <li><strong>Expected evaluation:</strong> Stockfish's expected position value when preparation ends.</li>
+        </ul>
+        <p>Update evaluations in the browser first for faster expected-evaluation calculations. Win probability and expected evaluation can be recalculated separately.</p>
+        <a class="doc-link" href="/doc/stats.html">Detailed Stats behavior <span aria-hidden="true">→</span></a>
+      </section>
+
+      <section class="doc-section">
+        <h2>Account and data</h2>
+        <p>Lichess sign-in is required for studies and Explorer data. Lirep uses Lichess account and board preferences, fetches opening data from Lichess, and runs Stockfish locally in your browser. Studies are stored in SQLite and associated with their owner's Lichess account. Explorer responses are cached for up to 24 hours.</p>
+        <p class="doc-callout">Stats are estimates, not guarantees. Explorer move lists omit rare replies, automatic rating bands use current ratings unless pinned, and local engine analysis uses a fixed search depth.</p>
+      </section>
+
+    </main>
+    <script type="module">
+      import { fetchMe, renderAuthArea } from "/src/layout.ts";
+      fetchMe().then(renderAuthArea);
+    </script>
+  </body>
+</html>

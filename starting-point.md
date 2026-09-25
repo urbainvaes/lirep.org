@@ -84,7 +84,7 @@ is (clearing resets to the real root, i.e. `null`). No separate confirmation
 dialog — same low-friction pattern as the rest of the editor's move actions.
 
 **Showing it, in the tree:** the designated node's move text is colored a
-distinct orange (`#e2903f`), separate from the existing "this is your move"
+distinct yellow (`#e0c93f`), separate from the existing "this is your move"
 (blue text) and "you're here" (highlighted background) states. If a node is
 both the starting point and one of your own moves, the starting-point color
 takes precedence — it's the more specific thing to call out in that spot.
