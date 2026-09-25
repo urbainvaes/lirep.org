@@ -401,7 +401,12 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  margin-top: 4px;
+  /* Grid rows stretch every .study-card in a row to the tallest one's
+     height; pushing this to the bottom of that stretched space (rather than
+     right after whatever content came before it) is what keeps the action
+     buttons aligned between cards with different-length names/lines. */
+  margin-top: auto;
+  padding-top: 4px;
 }
 
 .study-card__actions .btn {
