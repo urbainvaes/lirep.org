@@ -2599,3 +2599,8 @@ body {
   color: var(--text-dim);
   font-size: 0.9rem;
 }
+
+.doc-note {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}

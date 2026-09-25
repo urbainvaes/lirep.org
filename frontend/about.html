@@ -50,6 +50,64 @@
       </section>
 
       <section class="doc-section">
+        <h2>Similar tools</h2>
+        <p>Lirep is one of several free and open-source tools for building and drilling an opening repertoire. Its own emphasis is a repertoire-level number: the expected score (win % plus half the draw %) of your whole tree, weighted by how often opponents really play each reply in the Lichess Explorer, plus how much of the game your prepared moves cover. It also has a beta-stage practice mode with a simple forgetting-curve model (not FSRS), Stockfish in the browser, and a community page. Others are more mature in places; this is a short, honest map of free software only, with each project's license.</p>
+        <div class="community-table-wrap">
+          <table class="community-table">
+            <thead>
+              <tr><th>Tool</th><th>License</th><th>Runs as</th><th>Spaced repetition</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Lirep</strong></td>
+                <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a></td>
+                <td>Hosted at lirep.org (beta)</td>
+                <td>Simple forgetting curve</td>
+                <td>Expected score and coverage of your whole repertoire from Lichess Explorer data, practice, Stockfish in the browser, a community page.</td>
+              </tr>
+              <tr>
+                <td><a href="https://chessstack.app">ChessStack</a></td>
+                <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a> (<a href="https://github.com/PvtTwinkle/Chessstack">source</a>)</td>
+                <td>Hosted site, or self-hosted with Docker and PostgreSQL</td>
+                <td>FSRS</td>
+                <td>Repertoire builder with masters, Lichess and engine data; opponent preparation from Chess.com and Lichess games; puzzles; game review against your repertoire. Hosted: free with one repertoire, a small fee for more.</td>
+              </tr>
+              <tr>
+                <td><a href="https://encroissant.org">En Croissant</a></td>
+                <td><a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> (<a href="https://github.com/franciscoBSalgueiro/en-croissant">source</a>)</td>
+                <td>Desktop application</td>
+                <td>FSRS</td>
+                <td>A full chess toolkit: any UCI engine, local game databases, repertoire building and training, everything on your own machine.</td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/daxaur/tabia">Tabia</a></td>
+                <td><a href="https://opensource.org/license/mit">MIT</a> (<a href="https://github.com/daxaur/tabia">source</a>)</td>
+                <td>Static web page in your browser, no server</td>
+                <td>Yes</td>
+                <td>Opening drills in several modes, custom openings with notes, Stockfish in the browser, Lichess and Chess.com integration. Progress stays in your browser.</td>
+              </tr>
+              <tr>
+                <td><a href="https://www.openingtree.com">OpeningTree</a></td>
+                <td><a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> (<a href="https://github.com/openingtree/openingtree">source</a>)</td>
+                <td>Hosted site, or run it yourself</td>
+                <td>No</td>
+                <td>Builds an opening tree with win percentages from a player's own games or from databases; good for scouting an opponent or studying yourself.</td>
+              </tr>
+              <tr>
+                <td><a href="https://lichess.org/study">Lichess studies</a></td>
+                <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a> (<a href="https://github.com/lichess-org/lila">source</a>)</td>
+                <td>Lichess</td>
+                <td>No</td>
+                <td>Annotated, shareable lines with analysis; no drilling or repertoire scoring.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Compared with ChessStack in particular: it is broader (puzzles, opponent preparation, game review, FSRS scheduling) and more mature, and it can be self-hosted. Lirep is narrower and younger: it concentrates on scoring a repertoire against real game data and on sharing openings in its community. Both are free software under the AGPL, so the choice is mostly about which workflow suits you.</p>
+        <p class="doc-note">Gathered from each project's own pages and repositories in October 2026; features and prices change, so check them directly. Lirep is independent and not affiliated with any of these projects.</p>
+      </section>
+
+      <section class="doc-section">
         <h2>No warranty</h2>
         <p>This software is provided without warranty, under the terms of its applicable licenses.</p>
       </section>
