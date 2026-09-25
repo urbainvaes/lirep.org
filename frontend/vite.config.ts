@@ -24,6 +24,7 @@ export default defineConfig({
         stat: resolve(__dirname, "stat.html"),
         about: resolve(__dirname, "about.html"),
         practice: resolve(__dirname, "practice.html"),
+        community: resolve(__dirname, "community.html"),
         "practice-session": resolve(__dirname, "practice-session.html"),
         "sign-in-error": resolve(__dirname, "sign-in-error.html"),
         "doc/index": resolve(__dirname, "doc/index.html"),

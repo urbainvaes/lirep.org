@@ -31,6 +31,10 @@ class ExplorerSettings(BaseModel):
         return values
 
 
+class SharedIn(BaseModel):
+    shared: bool
+
+
 class StudyIn(BaseModel):
     name: str
     tree: dict
@@ -178,4 +182,15 @@ def update_study(study_id: int, payload: StudyIn, request: Request) -> dict:
         owner, study_id, name, payload.tree, payload.explorerSettings.model_dump(), existing["side"], start_node_id
     )
     assert study is not None
+    return study
+
+
+@router.put("/api/studies/{study_id}/shared")
+def set_shared(study_id: int, payload: SharedIn, request: Request) -> dict:
+    """Sharing is a separate call (not part of the autosaved study body) so an
+    autosave can never publish or unpublish a study by accident."""
+    owner = _require_owner(request)
+    study = store.set_study_shared(owner, study_id, payload.shared)
+    if not study:
+        raise HTTPException(status_code=404, detail="not found")
     return study

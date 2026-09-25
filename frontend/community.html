@@ -10,7 +10,8 @@
           t === "light" || t === "dark" ? t : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       } catch (e) {}
     </script>
-    <title>Edit study · lirep.org</title>
+    <meta name="description" content="Community numbers and a leaderboard of shared openings on lirep.org." />
+    <title>Community · lirep.org</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -25,7 +26,7 @@
           <a href="/studies.html">Studies</a>
           <a href="/stats.html">Stats</a>
           <a href="/practice.html">Practice</a>
-          <a href="/community.html">Community</a>
+          <a href="/community.html" aria-current="page">Community</a>
           <a href="/doc/index.html">Doc</a>
           <a href="/about.html">About</a>
         </nav>
@@ -35,12 +36,9 @@
       </div>
     </header>
 
-    <main class="site-main" id="study-main">
-      <div class="empty-state">
-        <p>Loading…</p>
-      </div>
+    <main class="site-main" id="community-main">
+      <div class="empty-state"><p>Loading…</p></div>
     </main>
-
-    <script type="module" src="/src/study.ts"></script>
+    <script type="module" src="/src/community.ts"></script>
   </body>
 </html>

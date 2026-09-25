@@ -2179,3 +2179,112 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Community page */
+.community-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 20px 0 34px;
+}
+
+.community-stat {
+  padding: 14px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.community-stat span {
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.community-stat strong {
+  color: var(--text-strong);
+  font-size: 1.5rem;
+}
+
+.community-note {
+  margin: 0 0 14px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.community-message {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-bg);
+}
+
+.community-table-wrap {
+  overflow-x: auto;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.community-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.community-table th,
+.community-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.community-table th {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.community-table tbody tr + tr td {
+  border-top: 1px solid var(--border);
+}
+
+.community-rank {
+  width: 40px;
+  color: var(--text-dim);
+}
+
+.community-sub,
+.community-settings {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.community-score {
+  color: var(--primary);
+  font-size: 1.05rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.community-action {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.community-yours {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.study-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 12px;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}

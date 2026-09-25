@@ -37,6 +37,7 @@ interface Study {
   explorerSettings: ExplorerSettings;
   side: "white" | "black";
   stats: StudyStats | null;
+  shared?: boolean;
   // null (the default) means calculations start at the tree's real root —
   // see starting-point.md.
   startNodeId: number | null;
@@ -236,6 +237,11 @@ function renderEditor(
           <p id="study-save-status" class="study-save-status" role="status" aria-live="polite">
             ${existing ? "Changes save automatically." : "Name this study to start auto-saving."}
           </p>
+          <label id="study-share" class="study-share" ${existing ? "" : "hidden"}
+            title="Shared studies appear on the Community page (name, your username, expected score), and other people can import a copy. Off by default.">
+            <input type="checkbox" id="study-shared" ${existing?.shared ? "checked" : ""} />
+            Share with the community
+          </label>
           <button id="delete-study-btn" class="btn btn-danger" type="button" ${existing ? "" : "hidden"}>Delete study</button>
         </div>
     </div>
@@ -259,6 +265,8 @@ function renderEditor(
   const colorSelect = document.getElementById("study-color") as HTMLSelectElement | null;
   const saveStatusEl = document.getElementById("study-save-status") as HTMLElement;
   const deleteStudyBtn = document.getElementById("delete-study-btn") as HTMLButtonElement;
+  const shareWrapEl = document.getElementById("study-share") as HTMLElement;
+  const sharedInput = document.getElementById("study-shared") as HTMLInputElement;
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
   const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
@@ -381,6 +389,7 @@ function renderEditor(
           colorSelect.title = "The playing side is fixed once the study is created.";
         }
         deleteStudyBtn.hidden = false;
+        shareWrapEl.hidden = false;
       }
       if (!deleting) {
         if (!nameInput.value.trim()) {
@@ -699,6 +708,30 @@ function renderEditor(
   });
 
   deleteStudyBtn.addEventListener("click", () => void deleteStudy());
+  sharedInput.addEventListener("change", async () => {
+    if (studyId === null) return;
+    const wanted = sharedInput.checked;
+    sharedInput.disabled = true;
+    try {
+      const res = await fetch(`/api/studies/${studyId}/shared`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shared: wanted }),
+      });
+      if (!res.ok) throw new Error("share failed");
+      setSaveStatus(
+        wanted
+          ? "Shared with the community (it is ranked once its stats are calculated with Lichess's Explorer)."
+          : "No longer shared.",
+      );
+    } catch {
+      sharedInput.checked = !wanted;
+      setSaveStatus("Could not change sharing. Please try again.", true);
+    } finally {
+      sharedInput.disabled = false;
+    }
+  });
 
   function closeKeyboardHelp(restoreFocus = false): void {
     keyboardHelpPanel.hidden = true;

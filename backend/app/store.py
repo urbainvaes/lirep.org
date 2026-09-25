@@ -109,6 +109,11 @@ def init_db() -> None:
         if "start_node_id" not in columns:
             conn.execute("ALTER TABLE studies ADD COLUMN start_node_id INTEGER")
 
+        # Opt-in sharing with the Community page; private unless the owner
+        # switches it on.
+        if "shared" not in columns:
+            conn.execute("ALTER TABLE studies ADD COLUMN shared INTEGER NOT NULL DEFAULT 0")
+
         # Registration order: users.id is the user number, starting at 1. Lichess
         # usernames are case-insensitive. Accounts that existed before this table
         # (known only through their studies) are numbered by their first study.
@@ -189,12 +194,13 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
         # None means "no override — calculations start at the tree's real
         # root", the default for every study. See starting-point.md.
         "startNodeId": row["start_node_id"],
+        "shared": bool(row["shared"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
 
 
-_COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, created_at, updated_at"
+_COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, shared, created_at, updated_at"
 
 
 def register_user(username: str) -> int:
@@ -209,6 +215,42 @@ def register_user(username: str) -> int:
             row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
     assert row is not None
     return int(row["id"])
+
+
+def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] | None:
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE studies SET shared = ? WHERE owner = ? AND id = ?",
+            (1 if shared else 0, owner, study_id),
+        )
+        if cur.rowcount == 0:
+            return None
+        row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
+    assert row is not None
+    return _row_to_study(row)
+
+
+def list_shared_studies() -> list[tuple[str, dict[str, Any]]]:
+    """(owner, study) for every study its owner has chosen to share."""
+    with _connect() as conn:
+        rows = conn.execute(f"SELECT owner, {_COLUMNS} FROM studies WHERE shared = 1").fetchall()
+    return [(row["owner"], _row_to_study(row)) for row in rows]
+
+
+def get_shared_study(study_id: int) -> tuple[str, dict[str, Any]] | None:
+    with _connect() as conn:
+        row = conn.execute(
+            f"SELECT owner, {_COLUMNS} FROM studies WHERE id = ? AND shared = 1", (study_id,)
+        ).fetchone()
+    return (row["owner"], _row_to_study(row)) if row else None
+
+
+def community_counts() -> dict[str, int]:
+    with _connect() as conn:
+        players = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+        studies = conn.execute("SELECT COUNT(*) AS n FROM studies").fetchone()["n"]
+        shared = conn.execute("SELECT COUNT(*) AS n FROM studies WHERE shared = 1").fetchone()["n"]
+    return {"players": int(players), "studies": int(studies), "sharedStudies": int(shared)}
 
 
 def list_studies(owner: str) -> list[dict[str, Any]]:
