@@ -129,10 +129,21 @@ statistics, and spaced-repetition practice.")
            (copy-recursively src "src-copy")
            (with-directory-excursion "src-copy"
              (invoke "npm" "ci" "--no-audit" "--no-fund" "--ignore-scripts")
+             ;; Drop files that vary with the npm version (the hidden lockfile
+             ;; and the .bin symlinks, which the build does not use) so that
+             ;; the hash does not depend on which Guix revision builds this.
+             (for-each (lambda (f)
+                         (when (file-exists? f) (delete-file-recursively f)))
+                       '("node_modules/.package-lock.json"
+                         "node_modules/.bin"
+                         "node_modules/.cache"
+                         ;; Optional native addon that npm 11 installs and
+                         ;; npm 10 skips; the build does not use it.
+                         "node_modules/@napi-rs/lzma-linux-x64-gnu"))
              (copy-recursively "node_modules" #$output)))))
    #:options
    `(#:hash-algo sha256
-     #:hash ,(base32 "1bgrp53ipyyr3l7spdd8cndwxn8v31hch4x3hbn693f9d0vg3ml7")
+     #:hash ,(base32 "1m0vccnas4nq5rzh207k9fm5x73p9y6nyn9mssljh9rwfd3hn2l2")
      #:recursive? #t)))
 
 (define-public lirep-frontend
