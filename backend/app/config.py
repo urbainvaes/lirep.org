@@ -25,6 +25,18 @@ REDIRECT_URI = os.getenv("REDIRECT_URI", f"{FRONTEND_URL}/auth/callback")
 # SESSION_SECRET should be set via .env for anything longer-lived.
 SESSION_SECRET = os.getenv("SESSION_SECRET") or secrets.token_hex(32)
 
+# The session cookie (it carries the Lichess access token) should only ever
+# be sent over HTTPS once this is actually deployed there. Defaults to
+# whether FRONTEND_URL itself is https:// (true for a real deployment, false
+# for the http://127.0.0.1 dev server, where a Secure cookie would just get
+# silently dropped by the browser), but can still be forced explicitly via
+# SESSION_HTTPS_ONLY for a deployment that fronts HTTPS behind a proxy
+# talking plain HTTP to this app.
+_https_only_env = os.getenv("SESSION_HTTPS_ONLY")
+SESSION_HTTPS_ONLY = (
+    _https_only_env.lower() == "true" if _https_only_env is not None else FRONTEND_URL.startswith("https://")
+)
+
 # httpx's own default is 5s across connect/read/write/pool, which is tight
 # enough that a brief network blip can fail an otherwise-fine login. Used for
 # every httpx.AsyncClient() that talks to lichess.org.

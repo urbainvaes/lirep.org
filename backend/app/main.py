@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import router as auth_router
-from .config import SESSION_SECRET
+from .config import SESSION_HTTPS_ONLY, SESSION_SECRET
 from .explorer import router as explorer_router
 from .practice import router as practice_router
 from .stats import router as stats_router
@@ -10,7 +10,7 @@ from .store import init_db
 from .studies import router as studies_router
 
 app = FastAPI(title="lirep.org")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=False)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=SESSION_HTTPS_ONLY)
 app.include_router(auth_router)
 app.include_router(studies_router)
 app.include_router(explorer_router)
