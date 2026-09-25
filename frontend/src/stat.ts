@@ -137,12 +137,11 @@ function formatEval(cp: number): string {
   return `${pawns > 0 ? "+" : ""}${pawns.toFixed(2)}`;
 }
 
-// Actual checkmate/stalemate/insufficient material on the board — a flat mate
-// cap (no distance), matching the backend's own terminal-position handling.
-// Doesn't cover threefold repetition / 50-move (rare at the edge of an
-// opening tree, and chess.js's and python-chess's "automatic" outcome rules
-// don't quite agree there) — those just get engine-analyzed like any other
-// non-terminal position instead.
+// Actual game-over positions on the board — checkmate gets a flat mate cap
+// (no distance), matching the backend's own terminal-position handling.
+// chess.js's isDraw() also covers stalemate, insufficient material,
+// threefold repetition, and the 50-move rule, so all of those are handled
+// here too rather than falling through to the engine.
 function terminalCp(chess: Chess): number | null {
   if (chess.isCheckmate()) return chess.turn() === "w" ? -MATE_SCORE_CP : MATE_SCORE_CP;
   if (chess.isDraw()) return 0;
@@ -403,7 +402,7 @@ function nodeCountsByMove(tree: StudyTree): number[] {
 
 function trimTrailingCoverageZeros(coverage: number[] | undefined): number[] {
   const displayed = [...(coverage ?? [])];
-  while (displayed.at(-1) === 0) displayed.pop();
+  while (displayed[displayed.length - 1] === 0) displayed.pop();
   return displayed;
 }
 
