@@ -5,17 +5,18 @@ interface Summary {
   studies: number;
   sharedStudies: number;
   rankedOpenings: number;
-  averageWinProbability: number | null;
+  activeThisWeek: number;
 }
 
 interface Opening {
-  rank: number;
+  rank: number | null;
   id: number;
   name: string;
   side: "white" | "black";
   owner: string;
   mine: boolean;
-  winProbability: number;
+  winProbability: number | null;
+  reason: string | null;
   database: "lichess" | "masters" | null;
   minRating: number | null;
   speeds: string[];
@@ -44,7 +45,7 @@ function renderStats(summary: Summary): string {
       ${card("Studies", String(summary.studies))}
       ${card("Shared with the community", String(summary.sharedStudies))}
       ${card("Ranked openings", String(summary.rankedOpenings))}
-      ${card("Average expected score", summary.averageWinProbability === null ? "—" : percent(summary.averageWinProbability))}
+      ${card("Active this week", String(summary.activeThisWeek))}
     </div>
   `;
 }
@@ -57,33 +58,43 @@ function renderRow(opening: Opening, signedIn: boolean): string {
       : `<a class="btn btn-secondary" href="/auth/login">Sign in to import</a>`;
   return `
     <tr>
-      <td class="community-rank">${opening.rank}</td>
+      <td class="community-rank">${opening.rank ?? "–"}</td>
       <td>
         <span class="side-pawn side-pawn--${opening.side}">${opening.side === "white" ? "♙" : "♟"}</span>
         <strong>${escapeHtml(opening.name)}</strong>
         <div class="community-sub">${opening.moves} ${opening.moves === 1 ? "move" : "moves"} · ${opening.lines} ${opening.lines === 1 ? "line" : "lines"}</div>
       </td>
       <td>${escapeHtml(opening.owner)}</td>
-      <td class="community-score">${percent(opening.winProbability)}</td>
-      <td class="community-settings">${escapeHtml(settingsLabel(opening))}</td>
+      <td class="community-score">${opening.winProbability === null ? "—" : percent(opening.winProbability)}</td>
+      <td class="community-settings">${escapeHtml(opening.winProbability === null ? (opening.reason ?? "Not ranked yet") : settingsLabel(opening))}</td>
       <td class="community-action">${action}</td>
     </tr>
   `;
 }
 
-function render(main: HTMLElement, summary: Summary, openings: Opening[], signedIn: boolean): void {
-  const table = openings.length
+function renderTable(openings: Opening[], signedIn: boolean, side: "white" | "black"): string {
+  const group = openings.filter((o) => o.side === side);
+  const title = side === "white" ? "Openings for White" : "Openings for Black";
+  const body = group.length
     ? `
       <div class="community-table-wrap">
         <table class="community-table">
           <thead>
             <tr><th>#</th><th>Opening</th><th>By</th><th>Expected score</th><th>Calculated with</th><th></th></tr>
           </thead>
-          <tbody>${openings.map((o) => renderRow(o, signedIn)).join("")}</tbody>
+          <tbody>${group.map((o) => renderRow(o, signedIn)).join("")}</tbody>
         </table>
       </div>`
-    : `<div class="empty-state"><p>No shared openings with a calculated score yet. Share one of yours from the study page, after calculating its stats.</p></div>`;
+    : `<div class="empty-state"><p>No shared openings for ${side === "white" ? "White" : "Black"} yet.</p></div>`;
+  return `
+    <section class="opening-group">
+      <h2>${title}</h2>
+      ${body}
+    </section>
+  `;
+}
 
+function render(main: HTMLElement, summary: Summary, openings: Opening[], signedIn: boolean): void {
   main.innerHTML = `
     <h1 class="page-title">Community</h1>
     <p class="doc-intro">What people are preparing on lirep.org.</p>
@@ -94,17 +105,21 @@ function render(main: HTMLElement, summary: Summary, openings: Opening[], signed
         <div>
           <h2>Opening leaderboard</h2>
           <p class="profile-subtitle">
-            Openings their authors chose to share, ranked by expected score: the chance of winning, counting draws
-            as half, if you always play the prepared moves and opponents reply as in the Lichess Explorer.
+            Up to ten shared openings per side, best score first. The expected score is the chance of winning,
+            counting draws as half, if you always play the prepared moves and opponents reply as in the Lichess
+            Explorer. Openings without a comparable score are listed after the ranked ones.
           </p>
         </div>
       </div>
       <p class="community-note">
         Scores come only from the hosted Lichess Explorer, with the rating band and time controls shown on each row,
-        so compare rows with the same settings. Studies are private unless their author switches on sharing.
+        so compare rows with the same settings. Studies are shared by default; authors can switch sharing off for any study on its page.
       </p>
       <div id="community-message" class="community-message" role="status" aria-live="polite" hidden></div>
-      ${table}
+      <div class="opening-groups">
+        ${renderTable(openings, signedIn, "white")}
+        ${renderTable(openings, signedIn, "black")}
+      </div>
     </section>
   `;
 

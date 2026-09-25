@@ -238,7 +238,7 @@ function renderEditor(
             ${existing ? "Changes save automatically." : "Name this study to start auto-saving."}
           </p>
           <label id="study-share" class="study-share" ${existing ? "" : "hidden"}
-            title="Shared studies appear on the Community page (name, your username, expected score), and other people can import a copy. Off by default.">
+            title="Shared studies appear on the Community page (name, your username, expected score), and other people can import a copy. Studies are shared by default; untick to keep this one private.">
             <input type="checkbox" id="study-shared" ${existing?.shared ? "checked" : ""} />
             Share with the community
           </label>
@@ -390,6 +390,7 @@ function renderEditor(
         }
         deleteStudyBtn.hidden = false;
         shareWrapEl.hidden = false;
+        sharedInput.checked = saved.shared ?? true;
       }
       if (!deleting) {
         if (!nameInput.value.trim()) {

@@ -7,7 +7,7 @@ from . import store
 
 router = APIRouter()
 
-LEADERBOARD_SIZE = 100
+LEADERBOARD_SIZE = 10
 
 
 def _count_moves_and_lines(tree: dict) -> tuple[int, int]:
@@ -18,20 +18,23 @@ def _count_moves_and_lines(tree: dict) -> tuple[int, int]:
     return moves, lines
 
 
-def _ranked_entry(owner: str, study: dict, me: str | None) -> dict | None:
-    """A leaderboard row, or None when the study has no comparable score: only
-    win probabilities calculated from Lichess's own Explorer count (not the
-    local one), and each row carries the settings that produced it."""
+def _entry(owner: str, study: dict, me: str | None) -> dict:
+    """A leaderboard row. Only win probabilities calculated from Lichess's own
+    Explorer are comparable, so only those get a score and a rank; the rest are
+    listed with the reason they are not ranked yet. Each scored row carries the
+    settings that produced it."""
     stats = study.get("stats") or {}
-    probability = stats.get("winProbability")
-    if probability is None:
-        return None
     settings = study["explorerSettings"]
+    probability = stats.get("winProbability")
     # Older stats records predate the "source" field; fall back to the study's.
     source = stats.get("source") or settings.get("source")
-    if source != "lichess":
-        return None
     moves, lines = _count_moves_and_lines(study["tree"])
+    reason = None
+    if probability is None:
+        reason = "Stats not calculated yet"
+    elif source != "lichess":
+        reason = "Calculated with the local Explorer, not Lichess's"
+        probability = None
     return {
         "id": study["id"],
         "name": study["name"],
@@ -39,34 +42,48 @@ def _ranked_entry(owner: str, study: dict, me: str | None) -> dict | None:
         "owner": owner,
         "mine": me is not None and owner.lower() == me.lower(),
         "winProbability": probability,
+        "reason": reason,
         "database": stats.get("database") or settings.get("database"),
         "minRating": stats.get("minRating", settings.get("minRating")),
         "speeds": stats.get("speeds") or settings.get("speeds") or [],
         "calculatedAt": stats.get("winProbabilityCalculatedAt"),
         "moves": moves,
         "lines": lines,
+        "rank": None,
     }
 
 
 @router.get("/api/community/summary")
 def summary() -> dict:
     counts = store.community_counts()
-    ranked = [e for owner, study in store.list_shared_studies() if (e := _ranked_entry(owner, study, None))]
+    ranked = [
+        e for owner, study in store.list_shared_studies()
+        if (e := _entry(owner, study, None))["winProbability"] is not None
+    ]
     counts["rankedOpenings"] = len(ranked)
-    counts["averageWinProbability"] = (
-        sum(e["winProbability"] for e in ranked) / len(ranked) if ranked else None
-    )
     return counts
 
 
 @router.get("/api/community/openings")
 def openings(request: Request) -> list[dict]:
+    """Up to LEADERBOARD_SIZE shared studies per side: the best-scoring first,
+    then (to fill the list) the ones that have no comparable score yet. Ranks
+    are per side, since White and Black openings are shown separately."""
     me = request.session.get("username")
-    entries = [e for owner, study in store.list_shared_studies() if (e := _ranked_entry(owner, study, me))]
-    entries.sort(key=lambda e: e["winProbability"], reverse=True)
-    for rank, entry in enumerate(entries[:LEADERBOARD_SIZE], start=1):
-        entry["rank"] = rank
-    return entries[:LEADERBOARD_SIZE]
+    entries = [_entry(owner, study, me) for owner, study in store.list_shared_studies()]
+    shown: list[dict] = []
+    for side in ("white", "black"):
+        group = [e for e in entries if e["side"] == side]
+        ranked = sorted((e for e in group if e["winProbability"] is not None),
+                        key=lambda e: e["winProbability"], reverse=True)
+        unranked = sorted((e for e in group if e["winProbability"] is None), key=lambda e: e["id"])
+        rank = 0
+        for entry in (ranked + unranked)[:LEADERBOARD_SIZE]:
+            if entry["winProbability"] is not None:
+                rank += 1
+                entry["rank"] = rank
+            shown.append(entry)
+    return shown
 
 
 @router.post("/api/community/import/{study_id}")
@@ -80,7 +97,8 @@ def import_study(study_id: int, request: Request) -> dict:
     owner, study = found
     if owner.lower() == me.lower():
         raise HTTPException(status_code=400, detail="this is already your study")
-    # A private copy: tree, side, starting point and Explorer settings. The
+    # A private copy (not shared, so it does not appear a second time on the
+    # leaderboard): tree, side, starting point and Explorer settings. The
     # calculated stats and evaluations are not copied; they are recalculated.
     return store.create_study(
         me,
@@ -89,4 +107,5 @@ def import_study(study_id: int, request: Request) -> dict:
         study["explorerSettings"],
         study["side"],
         study["startNodeId"],
+        shared=False,
     )

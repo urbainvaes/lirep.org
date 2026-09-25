@@ -109,10 +109,11 @@ def init_db() -> None:
         if "start_node_id" not in columns:
             conn.execute("ALTER TABLE studies ADD COLUMN start_node_id INTEGER")
 
-        # Opt-in sharing with the Community page; private unless the owner
-        # switches it on.
+        # Sharing with the Community page: public by default, and the owner can
+        # switch it off per study. (Databases that got the column before this
+        # default existed keep their stored values.)
         if "shared" not in columns:
-            conn.execute("ALTER TABLE studies ADD COLUMN shared INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE studies ADD COLUMN shared INTEGER NOT NULL DEFAULT 1")
 
         # Registration order: users.id is the user number, starting at 1. Lichess
         # usernames are case-insensitive. Accounts that existed before this table
@@ -126,6 +127,9 @@ def init_db() -> None:
             )
             """
         )
+        user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+        if "last_seen_at" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN last_seen_at TEXT")
         conn.execute(
             """
             INSERT OR IGNORE INTO users (username, created_at)
@@ -217,6 +221,23 @@ def register_user(username: str) -> int:
     return int(row["id"])
 
 
+def touch_user(username: str) -> None:
+    """Records that the user was seen now (at most once an hour), for the
+    Community page's "active this week" count. Registers them if needed."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            UPDATE users SET last_seen_at = datetime('now')
+            WHERE username = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now', '-1 hour'))
+            """,
+            (username,),
+        )
+        if cur.rowcount == 0 and conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone() is None:
+            conn.execute(
+                "INSERT OR IGNORE INTO users (username, last_seen_at) VALUES (?, datetime('now'))", (username,)
+            )
+
+
 def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] | None:
     with _connect() as conn:
         cur = conn.execute(
@@ -250,7 +271,15 @@ def community_counts() -> dict[str, int]:
         players = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
         studies = conn.execute("SELECT COUNT(*) AS n FROM studies").fetchone()["n"]
         shared = conn.execute("SELECT COUNT(*) AS n FROM studies WHERE shared = 1").fetchone()["n"]
-    return {"players": int(players), "studies": int(studies), "sharedStudies": int(shared)}
+        active = conn.execute(
+            "SELECT COUNT(*) AS n FROM users WHERE last_seen_at >= datetime('now', '-7 days')"
+        ).fetchone()["n"]
+    return {
+        "players": int(players),
+        "studies": int(studies),
+        "sharedStudies": int(shared),
+        "activeThisWeek": int(active),
+    }
 
 
 def list_studies(owner: str) -> list[dict[str, Any]]:
@@ -287,11 +316,13 @@ def create_study(
     explorer_settings: dict[str, Any],
     side: str,
     start_node_id: int | None = None,
+    shared: bool = True,
 ) -> dict[str, Any]:
     with _connect() as conn:
         cur = conn.execute(
-            "INSERT INTO studies (owner, name, tree, explorer_settings, side, start_node_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (owner, name, json.dumps(tree), json.dumps(explorer_settings), side, start_node_id),
+            "INSERT INTO studies (owner, name, tree, explorer_settings, side, start_node_id, shared)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (owner, name, json.dumps(tree), json.dumps(explorer_settings), side, start_node_id, 1 if shared else 0),
         )
         study_id = cur.lastrowid
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()

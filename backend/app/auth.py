@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, REDIRECT_URI
-from .store import register_user
+from .store import register_user, touch_user
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +160,7 @@ async def callback(
     request.session["username"] = account["username"]
     request.session["title"] = account.get("title")
     register_user(account["username"])
+    touch_user(account["username"])
     return RedirectResponse(FRONTEND_URL)
 
 
@@ -183,6 +184,8 @@ async def me(request: Request) -> dict:
     username = request.session.get("username")
     if not username or not request.session.get("access_token"):
         return {"authenticated": False}
+    # Every page asks /api/me on load, which makes it a cheap "was seen" signal.
+    touch_user(username)
     return {"authenticated": True, "username": username, "title": request.session.get("title")}
 
 
