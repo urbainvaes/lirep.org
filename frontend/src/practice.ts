@@ -16,7 +16,6 @@ function knowledgeLabel(summary: PracticeSummary): string {
 function renderCard(study: StudyCardData, summaries: Record<string, PracticeSummary>): string {
   const empty: PracticeSummary = { totalItems: 0, dueCount: 0, newCount: 0, aggregateKnowledge: null };
   const summary = summaries[String(study.id)] ?? empty;
-  const side = study.side === "white" ? "♙ White" : "♟ Black";
   // Nothing due/new just means the schedule is satisfied for now — practice
   // is never gated by that, only by there being no moves to drill at all.
   const unavailableReason = summary.totalItems === 0 ? "This study has no moves of its own to practice yet." : "";
@@ -24,7 +23,6 @@ function renderCard(study: StudyCardData, summaries: Record<string, PracticeSumm
   const content = `
       <div class="study-card__header">
         <h3>${escapeHtml(study.name)}</h3>
-        <span class="study-card__side">${side}</span>
       </div>
       <div class="study-card__score">
         <span>Knowledge</span>
