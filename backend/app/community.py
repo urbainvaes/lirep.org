@@ -19,7 +19,7 @@ def _count_moves_and_lines(tree: dict) -> tuple[int, int]:
     return moves, lines
 
 
-def _entry(owner: str, study: dict, me: str | None, include_lirep: bool = False) -> dict:
+def _entry(owner: str, study: dict, me: str | None, include_lirep: bool = False, any_source: bool = False) -> dict:
     """A leaderboard row. Only win probabilities calculated from Lichess's own
     Explorer are comparable, so only those get a score and a rank; the rest are
     listed with the reason they are not ranked yet. Each scored row carries the
@@ -34,6 +34,8 @@ def _entry(owner: str, study: dict, me: str | None, include_lirep: bool = False)
     reason = None
     if probability is None:
         reason = "Stats not calculated yet"
+    elif any_source:
+        pass  # a profile shows every score, however it was calculated
     elif source != "lichess" and not include_lirep:
         reason = "Calculated with the local Explorer, not Lichess's"
         probability = None
@@ -85,10 +87,13 @@ def player(username: str, request: Request, includeLirep: bool = True) -> dict:
         raise HTTPException(status_code=404, detail="not found")
     me = request.session.get("username")
     studies = [
-        _entry(owner, study, me, includeLirep)
+        _entry(owner, study, me, includeLirep, any_source=True)
         for owner, study in store.list_shared_studies()
         if owner.lower() == user["username"].lower()
     ]
+    # Best win probability first (however it was calculated); studies without a
+    # score last, in the order they were created.
+    studies.sort(key=lambda e: (e["winProbability"] is None, -(e["winProbability"] or 0), e["id"]))
     return {"maxUsers": MAX_USERS, **user, "studies": studies}
 
 
