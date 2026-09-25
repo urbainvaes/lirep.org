@@ -179,6 +179,20 @@ the store.  A stopgap for programs that need a newer Rust than Guix has.")
             (lambda* (#:key inputs #:allow-other-keys)
               (for-each make-file-writable (find-files "." "."))
               (#$strip-dev-dependencies)
+              ;; Upstream polls lichess.org for a cheater blacklist, a request
+              ;; that is refused (and retried every 5 seconds, forever)
+              ;; without a Lichess-issued token.  Only run it when a token is
+              ;; configured.
+              (substitute* "src/main.rs"
+                (("join_set\\.spawn\\(periodic_blacklist_update\\(blacklist, opt\\.lila\\.clone\\(\\)\\)\\);")
+                 (string-append
+                  "if std::env::var_os(\"EXPLORER_BEARER\").is_some() "
+                  "|| std::env::var_os(\"EXPLORER_BEARER_FILE\").is_some() { "
+                  "join_set.spawn(periodic_blacklist_update(blacklist, opt.lila.clone())); }")))
+              (unless (string-contains
+                       (call-with-input-file "src/main.rs" get-string-all)
+                       "EXPLORER_BEARER_FILE")
+                (error "blacklist patch did not apply"))
               (copy-recursively #$lila-openingexplorer-vendor "vendor")
               ;; Build scripts (jemalloc, ...) copy and write into their
               ;; sources, so the vendored tree must not be read-only.
