@@ -1031,7 +1031,23 @@ body {
 }
 
 .tree-variation {
+  position: relative;
   color: var(--text-dim);
+}
+
+.tree-variations {
+  margin: 2px 0 4px 18px;
+  padding-left: 9px;
+  border-left: 1px solid var(--border);
+}
+
+.tree-variation::before {
+  position: absolute;
+  top: 15px;
+  left: -10px;
+  width: 7px;
+  border-top: 1px solid var(--border);
+  content: "";
 }
 
 .tree-empty {

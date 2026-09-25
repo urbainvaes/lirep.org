@@ -79,6 +79,23 @@ export function mainLineSans(tree: StudyTree): string[] {
   return sans;
 }
 
+function renderMove(
+  tree: StudyTree,
+  nodeId: number,
+  depth: number,
+  currentId: number,
+  side: "white" | "black",
+  studyStartNodeId: number | null,
+): string {
+  const isWhite = depth % 2 === 1;
+  const classes = ["tree-move"];
+  if (isWhite === (side === "white")) classes.push("tree-move--mine");
+  if (nodeId === currentId) classes.push("tree-move--current");
+  if (nodeId === studyStartNodeId) classes.push("tree-move--start-point");
+  const title = nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
+  return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}</span>`;
+}
+
 function renderLine(
   tree: StudyTree,
   lineStartNodeId: number,
@@ -90,40 +107,54 @@ function renderLine(
   let html = "";
   let nodeId: number | undefined = lineStartNodeId;
   let depth = startDepth;
-  // Only Black's move needs this to force a number — White's always gets one
-  // regardless (standard PGN convention: "1.e4 e5 2.Nf3 Nc6", not just
-  // "1.e4 e5 Nf3 Nc6"). Black only needs one when resuming after an
-  // interruption: the very start of a rendered line, or right after a
-  // variation was shown at this same ply.
-  let needsNumber = true;
+  let firstRow = true;
 
   while (nodeId !== undefined) {
-    const node: TreeNode = tree.nodes[nodeId];
-    const moveNumber = Math.floor((depth - 1) / 2) + 1;
-    const isWhite = depth % 2 === 1;
-    const isStudiedSide = isWhite === (side === "white");
-    const label =
-      isWhite || needsNumber
-        ? `<span class="tree-move-number">${moveNumber}.${isWhite ? "" : ".."}</span> `
-        : "";
-    const classes = ["tree-move"];
-    if (isStudiedSide) classes.push("tree-move--mine");
-    if (nodeId === currentId) classes.push("tree-move--current");
-    if (nodeId === studyStartNodeId) classes.push("tree-move--start-point");
-    const title = nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
-    html += `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${label}${escapeHtml(node.san as string)}</span> `;
-    needsNumber = false;
+    const rowStartId = nodeId;
+    const rowStartDepth = depth;
+    const node = tree.nodes[rowStartId];
+    let pairedBlackId: number | undefined;
 
-    const [mainChildId, ...variations]: number[] = node.children;
-    for (const variationId of variations) {
-      html += `<span class="tree-variation">(${renderLine(tree, variationId, depth + 1, currentId, side, studyStartNodeId)})</span> `;
-      needsNumber = true;
+    if (rowStartDepth % 2 === 1) {
+      const possibleBlackId = node.children[0];
+      if (possibleBlackId !== undefined) pairedBlackId = possibleBlackId;
     }
-    nodeId = mainChildId;
-    depth += 1;
+
+    const whiteId = rowStartDepth % 2 === 1 ? rowStartId : undefined;
+    const blackId = rowStartDepth % 2 === 0 ? rowStartId : pairedBlackId;
+    const moveNumber = Math.floor((rowStartDepth - 1) / 2) + 1;
+    const number = rowStartDepth % 2 === 1 ? `${moveNumber}.` : `${moveNumber}...`;
+    const branches: string[] = [];
+
+    for (const [playedId, playedDepth] of [
+      [rowStartId, rowStartDepth],
+      ...(pairedBlackId !== undefined ? [[pairedBlackId, rowStartDepth + 1]] : []),
+    ] as [number, number][]) {
+      if (firstRow && playedId === rowStartId) continue;
+      const parentId = tree.nodes[playedId].parentId;
+      if (parentId === null) continue;
+      const alternatives = tree.nodes[parentId].children.filter((childId) => childId !== playedId);
+      for (const alternativeId of alternatives) {
+        branches.push(renderLine(tree, alternativeId, playedDepth, currentId, side, studyStartNodeId));
+      }
+    }
+
+    html += `
+      <div class="tree-move-row">
+        <span class="tree-move-number">${number}</span>
+        <span class="tree-move-cell tree-move-cell--white">${whiteId === undefined ? "" : renderMove(tree, whiteId, rowStartDepth, currentId, side, studyStartNodeId)}</span>
+        <span class="tree-move-cell tree-move-cell--black">${blackId === undefined ? "" : renderMove(tree, blackId, rowStartDepth % 2 === 0 ? rowStartDepth : rowStartDepth + 1, currentId, side, studyStartNodeId)}</span>
+      </div>
+      ${branches.length ? `<div class="tree-variations">${branches.map((branch) => `<div class="tree-variation">${branch}</div>`).join("")}</div>` : ""}
+    `;
+
+    const lastPlayedId = pairedBlackId ?? rowStartId;
+    nodeId = tree.nodes[lastPlayedId].children[0];
+    depth = rowStartDepth + (pairedBlackId === undefined ? 1 : 2);
+    firstRow = false;
   }
 
-  return html.trim();
+  return `<div class="tree-line">${html}</div>`;
 }
 
 export function renderTree(
@@ -137,9 +168,8 @@ export function renderTree(
     return '<span class="tree-empty">No moves yet — play them on the board.</span>';
   }
   const [mainChildId, ...variations] = root.children;
-  let html = renderLine(tree, mainChildId, 1, currentId, side, startNodeId);
-  for (const variationId of variations) {
-    html += ` <span class="tree-variation">(${renderLine(tree, variationId, 1, currentId, side, startNodeId)})</span>`;
-  }
-  return html;
+  return `
+    ${renderLine(tree, mainChildId, 1, currentId, side, startNodeId)}
+    ${variations.map((variationId) => `<div class="tree-variations tree-variations--root"><div class="tree-variation">${renderLine(tree, variationId, 1, currentId, side, startNodeId)}</div></div>`).join("")}
+  `;
 }
