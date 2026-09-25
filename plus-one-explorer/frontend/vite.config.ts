@@ -20,6 +20,7 @@ export default defineConfig({
         profile: resolve(__dirname, "profile.html"),
         studies: resolve(__dirname, "studies.html"),
         study: resolve(__dirname, "study.html"),
+        stats: resolve(__dirname, "stats.html"),
       },
     },
   },

@@ -52,7 +52,22 @@ def login(request: Request) -> RedirectResponse:
 
 
 @router.get("/auth/callback")
-async def callback(request: Request, code: str, state: str) -> RedirectResponse:
+async def callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+) -> RedirectResponse:
+    if error:
+        # Lichess sends this instead of `code` whenever authorization didn't
+        # succeed (denied consent, invalid scope, etc.) — surface the real
+        # reason instead of failing on a missing `code` param.
+        raise HTTPException(status_code=400, detail=f"lichess authorization failed: {error_description or error}")
+
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="missing code or state in lichess redirect")
+
     expected_state = request.session.pop("oauth_state", None)
     verifier = request.session.pop("oauth_verifier", None)
     if not expected_state or state != expected_state or not verifier:

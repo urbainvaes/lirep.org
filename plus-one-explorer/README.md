@@ -8,6 +8,205 @@
 
 ---
 
+## 0. Web app prototype (Chesster)
+
+Ahead of the CLI-first roadmap below, a working web app already implements the
+"opening studies" idea end to end: **Chesster** — a small FastAPI backend
+(`backend/`) plus a static TypeScript/Vite frontend (`frontend/`), with
+Lichess OAuth login and a real chessboard (`chessground`, the library
+lichess.org itself uses).
+
+### Running it
+
+```bash
+# backend
+cd backend
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app.main:app --reload   # http://127.0.0.1:8000
+
+# frontend (separate terminal)
+cd frontend
+npm install
+npm run dev                               # http://127.0.0.1:5173
+```
+
+Open `http://127.0.0.1:5173` and sign in with Lichess (no app registration
+needed for local dev — see `backend/app/config.py`).
+
+### Pages
+
+| Page | What it does |
+| --- | --- |
+| Home | Lichess-style empty shell (header, nav, sign-in) |
+| Profile | Your bullet/blitz/rapid/classical ratings, pulled from `/api/account`, with Lichess's own rating icons |
+| **Studies** | Create and edit opening repertoires — see below |
+| **Stats** | Expected-score card per study — see below |
+
+The board itself renders using **your actual Lichess board theme and piece
+set** (`GET /api/account/preferences`, scope `preference:read`): Chesster
+hotlinks the matching background and piece SVGs straight from lichess.org's
+own asset CDN rather than bundling every theme, so it always matches what you
+see on lichess.org. Falls back to the default brown/cburnett look if you're
+signed out or haven't re-logged-in since this was added.
+
+### The Studies tab
+
+A **Study** is a repertoire: a name plus a tree of positions, not just one
+line. It's modeled as a flat map of nodes (`{id, san, parentId, children}`)
+rather than a single move list, so a study can hold a main line plus any
+number of side variations — exactly like a real PGN with variations.
+
+Each study also has a **side** (Playing White / Playing Black), picked next to
+the name field. This didn't matter for editing alone, but it's required for
+the Stats tab below to know whose moves are "book" and whose are the
+opponent's.
+
+**Editing (`study.html`):**
+- Play moves directly on the board. Playing a move appends it as a child of
+  wherever you currently are in the tree.
+- If you replay a move that's already there, it just navigates into that
+  existing branch instead of duplicating it; playing something new creates a
+  fresh variation.
+- The move list next to the board is a clickable PGN-style tree: the main
+  line reads left to right, and any variation appears in parentheses. Click
+  any move (mainline or variation) to jump the board there.
+- **Delete this move** removes the selected move and everything under it
+  (disabled on the root — you can't delete the starting position).
+  **Go to start** jumps back to the beginning.
+- **Save** persists the whole tree to `/api/studies` (SQLite-backed,
+  per-Lichess-account).
+
+**Stockfish toggle:** checking "Stockfish" next to the tree runs a real
+engine — [Stockfish 19, the "lite single-threaded" WASM build](https://github.com/nmrugg/stockfish.js)
+— entirely client-side in a Web Worker. It analyzes with `MultiPV 5` (the
+top 5 candidate moves, not just one) and shows them two ways at once:
+- **On the board:** five arrows via chessground's own `drawable.autoShapes`
+  API (the same mechanism, and the same board library, lichess.org's
+  analysis page uses), colored in a green → red gradient by rank — reusing
+  chessground's own built-in Lichess-style brushes (`green`, `paleGreen`,
+  `yellow`, `paleRed`, `red`) rather than inventing new colors.
+- **As a ranked list** below the toggle: each line's move (in SAN) and eval,
+  with a colored dot matching its arrow. Clicking a line plays that move,
+  exactly like the Opening Explorer rows.
+
+The lite/single-threaded build was chosen deliberately: it needs no
+`Cross-Origin-Opener-Policy`/`Cross-Origin-Embedder-Policy` headers (the
+multi-threaded build requires `SharedArrayBuffer`, which does), and at
+≈1.7 MB it's far smaller than the full engine — while still being much
+stronger than any human. Files live in `frontend/public/engine/`
+(GPLv3, see the bundled `LICENSE.txt`) and are only loaded (the engine is
+only instantiated) the first time you check the box, not on every page load.
+Re-analysis happens automatically every time you navigate the tree; a stale
+in-flight search is stopped and its result discarded if you move again
+before it finishes.
+
+**Opening Explorer panel:** below the board, Chesster shows real move
+statistics for whichever position you're currently viewing, pulled live from
+Lichess's own opening explorer (`GET https://explorer.lichess.org/lichess` or
+`/masters`, which now requires *some* signed-in Lichess account — no special
+scope, just "not anonymous").
+
+It's **toggleable and customizable per study** — a small settings row above
+the panel lets you turn it off entirely, or change:
+- **Database:** Lichess players (default) or Masters games. Masters has no
+  rating filter (it's already an elite-only dataset), so the rating picker
+  disables itself in that mode.
+- **Minimum rating:** defaults to **"My current rating"** — dynamically
+  resolved *each time* to the bracket containing your current rating and
+  every bracket above it (e.g. a 1734 rating → `1600,1800,2000,2200,2500`),
+  using your **rapid** rating, falling back to blitz then classical if rapid
+  is unrated (1500 default if none are established). Pick a specific
+  threshold instead (e.g. "2000+") to pin it — that fixed value is then
+  saved with the study instead of tracking your rating over time.
+- Games are always filtered to blitz/rapid/classical speeds (bullet/
+  ultraBullet excluded as noisier; correspondence excluded as too rare).
+
+These settings are saved as part of the study (`explorerSettings`:
+`{enabled, database, minRating}`, where `minRating: null` means "always use
+my current rating"), so each study remembers its own explorer configuration.
+
+Each row shows a move with its white/draw/black bar and total game count at
+your level; **clicking a row plays that move**, adding it to the tree exactly
+like playing it on the board — so building a repertoire out of what strong
+players actually play is a couple of clicks, not manual entry.
+
+### The Stats tab
+
+Each study card shows an **expected score**: roughly "if I've perfectly
+memorized this repertoire, what fraction of a point do I score on average
+against real opposition?" It's a first, simplified implementation of the
+`escore` objective sketched in §2 below — restricted to exactly the tree
+you've built, rather than the full Markov-chain expansion over the whole
+opening space that §2 describes.
+
+**Why "expected score" and not "win probability":** a draw counts as half a
+point, same as chess scoring itself (and same as Lichess's own "expected
+score" stat on profile pages). A single number that only counted wins as
+"success" would throw away real information — a repertoire that draws 80% of
+the time isn't equivalent to one that loses 80% of the time, even though
+neither "wins."
+
+**The algorithm** (implemented in `backend/app/stats.py`), walking the
+study's tree from the root:
+
+1. **At a finished game** (checkmate/stalemate/etc., detected with
+   `python-chess`): score 1 if the studied side won, 0 if they lost, 0.5 for
+   a draw.
+2. **At a position where it's the studied side's move:** assume **perfect
+   memorization** — they always play the tree's recorded move. Score = the
+   score of that child position.
+3. **At a position where it's the opponent's move:** fetch the Opening
+   Explorer's move list for this exact position (same database/rating
+   settings as the study's `explorerSettings`), and take a weighted average
+   over *all* of the opponent's real replies, weighted by how often each is
+   actually played:
+   - If a reply matches a branch you've prepared, recurse into it.
+   - If a reply isn't in your tree, your preparation ends right there — its
+     contribution is that single move's own win/draw/loss rate (which the
+     explorer already reports per move), not a recursive expansion.
+
+**Explicit assumptions / simplifications, since this is easy to get wrong
+silently:**
+- **You always play your main line.** If a node where it's your move has
+  more than one prepared child (you recorded alternatives for yourself, not
+  just for the opponent), only the *first* child is used — exactly as
+  "mainline" is defined elsewhere in this tool. The calculation can't guess
+  which one you'd actually pick over the board.
+- **Leaving your own prep uses a neutral estimate, not a guess.** If the
+  tree ends on *your* move (you haven't decided how to continue), the score
+  there falls back to the position's overall explorer statistics — i.e. what
+  happens on average from that position across the whole population — rather
+  than assuming any specific continuation.
+- **The explorer's move list is capped** (its own default is the top ~12
+  moves per position). Extremely rare replies outside that list aren't
+  individually accounted for; in practice they're a small fraction of games
+  at any well-populated position.
+- **Ratings are current, not historical**, unless you've pinned a specific
+  threshold on the study (see the explorer settings above) — the "auto"
+  default re-resolves your rating bucket every time you recalculate.
+- **No caching across studies or across time.** Each recalculation walks the
+  whole tree fresh (positions repeated *within* one run, e.g. via
+  transpositions, are cached for that run only).
+
+**Why it's a manual, per-study "Recalculate" button, not automatic:** the
+algorithm makes one Opening Explorer request per position in your tree where
+it's the opponent's move (plus occasionally one more for the "left your own
+prep" fallback), made **sequentially** (each depends on knowing which
+branches to expand next) rather than in parallel. For a tree with dozens of
+opponent branches, that's dozens of sequential HTTP round-trips to Lichess —
+seconds, not milliseconds. Recomputing this on every page load (or after
+every single move while editing) would make the app feel slow for no benefit,
+since a repertoire doesn't change from one page view to the next. The result
+is cached on the study (`stats: {winProbability, calculatedAt, database,
+minRating, nodesEvaluated, explorerCalls}`) and only recomputed when you
+explicitly ask for it.
+
+Not built yet: the `hit` objective (P(reach +N)) from §2 below, and the
+practice/puzzle mode from §5 — the tree you build in Studies is the
+foundation those will eventually also use.
+
+---
+
 ## 1. Motivation
 
 Opening explorers tell you what people *play* and how those games *ended*, but not:
@@ -217,12 +416,12 @@ the name of the profile they were created with.
 
 | Source | Endpoint | Notes |
 | --- | --- | --- |
-| Opening explorer | `GET https://explorer.lichess.ovh/{lichess,masters}\?fen=..\&speeds=..\&ratings=..\&moves=..` | Move list with game counts and W/D/L |
+| Opening explorer | `GET https://explorer.lichess.org/{lichess,masters}\?fen=..\&speeds=..\&ratings=..` | Move list with game counts and W/D/L. Moved from the old `explorer.lichess.ovh` host and now requires a signed-in OAuth token (no special scope, just not anonymous) |
 | Cloud eval | `GET https://lichess.org/api/cloud-eval?fen=..&multiPv=1` | Free, cached server evals; sparse coverage |
 | Local Stockfish | UCI via `python-chess` | Fallback + verification at fixed depth/nodes |
 | Openings reference | `https://github.com/lichess-org/chess-openings` | ECO names for reporting |
 
-All are free; respect rate limits (~20 req/s explorer, less for cloud-eval) and
+Free, but rate-limited, and the explorer now needs a Lichess OAuth token;
 cache aggressively — opening trees are highly transpositional, key them by FEN.
 
 ## 9. Architecture sketch

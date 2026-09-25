@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -6,9 +8,18 @@ from . import store
 router = APIRouter()
 
 
+class ExplorerSettings(BaseModel):
+    enabled: bool = True
+    database: Literal["lichess", "masters"] = "lichess"
+    # None means "always use my current rating" rather than a fixed value pinned to the study.
+    minRating: int | None = None
+
+
 class StudyIn(BaseModel):
     name: str
     tree: dict
+    explorerSettings: ExplorerSettings = ExplorerSettings()
+    side: Literal["white", "black"] = "white"
 
 
 def _require_owner(request: Request) -> str:
@@ -30,7 +41,7 @@ def create_study(payload: StudyIn, request: Request) -> dict:
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name required")
-    return store.create_study(owner, name, payload.tree)
+    return store.create_study(owner, name, payload.tree, payload.explorerSettings.model_dump(), payload.side)
 
 
 @router.get("/api/studies/{study_id}")
@@ -48,7 +59,9 @@ def update_study(study_id: int, payload: StudyIn, request: Request) -> dict:
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name required")
-    study = store.update_study(owner, study_id, name, payload.tree)
+    study = store.update_study(
+        owner, study_id, name, payload.tree, payload.explorerSettings.model_dump(), payload.side
+    )
     if not study:
         raise HTTPException(status_code=404, detail="not found")
     return study
