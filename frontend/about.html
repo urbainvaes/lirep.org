@@ -46,7 +46,7 @@
       <section class="doc-section">
         <h2>Based on Lichess</h2>
         <p>This website is based in part on source code and assets from <a href="https://lichess.org">Lichess</a>, including its open-source chessboard library, Chessground. Lirep.org also uses Stockfish for chess analysis. It is an independent project and is not an official Lichess service.</p>
-        <p>Like the code of Lichess, the code of Lirep is released under the <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL-3.0</a>.</p>
+        <p>Like the code of Lichess, the code of Lirep is released under the <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL-3.0-or-later</a>.</p>
       </section>
 
       <section class="doc-section">
@@ -70,59 +70,80 @@
         Its unique features include:</p>
         <ul>
           <li>Easy sign-in with your Lichess account.</li>
-          <li>New metrics to evaluate an opening: the expected score (win % plus half the draw %) of your whole repertoire,
-              calculated assuming the opponent plays moves according to probabilities given by the Lichess opening explorer.</li>
+          <li>New metrics to evaluate an opening, such as the expected score (win % plus half the draw %) of your whole repertoire,
+              calculated assuming the opponent plays moves according to probabilities given by the Lichess opening explorer,
+              as well as the expected evaluation when reaching the end of preparation.</li>
           <li>Easy sharing of studies with the community, and a one-click import of someone else's opening.</li>
         </ul>
-        <p>For comparison, here is a short map of similar free software, with each project's license.
-        Others are more mature in places.</p>
-        <div class="community-table-wrap">
-          <table class="community-table">
+        <p>For comparison, here is a short map of similar free software projects.</p>
+        <div class="community-table-wrap tool-table-wrap" id="tool-table-wrap">
+          <div class="tool-table-bar">
+            <button type="button" class="btn btn-secondary tool-table-fullscreen" id="tool-table-fullscreen">⛶ Full screen</button>
+          </div>
+          <table class="community-table tool-table">
             <thead>
-              <tr><th>Tool</th><th>License</th><th>Runs as</th><th>Spaced repetition</th><th>Notes</th></tr>
+              <tr><th>Tool</th><th>License</th><th>Log in</th><th>Opening explorer</th><th>Stockfish</th><th>Spaced repetition</th><th>Metrics</th><th>Extra features</th></tr>
             </thead>
             <tbody>
               <tr>
-                <td><strong>Lirep</strong></td>
-                <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a></td>
-                <td>Hosted at lirep.org (beta)</td>
-                <td>Simple forgetting curve</td>
-                <td>Expected score and coverage of your whole repertoire from Lichess Explorer data, practice, Stockfish in the browser, a community page.</td>
-              </tr>
-              <tr>
-                <td><a href="https://chessstack.app">ChessStack</a></td>
-                <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a> (<a href="https://github.com/PvtTwinkle/Chessstack">source</a>)</td>
-                <td>Hosted site, or self-hosted with Docker and PostgreSQL</td>
-                <td>FSRS</td>
-                <td>Repertoire builder with masters, Lichess and engine data; opponent preparation from Chess.com and Lichess games; puzzles; game review against your repertoire. Hosted: free with one repertoire, a small fee for more.</td>
-              </tr>
-              <tr>
-                <td><a href="https://encroissant.org">En Croissant</a></td>
-                <td><a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> (<a href="https://github.com/franciscoBSalgueiro/en-croissant">source</a>)</td>
-                <td>Desktop application</td>
-                <td>FSRS</td>
-                <td>A full chess toolkit: any UCI engine, local game databases, repertoire building and training, everything on your own machine.</td>
-              </tr>
-              <tr>
-                <td><a href="https://github.com/daxaur/tabia">Tabia</a></td>
-                <td><a href="https://opensource.org/license/mit">MIT</a> (<a href="https://github.com/daxaur/tabia">source</a>)</td>
-                <td>Static web page in your browser, no server</td>
-                <td>Yes</td>
-                <td>Opening drills in several modes, custom openings with notes, Stockfish in the browser, Lichess and Chess.com integration. Progress stays in your browser.</td>
-              </tr>
-              <tr>
-                <td><a href="https://www.openingtree.com">OpeningTree</a></td>
-                <td><a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> (<a href="https://github.com/openingtree/openingtree">source</a>)</td>
-                <td>Hosted site, or run it yourself</td>
-                <td>No</td>
-                <td>Builds an opening tree with win percentages from a player's own games or from databases; good for scouting an opponent or studying yourself.</td>
-              </tr>
-              <tr>
-                <td><a href="https://lichess.org/study">Lichess studies</a></td>
+                <td><a href="https://lichess.org/study">Lichess studies</a><br><span class="tool-runs">Dynamic website</span><br><span class="tool-runs">Since Feb 2012 · ★ 18,807</span></td>
                 <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a> (<a href="https://github.com/lichess-org/lila">source</a>)</td>
-                <td>Lichess</td>
-                <td>No</td>
-                <td>Annotated, shareable lines with analysis; no drilling or repertoire scoring.</td>
+                <td class="login login--good">With Lichess</td>
+                <td class="login login--good">Rate-unlimited</td>
+                <td class="login login--good">In browser</td>
+                <td class="login login--bad">No</td>
+                <td>None</td>
+                <td><ul class="cell-list"><li>Annotated, shareable lines with analysis</li></ul></td>
+              </tr>
+              <tr>
+                <td><a href="https://www.openingtree.com">OpeningTree</a><br><span class="tool-runs">Dynamic website, or run it yourself</span><br><span class="tool-runs">Since Nov 2019 · ★ 476</span></td>
+                <td><a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> (<a href="https://github.com/openingtree/openingtree">source</a>)</td>
+                <td class="login login--good">No login</td>
+                <td class="login login--ok">Rate-limited</td>
+                <td class="login login--bad">No</td>
+                <td class="login login--bad">No</td>
+                <td><ul class="cell-list"><li>Win/draw/loss percentages per move</li></ul></td>
+                <td><ul class="cell-list"><li>Opening tree from a player's own games or from databases</li><li>Scouting an opponent or studying yourself</li></ul></td>
+              </tr>
+              <tr>
+                <td><a href="https://encroissant.org">En Croissant</a><br><span class="tool-runs">Desktop application</span><br><span class="tool-runs">Since Sep 2022 · ★ 1,926</span></td>
+                <td><a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> (<a href="https://github.com/franciscoBSalgueiro/en-croissant">source</a>)</td>
+                <td class="login login--good">No login</td>
+                <td class="login login--ok">Rate-limited</td>
+                <td class="login login--good">On your computer</td>
+                <td class="login login--good has-more" tabindex="0">FSRS ⓘ<span class="more">Free Spaced Repetition Scheduler: a modern algorithm that models your memory to schedule each review just before you would forget.</span></td>
+                <td><ul class="cell-list"><li>Win/draw/loss percentages per move</li></ul></td>
+                <td><ul class="cell-list"><li>Full chess toolkit</li><li>Local game databases</li></ul></td>
+              </tr>
+              <tr>
+                <td><a href="https://chessstack.app">ChessStack</a><br><span class="tool-runs">Dynamic website (free with one repertoire, a small fee for more), or self-hosted</span><br><span class="tool-runs">Since Feb 2026 · ★ 10</span></td>
+                <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a> (<a href="https://github.com/PvtTwinkle/Chessstack">source</a>)</td>
+                <td class="login login--bad">Account required</td>
+                <td class="login login--ok">Rate-limited</td>
+                <td class="login login--ok">On server</td>
+                <td class="login login--good has-more" tabindex="0">FSRS ⓘ<span class="more">Free Spaced Repetition Scheduler: a modern algorithm that models your memory to schedule each review just before you would forget.</span></td>
+                <td><ul class="cell-list"><li class="has-more" tabindex="0">Health score<span class="more">From 0 to 100: the average of coverage (100 minus 5 per gap against common opponent moves), share of learned positions, share of positions not currently due, and share without repeated errors.</span></li><li class="has-more" tabindex="0">Accuracy trend<span class="more">Share of correct answers in each of your last 14 drill sessions.</span></li><li class="has-more" tabindex="0">Trouble spots<span class="more">The 5 positions you have failed most often (at least 3 lapses).</span></li><li class="has-more" tabindex="0">Streak<span class="more">Number of consecutive days with a completed drill session.</span></li></ul></td>
+                <td><ul class="cell-list"><li>Opponent preparation from Chess.com and Lichess games</li><li>Puzzles</li><li>Game review against your repertoire</li></ul></td>
+              </tr>
+              <tr>
+                <td><a href="https://daxaur.github.io/tabia/">Tabia</a><br><span class="tool-runs">Static website</span><br><span class="tool-runs">Since Jun 2026 · ★ 23</span></td>
+                <td><a href="https://opensource.org/license/mit">MIT</a> (<a href="https://github.com/daxaur/tabia">source</a>)</td>
+                <td class="login login--good">No login</td>
+                <td class="login login--bad">No</td>
+                <td class="login login--good">In browser</td>
+                <td class="login login--ok">Fixed review intervals (1 to 90 days)</td>
+                <td><ul class="cell-list"><li class="has-more" tabindex="0">Correct and wrong moves<span class="more">Counted per drill session. A move played after asking for a hint doesn't count as correct.</span></li></ul></td>
+                <td><ul class="cell-list"><li>Opening drills in several modes</li><li>Custom openings with notes</li><li>Lichess and Chess.com integration</li><li>Progress stays in your browser</li></ul></td>
+              </tr>
+              <tr>
+                <td><a href="https://lirep.org"><strong>Lirep</strong></a><br><span class="tool-runs">Dynamic website</span><br><span class="tool-runs">Since Sep 2026</span></td>
+                <td><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a></td>
+                <td class="login login--good">With Lichess</td>
+                <td class="login login--good has-more" tabindex="0">Your choice: Lichess or Lirep ⓘ<span class="more">Lichess explorer: full data, but rate-limited. Lirep's own explorer: rate-unlimited, but only a subset of the data.</span></td>
+                <td class="login login--good">In browser</td>
+                <td class="login login--ok">Simple forgetting curve</td>
+                <td><ul class="cell-list"><li class="has-more" tabindex="0">Win probability<span class="more">Expected score (win % plus half the draw %) of your whole repertoire, assuming the opponent plays moves with the probabilities given by the explorer.</span></li><li class="has-more" tabindex="0">Expected evaluation<span class="more">Average Stockfish evaluation at the end of your prep, weighted by how likely the opponent is to reach each line.</span></li><li class="has-more" tabindex="0">Coverage<span class="more">Share of games still following your lines after each opponent reply, move by move.</span></li><li class="has-more" tabindex="0">Knowledge<span class="more">Practice score per position that fades over time like real memory, so it shows what you can recall right now.</span></li></ul></td>
+                <td><ul class="cell-list"><li>Community page with one-click import of shared openings</li></ul></td>
               </tr>
             </tbody>
           </table>
@@ -130,6 +151,48 @@
         <p class="doc-note">Gathered from each project's own pages and repositories in October 2026; features and prices change, so check them directly. Lirep is independent and not affiliated with any of these projects.</p>
       </section>
     </main>
+    <script>
+      // Show the extra info of a table cell as a floating overlay (position: fixed escapes the table's scroll wrapper).
+      document.querySelectorAll(".has-more").forEach((cell) => {
+        const more = cell.querySelector(".more");
+        const show = () => {
+          const r = cell.getBoundingClientRect();
+          more.style.top = r.bottom + 6 + "px";
+          more.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 253)) + "px";
+          more.classList.add("open");
+        };
+        const hide = () => more.classList.remove("open");
+        cell.addEventListener("mouseenter", show);
+        cell.addEventListener("focus", show);
+        cell.addEventListener("mouseleave", hide);
+        cell.addEventListener("blur", hide);
+      });
+    </script>
+    <script>
+      // Full-screen view of the comparison table, with a CSS fallback where the Fullscreen API is missing (e.g. iPhone).
+      (() => {
+        const wrap = document.getElementById("tool-table-wrap");
+        const btn = document.getElementById("tool-table-fullscreen");
+        const isOpen = () => document.fullscreenElement === wrap || wrap.classList.contains("is-fullscreen");
+        const sync = () => {
+          btn.textContent = isOpen() ? "✕ Exit full screen" : "⛶ Full screen";
+        };
+        btn.addEventListener("click", () => {
+          if (document.fullscreenElement) document.exitFullscreen();
+          else if (wrap.classList.contains("is-fullscreen")) wrap.classList.remove("is-fullscreen");
+          else if (wrap.requestFullscreen) wrap.requestFullscreen().catch(() => wrap.classList.add("is-fullscreen"));
+          else wrap.classList.add("is-fullscreen");
+          sync();
+        });
+        document.addEventListener("fullscreenchange", sync);
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && wrap.classList.contains("is-fullscreen")) {
+            wrap.classList.remove("is-fullscreen");
+            sync();
+          }
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
