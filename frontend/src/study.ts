@@ -157,13 +157,27 @@ function renderEditor(
 
         <div class="study-card study-card--moves">
           <div id="tree-view" class="tree-view"></div>
-          <p class="tree-hint">Click a move to jump there. Play a different move from any point to start a variation. Keyboard: ←/→ to navigate, ↑/↓ for the start/end of the line, Delete to remove the selected move, f to flip the board.</p>
+          <div class="study-comment-editor">
+            <textarea id="study-comment" rows="3" aria-label="Comment on selected position"></textarea>
+          </div>
           <p id="move-conflict" class="move-conflict" hidden></p>
           <div class="study-actions">
             <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
             <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
             <button id="delete-btn" class="btn btn-secondary study-icon-btn" type="button" data-icon="" aria-label="Delete this move" title="Delete this move and everything after it (Delete)"></button>
             <button id="start-point-btn" class="btn btn-secondary" type="button">Set as starting point</button>
+            <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
+          </div>
+          <div id="keyboard-help" class="study-keyboard-help" role="region" aria-label="Keyboard shortcuts" tabindex="-1" hidden>
+            <p class="study-keyboard-help__title">Keyboard shortcuts</p>
+            <p class="study-keyboard-help__intro">Click a move to jump there. Play a different move from any point to start a variation.</p>
+            <ul>
+              <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
+              <li><kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
+              <li><kbd>Delete</kbd> Delete selected move and its branches</li>
+              <li><kbd>F</kbd> Flip the board</li>
+              <li><kbd>?</kbd> Show / hide these shortcuts</li>
+            </ul>
           </div>
         </div>
 
@@ -219,6 +233,9 @@ function renderEditor(
 
   const boardEl = document.getElementById("board") as HTMLElement;
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
+  const commentInputEl = document.getElementById("study-comment") as HTMLTextAreaElement;
+  const keyboardHelpButton = document.getElementById("keyboard-help-btn") as HTMLButtonElement;
+  const keyboardHelpPanel = document.getElementById("keyboard-help") as HTMLElement;
   const explorerPanelEl = document.getElementById("explorer-panel") as HTMLElement;
   const explorerEnabledEl = document.getElementById("explorer-enabled") as HTMLInputElement;
   const explorerSourceEl = document.getElementById("explorer-source") as HTMLSelectElement;
@@ -266,6 +283,11 @@ function renderEditor(
 
   function currentSide(): "white" | "black" {
     return colorSelect ? (colorSelect.value as "white" | "black") : (existing?.side ?? "white");
+  }
+
+  function updateCommentEditor(): void {
+    const node = tree.nodes[currentId];
+    commentInputEl.value = node.comment ?? "";
   }
 
   function setSaveStatus(message: string, failed = false): void {
@@ -550,6 +572,7 @@ function renderEditor(
 
     currentId = nodeId;
     const chess = positionAt(tree, currentId);
+    updateCommentEditor();
     lichessAnalysisLink.href = `https://lichess.org/analysis/standard/${chess.fen().replaceAll(" ", "_")}`;
     board.set({
       fen: chess.fen(),
@@ -635,6 +658,37 @@ function renderEditor(
 
   deleteStudyBtn.addEventListener("click", () => void deleteStudy());
 
+  function closeKeyboardHelp(restoreFocus = false): void {
+    keyboardHelpPanel.hidden = true;
+    keyboardHelpButton.setAttribute("aria-expanded", "false");
+    keyboardHelpButton.setAttribute("aria-label", "Show keyboard shortcuts");
+    if (restoreFocus) keyboardHelpButton.focus();
+  }
+
+  function toggleKeyboardHelp(): void {
+    if (!keyboardHelpPanel.hidden) {
+      closeKeyboardHelp(true);
+      return;
+    }
+    keyboardHelpPanel.hidden = !keyboardHelpPanel.hidden;
+    keyboardHelpButton.setAttribute("aria-expanded", String(!keyboardHelpPanel.hidden));
+    keyboardHelpButton.setAttribute("aria-label", keyboardHelpPanel.hidden ? "Show keyboard shortcuts" : "Hide keyboard shortcuts");
+    if (!keyboardHelpPanel.hidden) keyboardHelpPanel.focus();
+  }
+
+  keyboardHelpButton.addEventListener("click", toggleKeyboardHelp);
+
+  document.addEventListener("click", (event) => {
+    if (
+      !keyboardHelpPanel.hidden &&
+      event.target instanceof Node &&
+      !keyboardHelpPanel.contains(event.target) &&
+      event.target !== keyboardHelpButton
+    ) {
+      closeKeyboardHelp();
+    }
+  });
+
   colorSelect?.addEventListener("change", () => {
     renderTreeView();
     if (!boardOrientationManuallySet) {
@@ -646,6 +700,27 @@ function renderEditor(
 
   nameInput.addEventListener("input", () => scheduleAutoSave(500));
   window.addEventListener("online", () => scheduleAutoSave(0));
+
+  commentInputEl.addEventListener("input", () => {
+    const node = tree.nodes[currentId];
+    if (commentInputEl.value.trim()) node.comment = commentInputEl.value;
+    else delete node.comment;
+
+    const selectedMove = treeViewEl.querySelector<HTMLElement>(`[data-node-id="${currentId}"]`);
+    const marker = selectedMove?.querySelector<HTMLElement>(".tree-move-comment-marker");
+    if (marker) {
+      marker.hidden = !node.comment;
+      marker.title = node.comment ? "Has a comment" : "";
+    }
+    scheduleAutoSave(500);
+  });
+
+  commentInputEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    commentInputEl.blur();
+  });
+  commentInputEl.addEventListener("blur", () => scheduleAutoSave(0));
 
   window.addEventListener("beforeunload", (event) => {
     if (deleting || (editVersion === savedVersion && !saveInProgress)) return;
@@ -684,6 +759,11 @@ function renderEditor(
   // editor), f flips the board.
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "Escape" && !keyboardHelpPanel.hidden) {
+      e.preventDefault();
+      closeKeyboardHelp(true);
+      return;
+    }
     const target = e.target as HTMLElement;
     const navigatingFromEngineToggle = target === engineEnabledEl && e.key.startsWith("Arrow");
     if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) && !navigatingFromEngineToggle) return;
@@ -714,6 +794,10 @@ function renderEditor(
       case "F":
         e.preventDefault();
         flipBoard();
+        break;
+      case "?":
+        e.preventDefault();
+        toggleKeyboardHelp();
         break;
     }
   });

@@ -7,6 +7,7 @@ export interface TreeNode {
   san: string | null;
   parentId: number | null;
   children: number[];
+  comment?: string;
 }
 
 export interface StudyTree {
@@ -93,7 +94,8 @@ function renderMove(
   if (nodeId === currentId) classes.push("tree-move--current");
   if (nodeId === studyStartNodeId) classes.push("tree-move--start-point");
   const title = nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
-  return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}</span>`;
+  const hasComment = Boolean(tree.nodes[nodeId].comment?.trim());
+  return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}<span class="tree-move-comment-marker"${hasComment ? ' title="Has a comment"' : ""} ${hasComment ? "" : "hidden"} aria-hidden="true"></span></span>`;
 }
 
 function renderLine(
