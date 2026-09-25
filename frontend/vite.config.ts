@@ -26,6 +26,7 @@ export default defineConfig({
         practice: resolve(__dirname, "practice.html"),
         community: resolve(__dirname, "community.html"),
         players: resolve(__dirname, "players.html"),
+        opening: resolve(__dirname, "opening.html"),
         player: resolve(__dirname, "player.html"),
         "practice-session": resolve(__dirname, "practice-session.html"),
         "sign-in-error": resolve(__dirname, "sign-in-error.html"),

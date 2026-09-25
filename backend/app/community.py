@@ -97,6 +97,28 @@ def player(username: str, request: Request, includeLirep: bool = True) -> dict:
     return {"maxUsers": MAX_USERS, **user, "studies": studies}
 
 
+@router.get("/api/community/studies/{study_id}")
+def shared_study(study_id: int, request: Request) -> dict:
+    """One shared opening, for the read-only viewer: its tree, side and the
+    Explorer settings its author used. Studies that are not shared (or no
+    longer shared) do not exist here. No scores: the viewer only browses."""
+    found = store.get_shared_study(study_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="not found")
+    owner, study = found
+    me = request.session.get("username")
+    return {
+        "id": study["id"],
+        "name": study["name"],
+        "side": study["side"],
+        "owner": owner,
+        "mine": me is not None and owner.lower() == me.lower(),
+        "tree": study["tree"],
+        "startNodeId": study["startNodeId"],
+        "explorerSettings": study["explorerSettings"],
+    }
+
+
 @router.get("/api/community/openings")
 def openings(request: Request, includeLirep: bool = False) -> list[dict]:
     """Up to LEADERBOARD_SIZE ranked studies per side, best score first. Only

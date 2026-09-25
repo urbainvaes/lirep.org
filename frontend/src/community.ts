@@ -66,7 +66,7 @@ function renderRow(opening: Opening, signedIn: boolean): string {
       <td class="community-rank">${opening.rank ?? "–"}</td>
       <td>
         <span class="side-pawn side-pawn--${opening.side}">${opening.side === "white" ? "♙" : "♟"}</span>
-        <strong>${escapeHtml(opening.name)}</strong>
+        <a class="opening-link" href="${opening.mine ? `/study.html?id=${opening.id}` : `/opening.html?id=${opening.id}`}"><strong>${escapeHtml(opening.name)}</strong></a>
         <div class="community-sub">${opening.moves} ${opening.moves === 1 ? "move" : "moves"} · ${opening.lines} ${opening.lines === 1 ? "line" : "lines"}</div>
       </td>
       <td><a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">${escapeHtml(opening.owner)}</a></td>

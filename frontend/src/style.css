@@ -2549,3 +2549,41 @@ body {
 #player-main {
   padding-top: 24px;
 }
+
+/* Read-only opening viewer (opening.html) */
+.opening-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.5rem;
+}
+
+.opening-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.opening-link:hover strong {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.opening-comment {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--primary);
+  background: var(--card-nested-bg);
+  border-radius: 0 4px 4px 0;
+  white-space: pre-wrap;
+}
+
+.opening-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.opening-import-message {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
