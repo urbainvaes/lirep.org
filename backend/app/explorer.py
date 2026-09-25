@@ -185,13 +185,19 @@ async def fetch_explorer_cached(
         async def fetch_and_cache() -> tuple[dict, str]:
             try:
                 data = await fetch_explorer(client, headers, fen, source, database, min_rating, speeds)
-            except (httpx.RequestError, RuntimeError):
+            except RuntimeError:
                 if not client.is_closed:
                     raise
                 # The initiating request can disconnect while another caller
                 # still awaits its fetch; retry with an independently owned client.
                 async with httpx.AsyncClient(timeout=client.timeout) as replacement:
                     data = await fetch_explorer(replacement, headers, fen, source, database, min_rating, speeds)
+            except httpx.RequestError as exc:
+                # A genuine connection failure (host unreachable, timed out) —
+                # not the client-closed case above — so surface it as a clean
+                # error instead of letting it propagate as a raw, undetailed 500.
+                name = "the local Lirep explorer" if source == "lirep" else "lichess's opening explorer"
+                raise HTTPException(status_code=502, detail=f"could not reach {name}") from exc
             fetched_at = datetime.now(UTC).isoformat()
             store.set_explorer_cache(cache_key, data, fetched_at)
             return data, fetched_at
