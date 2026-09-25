@@ -193,6 +193,10 @@ def record_attempt(study_id: int, payload: AttemptIn, request: Request) -> dict:
     if str(payload.nodeId) not in study["tree"]["nodes"]:
         raise HTTPException(status_code=400, detail="unknown node")
 
+    start_node_id = _resolve_start_node_id(study)
+    if payload.nodeId not in _drill_item_nodes(study["tree"], start_node_id, study["side"]):
+        raise HTTPException(status_code=400, detail="not a drill item for this study")
+
     states = store.get_practice_states(owner, study_id)
     prev = states.get(payload.nodeId)
     streak, tau_days = apply_answer(prev, payload.correct)
