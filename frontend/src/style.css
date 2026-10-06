@@ -1427,25 +1427,34 @@ body {
   white-space: normal;
 }
 
+/* The study's two other pages: outlined in the accent colour so they stand
+   out from the quieter "⋯" menu. */
 .study-head__link {
-  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  color: var(--primary);
   font-size: 0.9rem;
+  font-weight: 600;
   text-decoration: none;
 }
 
 .study-head__link:hover {
-  color: var(--text-strong);
-  text-decoration: underline;
+  background: var(--primary);
+  color: #fff;
 }
 
 .study-menu > summary.btn {
-  padding: 2px 10px;
+  padding: 5px 10px;
 }
 
 .study-head__links {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
 }
 
 .study-menu {

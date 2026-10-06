@@ -20,7 +20,7 @@ import {
   type ExplorerSpeed,
 } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
+import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
 interface StudyStats {
   winProbability: number;
@@ -205,8 +205,8 @@ function renderEditor(
           </span>
         </div>
         <div class="study-head__links" id="study-links" ${existing ? "" : "hidden"}>
-          <a class="study-head__link" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}">Stats</a>
-          <a class="study-head__link" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}">Practice</a>
+          <a class="study-head__link" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>Stats</a>
+          <a class="study-head__link" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>Practice</a>
           <details class="study-menu" id="study-menu">
             <summary class="btn btn-secondary" aria-label="More study options">⋯</summary>
             <div class="study-menu__panel">
@@ -737,9 +737,9 @@ function renderEditor(
       lineEnd = next;
       next = lastChild[lineEnd] ?? tree.nodes[lineEnd].children[0];
     }
-    lichessAnalysisLink.href = line.length
-      ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}`
-      : "https://lichess.org/analysis";
+    // The whole line, so it can be stepped through on Lichess, opened at the
+    // current move.
+    lichessAnalysisLink.href = lichessAnalysisUrl(line, sanPathTo(tree, currentId).length);
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),

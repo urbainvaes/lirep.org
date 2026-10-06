@@ -12,7 +12,7 @@ import {
   type ExplorerSettings,
 } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { lastMoveAt, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
+import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
 // A read-only viewer for a shared opening: browse its lines, nothing else.
 // Moves on the board are not accepted (no free play); the Explorer and
@@ -225,9 +225,9 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
       lineEnd = next;
       next = lastChild[lineEnd] ?? tree.nodes[lineEnd].children[0];
     }
-    lichessAnalysisLink.href = line.length
-      ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}`
-      : "https://lichess.org/analysis";
+    // The whole line, so it can be stepped through on Lichess, opened at the
+    // current move.
+    lichessAnalysisLink.href = lichessAnalysisUrl(line, sanPathTo(tree, currentId).length);
 
     board.set({
       fen: chess.fen(),

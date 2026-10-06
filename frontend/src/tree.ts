@@ -25,6 +25,15 @@ export function createEmptyTree(): StudyTree {
   };
 }
 
+/** A Lichess analysis link to `line` (SAN moves from the initial position),
+ * opened at its `ply`-th move: Lichess reads the ply from the #fragment and
+ * would otherwise open a pasted line at its last move. */
+export function lichessAnalysisUrl(line: string[], ply: number): string {
+  return line.length
+    ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}#${ply}`
+    : "https://lichess.org/analysis";
+}
+
 export function pathTo(tree: StudyTree, nodeId: number): TreeNode[] {
   const path: TreeNode[] = [];
   let current: TreeNode | undefined = tree.nodes[nodeId];
