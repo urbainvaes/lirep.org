@@ -82,7 +82,7 @@ export class Engine {
       this.activeSearch?.resolve(result);
       this.activeSearch = null;
       this.stopping = false;
-      void this.startNextSearch();
+      this.startNextSearch();
     }
   };
 
@@ -102,14 +102,17 @@ export class Engine {
         this.stopping = true;
         this.worker.postMessage("stop");
       } else if (!this.activeSearch) {
-        void this.startNextSearch();
+        this.startNextSearch();
       }
     });
   }
 
-  private async startNextSearch(): Promise<void> {
+  // Synchronous on purpose: only ever called once the engine is ready (from
+  // analyze, after awaiting readyPromise, or from a bestmove message), and
+  // an await here would let a second call claim the same queue slot, wipe
+  // the running search's record and leave its caller waiting forever.
+  private startNextSearch(): void {
     if (this.activeSearch || !this.nextSearch) return;
-    await this.readyPromise;
     const search = this.nextSearch;
     this.nextSearch = null;
     this.activeSearch = search;
