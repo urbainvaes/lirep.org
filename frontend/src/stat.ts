@@ -5,9 +5,9 @@ import { DEFAULT_SEARCH_DEPTH, Engine, type EngineLine } from "./engine";
 import { openEvaluationCache, type EvaluationCache } from "./evalCache";
 import {
   DEFAULT_EXPLORER_SETTINGS,
+  explorerSummary,
   explorerUrl,
   fetchExplorerDefaults,
-  LIREP_DATASET,
   ratingOptionsHtml,
   speedCheckboxesHtml,
   type ExplorerData,
@@ -367,20 +367,6 @@ async function loadStudy(id: number): Promise<Study | null> {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-// One line describing Explorer settings, e.g. "Lichess · 1600+ · blitz, rapid".
-// The Lirep source names its dataset, since its games are few and old.
-function explorerSummary(settings: CalculationSettings): string {
-  const parts: string[] = [];
-  if (settings.database === "player") {
-    parts.push("Lichess", `games of ${settings.player ?? "?"}`);
-  } else {
-    parts.push(settings.source === "lirep" ? `Lirep (${LIREP_DATASET})` : "Lichess");
-    parts.push(settings.database === "masters" ? "Masters" : `${settings.minRating ?? "?"}+`);
-  }
-  if (settings.database !== "masters" && settings.speeds?.length) parts.push(settings.speeds.join(", "));
-  return parts.join(" · ");
 }
 
 // Whether two sets of Explorer settings select the same games. Controls the

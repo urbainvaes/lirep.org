@@ -95,3 +95,56 @@ settings as out of date; nothing recalculates until Recalculate. The
 Stockfish depth is saved with the expected evaluation, as the Explorer
 settings are, and the page opens with the study's saved depth (falling
 back to this browser's last choice for a study never calculated).
+
+## 8. Redesign the study editor (done)
+
+Today, top to bottom: a name row (name, side, flip button, starting-point
+badge); the board and the move tree side by side, with a comment box and
+a row of buttons (Lichess analysis, Go to start, delete move, starting
+point, shortcuts) under the tree; the Opening Explorer and Stockfish as
+two large cards below; and a footer with the save status, the sharing
+checkbox and "Delete study". Problems:
+
+- The Explorer and Stockfish are below the fold on a laptop, so checking
+  a position means scrolling away from the board. The Stockfish card is
+  mostly empty space.
+- The Explorer shows Lichess's move list but not your repertoire: nothing
+  marks which replies you have prepared, or which popular ones you haven't.
+  That is what the editor is for, and coverage on the Stats page already
+  measures it.
+- The Explorer settings here are the same settings the Stats page
+  calculates with, but nothing says so; changing them here silently makes
+  the stats out of date.
+- No link to the study's Stats page or to Practice; the save status,
+  sharing and "Delete study" are at the bottom of the page.
+- On a phone, the name row and the moves card overflow the screen width.
+- The comment box always takes room, even when most positions have none.
+
+Proposed layout:
+
+1. **Header**: name (editable), side, starting-point badge; on the right,
+   the save status ("Saved"), links to Stats and Practice, and a "⋯" menu
+   with sharing and "Delete study".
+2. **Board** on the left, with navigation buttons under it (start, back,
+   forward, end, flip), as on Lichess.
+3. **Right column**: the move tree, then a tool panel with two tabs,
+   **Explorer** and **Stockfish**, so the tools sit next to the board at
+   any screen height. Stockfish becomes a compact line or two of
+   evaluation instead of a card.
+4. **Explorer tab**: the settings collapse to the same one-line summary
+   as on the Stats page, with a note that they also drive the study's
+   stats. Each move row is marked when it's in your tree. On the
+   opponent's turn, popular replies you haven't prepared are flagged
+   ("not prepared · 14% of games"); on your turn, your prepared move is
+   highlighted, and a missing reply is pointed out.
+5. **Comment**: an "Add a comment" link that opens the box, shown open
+   when the position already has one.
+6. **Move actions** (delete, set as starting point, open in Lichess) in
+   a small toolbar above the tree, with text labels on wide screens.
+7. **Phone**: header wraps; board, navigation, tabs, then the tree;
+   nothing wider than the screen.
+
+Decided: unprepared replies are flagged from 5% of games; Explorer and
+Stockfish are tabs (Stockfish runs only while its tab is shown); sharing
+and "Delete study" are in the "⋯" menu. The shared-opening viewer
+(`opening.ts`) still has the old layout.

@@ -1290,6 +1290,340 @@ body {
   border-color: var(--text-dim);
 }
 
+/* The study editor (study.ts). The read-only viewer (opening.ts) keeps the
+   plain .study-grid layout above. */
+.study-editor--edit {
+  max-width: 1200px;
+}
+
+/* Several elements here set their own display, which would otherwise
+   override the hidden attribute. */
+.study-editor--edit [hidden] {
+  display: none !important;
+}
+
+.study-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 16px;
+}
+
+.study-head__main {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.study-head__main .study-name-input {
+  width: 100%;
+}
+
+.study-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.study-head__meta .study-color-badge,
+.study-head__meta .study-start-badge,
+.study-head__meta .study-color-select {
+  height: 28px;
+  font-size: 0.82rem;
+}
+
+.study-head__meta .study-save-status {
+  flex: 0 1 auto;
+}
+
+.study-head__links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.study-menu {
+  position: relative;
+}
+
+.study-menu > summary {
+  list-style: none;
+}
+
+.study-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.study-menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 270px;
+  padding: 14px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.study-menu__panel .study-share {
+  margin: 0;
+}
+
+.study-menu__note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.study-editor--edit .study-grid {
+  grid-template-columns: minmax(0, 52fr) minmax(0, 48fr);
+}
+
+.study-board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.board-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.board-nav__btn {
+  flex: 1;
+  height: 36px;
+  padding: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.board-nav__btn:hover:not(:disabled) {
+  color: var(--text-strong);
+  border-color: var(--text-dim);
+}
+
+.board-nav__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.board-nav .board-flip-btn {
+  flex: 0 0 44px;
+  width: auto;
+  height: 36px;
+  font-size: 1.2rem;
+}
+
+/* The right column is as tall as the board column, whatever its content:
+   the tree and the tools scroll inside it instead of pushing the page down. */
+.study-side-col {
+  position: relative;
+  min-height: 0;
+}
+
+.study-side-col__inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.study-editor--edit .study-card--moves {
+  flex: 2 1 0;
+  min-height: 0;
+  aspect-ratio: auto;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.study-editor--edit .study-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.study-editor--edit .study-actions .study-icon-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
+}
+
+.study-editor--edit .study-keyboard-help-btn {
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+}
+
+.btn--active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* The settings line above already names the source. */
+.study-editor--edit .explorer-source {
+  display: none;
+}
+
+.board-nav__btn svg {
+  vertical-align: middle;
+}
+
+.study-editor--edit .study-comment-editor {
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.study-editor--edit .study-comment-editor textarea {
+  min-height: 48px;
+}
+
+.study-card--tools {
+  display: flex;
+  flex-direction: column;
+  flex: 3 1 0;
+  min-height: 0;
+  padding: 8px 14px 12px;
+}
+
+.tool-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-tab {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: -1px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.tool-tab:hover {
+  color: var(--text-strong);
+}
+
+.tool-tab[aria-selected="true"] {
+  border-bottom-color: var(--primary);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.tool-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 10px;
+}
+
+.explorer-settings-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.explorer-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: var(--card-nested-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.explorer-settings .speed-checkboxes {
+  margin-bottom: 0;
+}
+
+.explorer-settings__note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.explorer-row.explorer-row--prepared {
+  border-left: 3px solid var(--good);
+}
+
+.explorer-row.explorer-row--gap {
+  border-left: 3px solid var(--warn);
+}
+
+.explorer-row__mark {
+  margin-right: 4px;
+  color: var(--good);
+}
+
+.study-editor--edit .explorer-row {
+  padding: 4px 8px;
+}
+
+.engine-status-line {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 980px) {
+  .study-editor--edit .study-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .study-side-col__inner {
+    position: static;
+  }
+
+  .study-editor--edit .study-card--moves,
+  .study-card--tools {
+    flex: none;
+  }
+
+  .study-editor--edit .tree-view {
+    max-height: 320px;
+  }
+
+  .study-card--tools .tool-panel {
+    min-height: 200px;
+  }
+
+  /* Keyboard shortcuts mean little on a phone. */
+  .study-editor--edit .study-keyboard-help-btn {
+    display: none;
+  }
+
+  .study-head__links {
+    width: 100%;
+  }
+}
+
 .study-board {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -1356,6 +1690,11 @@ body {
 /* The study's starting point (see starting-point.md). */
 .tree-move--start-point {
   color: var(--info);
+}
+
+/* Selected wins over starting point; otherwise the text is blue on blue. */
+.tree-move--current.tree-move--start-point {
+  color: #fff;
 }
 
 .tree-variation {
@@ -1659,7 +1998,7 @@ body {
 
 .explorer-row {
   display: grid;
-  grid-template-columns: 56px 1fr 48px;
+  grid-template-columns: 56px 1fr 92px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -1733,19 +2072,19 @@ body {
   font-size: 0.85rem;
 }
 
+/* The move's share of the games here, aligned in its own column. */
+.explorer-row__share {
+  display: inline-block;
+  min-width: 38px;
+  margin-left: 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+
 .explorer-empty {
   margin: 0;
   color: var(--text-dim);
   font-size: 0.85rem;
-}
-
-.study-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 12px;
 }
 
 .study-save-status {

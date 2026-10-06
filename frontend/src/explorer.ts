@@ -94,6 +94,26 @@ export function speedCheckboxesHtml(allSpeeds: ExplorerSpeed[], selected: Explor
     .join("");
 }
 
+// One line describing Explorer settings, e.g. "Lichess · 1600+ · blitz, rapid".
+// The Lirep source names its dataset, since its games are few and old.
+export function explorerSummary(settings: {
+  source?: ExplorerSettings["source"];
+  database: ExplorerSettings["database"];
+  minRating: number | null;
+  speeds?: ExplorerSpeed[];
+  player?: string | null;
+}): string {
+  const parts: string[] = [];
+  if (settings.database === "player") {
+    parts.push("Lichess", `games of ${settings.player ?? "?"}`);
+  } else {
+    parts.push(settings.source === "lirep" ? `Lirep (${LIREP_DATASET})` : "Lichess");
+    parts.push(settings.database === "masters" ? "Masters" : `${settings.minRating ?? "?"}+`);
+  }
+  if (settings.database !== "masters" && settings.speeds?.length) parts.push(settings.speeds.join(", "));
+  return parts.join(" · ");
+}
+
 export async function fetchExplorerDefaults(): Promise<ExplorerDefaults | null> {
   try {
     const res = await fetch("/api/explorer-defaults", { credentials: "same-origin" });
@@ -115,6 +135,11 @@ export function explorerUrl(fen: string, settings: ExplorerSettings, side: "whit
     params.set("color", side);
   }
   return `/api/explorer?${params.toString()}`;
+}
+
+// A move's share of the games in this position.
+function formatShare(share: number): string {
+  return share < 0.01 ? "<1%" : `${Math.round(share * 100)}%`;
 }
 
 function formatCount(n: number): string {
@@ -145,21 +170,42 @@ export function renderExplorerError(panel: HTMLElement): void {
   panel.innerHTML = `<p class="explorer-empty">Explorer data unavailable right now.</p>`;
 }
 
-export function renderExplorer(panel: HTMLElement, data: ExplorerData, onPlay: (san: string) => void): void {
+// Opponent replies played in at least this share of games are flagged when
+// the study has no answer to them.
+export const UNPREPARED_THRESHOLD = 0.05;
+
+/** What the study already has at this position, for the editor's Explorer:
+ * the moves in the tree from here, and whether it's the studied side's turn. */
+export interface RepertoireView {
+  inTree: Set<string>;
+  yourTurn: boolean;
+}
+
+export function renderExplorer(
+  panel: HTMLElement,
+  data: ExplorerData,
+  onPlay: (san: string) => void,
+  repertoire?: RepertoireView,
+): void {
   if (data.moves.length === 0) {
     panel.innerHTML = `<p class="explorer-empty">No games found here yet.</p>`;
     return;
   }
 
+  const total = data.moves.reduce((sum, m) => sum + m.white + m.draws + m.black, 0);
   const rows = data.moves
     .map((move) => {
       const games = move.white + move.draws + move.black;
+      const prepared = repertoire?.inTree.has(move.san) ?? false;
+      const gap = repertoire !== undefined && !repertoire.yourTurn && !prepared && games / total >= UNPREPARED_THRESHOLD;
+      const rowClass = prepared ? " explorer-row--prepared" : gap ? " explorer-row--gap" : "";
+      const label = prepared ? "In your study" : gap ? "Not prepared" : "";
       const whitePct = (move.white / games) * 100;
       const drawsPct = (move.draws / games) * 100;
       const blackPct = (move.black / games) * 100;
       return `
-        <button class="explorer-row" type="button" data-san="${escapeHtml(move.san)}">
-          <span class="explorer-row__san">${escapeHtml(move.san)}</span>
+        <button class="explorer-row${rowClass}" type="button" data-san="${escapeHtml(move.san)}"${label ? ` title="${label}"` : ""}>
+          <span class="explorer-row__san">${prepared ? `<span class="explorer-row__mark" aria-label="In your study">✓</span>` : ""}${escapeHtml(move.san)}</span>
           <span class="explorer-row__bar-wrap">
             <span class="explorer-row__bar">
               <span class="explorer-row__white" style="width:${whitePct}%"></span>
@@ -172,7 +218,7 @@ export function renderExplorer(panel: HTMLElement, data: ExplorerData, onPlay: (
               <span class="explorer-row__pct-black">${blackPct.toFixed(0)}%</span>
             </span>
           </span>
-          <span class="explorer-row__games">${formatCount(games)}</span>
+          <span class="explorer-row__games">${formatCount(games)}<span class="explorer-row__share">${formatShare(games / total)}</span></span>
         </button>
       `;
     })
@@ -189,7 +235,7 @@ export function renderExplorer(panel: HTMLElement, data: ExplorerData, onPlay: (
 
   panel.innerHTML = `
     <div class="explorer-header">
-      <span>${source}</span>
+      <span class="explorer-source">${source}</span>
       ${data.opening ? `<span class="explorer-opening">${escapeHtml(data.opening)}</span>` : ""}
       <span class="explorer-fetched-at" title="Fetched ${fetchedAtDate.toLocaleString()}">Fetched ${formatFetchedAt(data.fetchedAt)}</span>
     </div>

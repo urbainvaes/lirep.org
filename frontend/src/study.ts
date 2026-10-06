@@ -6,6 +6,7 @@ import { applyLichessBoardTheme, computeDests, createBoard, playMoveSound, toCol
 import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
 import {
   DEFAULT_EXPLORER_SETTINGS,
+  explorerSummary,
   explorerUrl,
   fetchExplorerDefaults,
   ratingOptionsHtml,
@@ -41,6 +42,25 @@ interface Study {
   // null (the default) means calculations start at the tree's real root —
   // see starting-point.md.
   startNodeId: number | null;
+}
+
+type Tool = "explorer" | "engine";
+const TOOL_STORAGE_KEY = "study-tool";
+
+function getSavedTool(): Tool {
+  try {
+    return localStorage.getItem(TOOL_STORAGE_KEY) === "engine" ? "engine" : "explorer";
+  } catch {
+    return "explorer";
+  }
+}
+
+function saveTool(tool: Tool): void {
+  try {
+    localStorage.setItem(TOOL_STORAGE_KEY, tool);
+  } catch {
+    // The choice just isn't remembered.
+  }
 }
 
 function getStudyId(): number | null {
@@ -141,113 +161,140 @@ function renderEditor(
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
   main.innerHTML = `
-    <div class="study-editor">
-      <div class="study-name-row">
-        <input
-          id="study-name"
-          class="study-name-input"
-          type="text"
-          placeholder="Name this study"
-          value="${existing ? escapeHtml(existing.name) : ""}"
-        />
-        ${
-          existing
-            ? `<span class="study-color-badge">${existing.side === "white" ? "Playing White" : "Playing Black"}</span>`
-            : `<select id="study-color" class="study-color-select" title="Which side is this repertoire for? This can't be changed after saving.">
-                  <option value="white" ${newStudySide === "white" ? "selected" : ""}>Playing White</option>
-                  <option value="black" ${newStudySide === "black" ? "selected" : ""}>Playing Black</option>
-                </select>`
-        }
-        <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board" aria-label="Flip board"></button>
-        <span id="study-start-badge" class="study-start-badge" hidden></span>
-      </div>
+    <div class="study-editor study-editor--edit">
+      <header class="study-head">
+        <div class="study-head__main">
+          <input
+            id="study-name"
+            class="study-name-input"
+            type="text"
+            placeholder="Name this study"
+            aria-label="Study name"
+            value="${existing ? escapeHtml(existing.name) : ""}"
+          />
+          <div class="study-head__meta">
+            ${
+              existing
+                ? `<span class="study-color-badge">${existing.side === "white" ? "Playing White" : "Playing Black"}</span>`
+                : `<select id="study-color" class="study-color-select" aria-label="Side" title="Which side is this repertoire for? This can't be changed after saving.">
+                      <option value="white" ${newStudySide === "white" ? "selected" : ""}>Playing White</option>
+                      <option value="black" ${newStudySide === "black" ? "selected" : ""}>Playing Black</option>
+                    </select>`
+            }
+            <span id="study-start-badge" class="study-start-badge" hidden></span>
+            <span id="study-save-status" class="study-save-status" role="status" aria-live="polite">
+              ${existing ? "All changes saved." : "Name this study to start auto-saving."}
+            </span>
+          </div>
+        </div>
+        <div class="study-head__links" id="study-links" ${existing ? "" : "hidden"}>
+          <a class="btn btn-secondary" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}">Stats</a>
+          <a class="btn btn-secondary" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}">Practice</a>
+          <details class="study-menu" id="study-menu">
+            <summary class="btn btn-secondary" aria-label="More study options">⋯</summary>
+            <div class="study-menu__panel">
+              <label class="study-share">
+                <input type="checkbox" id="study-shared" ${existing?.shared ? "checked" : ""} />
+                Share with the community
+              </label>
+              <p class="study-menu__note">Shared studies appear on the Community page, and other people can import a copy.</p>
+              <button id="delete-study-btn" class="btn btn-danger" type="button">Delete study</button>
+            </div>
+          </details>
+        </div>
+      </header>
+
       <div class="study-grid">
-        <div class="study-card study-card--board">
-          <div id="board" class="study-board"></div>
-        </div>
-
-        <div class="study-card study-card--moves">
-          <div id="tree-view" class="tree-view"></div>
-          <div class="study-comment-editor">
-            <textarea id="study-comment" rows="3" aria-label="Comment on selected position"></textarea>
+        <div class="study-board-col">
+          <div class="study-card study-card--board">
+            <div id="board" class="study-board"></div>
           </div>
-          <p id="move-conflict" class="move-conflict" hidden></p>
-          <div class="study-actions">
-            <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
-            <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
-            <button id="delete-btn" class="btn btn-secondary study-icon-btn" type="button" data-icon="" aria-label="Delete this move" title="Delete this move and everything after it (Delete)"></button>
-            <button id="start-point-btn" class="btn btn-secondary" type="button">Set as starting point</button>
-            <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
-          </div>
-          <div id="keyboard-help" class="study-keyboard-help" role="region" aria-label="Keyboard shortcuts" tabindex="-1" hidden>
-            <p class="study-keyboard-help__title">Keyboard shortcuts</p>
-            <p class="study-keyboard-help__intro">Click a move to jump there. Play a different move from any point to start a variation.</p>
-            <ul>
-              <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
-              <li><kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
-              <li><kbd>Delete</kbd> Delete selected move and its branches</li>
-              <li><kbd>F</kbd> Flip the board</li>
-              <li><kbd>?</kbd> Show / hide these shortcuts</li>
-            </ul>
+          <div class="board-nav" role="group" aria-label="Move navigation">
+            <button id="nav-start" class="board-nav__btn" type="button" title="Go to start (↑)" aria-label="Go to start"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+            <button id="nav-back" class="board-nav__btn" type="button" title="Previous move (←)" aria-label="Previous move"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M17 5v14L6 12z"/></svg></button>
+            <button id="nav-forward" class="board-nav__btn" type="button" title="Next move (→)" aria-label="Next move"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M7 5v14l11-7z"/></svg></button>
+            <button id="nav-end" class="board-nav__btn" type="button" title="End of line (↓)" aria-label="End of line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+            <button id="flip-board-btn" class="board-nav__btn board-flip-btn" type="button" data-icon="&#xe07b;" title="Flip board" aria-label="Flip board"></button>
           </div>
         </div>
 
-        <div class="study-card study-card--explorer">
-          <div class="analysis-header">
-            <label class="explorer-toggle">
-              <input type="checkbox" id="explorer-enabled" aria-label="Opening Explorer" ${settings.enabled ? "checked" : ""} />
-              <span class="analysis-label" data-icon="" aria-hidden="true">Opening Explorer</span>
-            </label>
-            <div class="analysis-header__settings">
-              <select id="explorer-source" aria-label="Explorer data source" ${settings.enabled ? "" : "disabled"}>
-                <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
-                <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
-              </select>
-              <select id="explorer-database" aria-label="Lichess database" ${settings.enabled && settings.source === "lichess" ? "" : "disabled"}>
-                <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
-                <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
-                <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
-              </select>
-              <input id="explorer-player" class="explorer-player" type="text" placeholder="Lichess username"
-                aria-label="Player whose games to show" value="${escapeHtml(settings.player ?? "")}"
-                ${settings.enabled && settings.database === "player" ? "" : "hidden"} />
-              <select
-                id="explorer-min-rating"
-                ${settings.enabled && settings.database === "lichess" ? "" : "disabled"}
-              >
-                ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
-              </select>
+        <div class="study-side-col">
+          <div class="study-side-col__inner">
+            <div class="study-card study-card--moves">
+              <div class="study-actions">
+                <button id="delete-btn" class="btn btn-secondary study-icon-btn" type="button" data-icon="&#xe04f;" aria-label="Delete this move" title="Delete this move and everything after it (Delete)"></button>
+                <button id="start-point-btn" class="btn btn-secondary btn-small" type="button">Set as starting point</button>
+                <button id="comment-btn" class="btn btn-secondary btn-small" type="button" aria-expanded="false" aria-controls="comment-editor">Comment</button>
+                <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
+                <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
+              </div>
+              <div id="keyboard-help" class="study-keyboard-help" role="region" aria-label="Keyboard shortcuts" tabindex="-1" hidden>
+                <p class="study-keyboard-help__title">Keyboard shortcuts</p>
+                <p class="study-keyboard-help__intro">Click a move to jump there. Play a different move from any point to start a variation.</p>
+                <ul>
+                  <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
+                  <li><kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
+                  <li><kbd>Delete</kbd> Delete selected move and its branches</li>
+                  <li><kbd>F</kbd> Flip the board</li>
+                  <li><kbd>?</kbd> Show / hide these shortcuts</li>
+                </ul>
+              </div>
+              <div id="tree-view" class="tree-view"></div>
+              <p id="move-conflict" class="move-conflict" hidden></p>
+              <div class="study-comment-editor" id="comment-editor" hidden>
+                <textarea id="study-comment" rows="2" placeholder="Comment on this position" aria-label="Comment on selected position"></textarea>
+              </div>
+            </div>
+
+            <div class="study-card study-card--tools">
+              <div class="tool-tabs" role="tablist" aria-label="Analysis tools">
+                <button id="tab-explorer" class="tool-tab" type="button" role="tab" aria-controls="tool-explorer">
+                  <span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span>Opening Explorer
+                </button>
+                <button id="tab-engine" class="tool-tab" type="button" role="tab" aria-controls="tool-engine">
+                  <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span>Stockfish
+                </button>
+              </div>
+
+              <div id="tool-explorer" class="tool-panel" role="tabpanel" aria-labelledby="tab-explorer">
+                <div class="explorer-settings-line">
+                  <span id="explorer-summary"></span>
+                  <button id="explorer-settings-btn" class="btn btn-secondary btn-small" type="button" aria-expanded="false" aria-controls="explorer-settings">Change</button>
+                </div>
+                <div id="explorer-settings" class="explorer-settings" hidden>
+                  <div class="analysis-header__settings">
+                    <select id="explorer-source" aria-label="Explorer data source">
+                      <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
+                      <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
+                    </select>
+                    <select id="explorer-database" aria-label="Lichess database" ${settings.source === "lichess" ? "" : "disabled"}>
+                      <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
+                      <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
+                      <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
+                    </select>
+                    <input id="explorer-player" class="explorer-player" type="text" placeholder="Lichess username"
+                      aria-label="Player whose games to show" value="${escapeHtml(settings.player ?? "")}"
+                      ${settings.database === "player" ? "" : "hidden"} />
+                    <select id="explorer-min-rating" aria-label="Minimum rating" ${settings.database === "lichess" ? "" : "disabled"}>
+                      ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
+                    </select>
+                  </div>
+                  <div class="speed-checkboxes" id="explorer-speeds">
+                    ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database === "masters")}
+                  </div>
+                  <p class="explorer-settings__note">These settings are also the ones this study's stats are calculated with.</p>
+                </div>
+                <div id="explorer-panel" class="explorer-panel"></div>
+              </div>
+
+              <div id="tool-engine" class="tool-panel" role="tabpanel" aria-labelledby="tab-engine" hidden>
+                <p class="engine-status-line">Stockfish, in this browser · <span id="engine-status" class="engine-eval"></span></p>
+                <div id="engine-panel" class="engine-panel"></div>
+              </div>
             </div>
           </div>
-          <div class="speed-checkboxes" id="explorer-speeds">
-            ${speedCheckboxesHtml(allSpeeds, settings.speeds, !settings.enabled || settings.database === "masters")}
-          </div>
-          <div id="explorer-panel" class="explorer-panel" ${settings.enabled ? "" : "hidden"}></div>
-        </div>
-
-        <div class="study-card study-card--engine">
-          <div class="analysis-header">
-            <label class="explorer-toggle">
-              <input type="checkbox" id="engine-enabled" aria-label="Stockfish" />
-              <span class="analysis-label" data-icon="" aria-hidden="true">Stockfish</span>
-            </label>
-            <span id="engine-status" class="engine-eval"></span>
-          </div>
-          <div id="engine-panel" class="engine-panel" hidden></div>
         </div>
       </div>
-
-        <div class="study-footer">
-          <p id="study-save-status" class="study-save-status" role="status" aria-live="polite">
-            ${existing ? "Changes save automatically." : "Name this study to start auto-saving."}
-          </p>
-          <label id="study-share" class="study-share" ${existing ? "" : "hidden"}
-            title="Shared studies appear on the Community page (name, your username, expected score), and other people can import a copy. Studies are shared by default; untick to keep this one private.">
-            <input type="checkbox" id="study-shared" ${existing?.shared ? "checked" : ""} />
-            Share with the community
-          </label>
-          <button id="delete-study-btn" class="btn btn-danger" type="button" ${existing ? "" : "hidden"}>Delete study</button>
-        </div>
     </div>
   `;
 
@@ -257,25 +304,41 @@ function renderEditor(
   const keyboardHelpButton = document.getElementById("keyboard-help-btn") as HTMLButtonElement;
   const keyboardHelpPanel = document.getElementById("keyboard-help") as HTMLElement;
   const explorerPanelEl = document.getElementById("explorer-panel") as HTMLElement;
-  const explorerEnabledEl = document.getElementById("explorer-enabled") as HTMLInputElement;
   const explorerSourceEl = document.getElementById("explorer-source") as HTMLSelectElement;
   const explorerDatabaseEl = document.getElementById("explorer-database") as HTMLSelectElement;
   const explorerPlayerEl = document.getElementById("explorer-player") as HTMLInputElement;
   const explorerMinRatingEl = document.getElementById("explorer-min-rating") as HTMLSelectElement;
   const explorerSpeedsEl = document.getElementById("explorer-speeds") as HTMLElement;
-  const engineEnabledEl = document.getElementById("engine-enabled") as HTMLInputElement;
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const nameInput = document.getElementById("study-name") as HTMLInputElement;
   const colorSelect = document.getElementById("study-color") as HTMLSelectElement | null;
   const saveStatusEl = document.getElementById("study-save-status") as HTMLElement;
   const deleteStudyBtn = document.getElementById("delete-study-btn") as HTMLButtonElement;
-  const shareWrapEl = document.getElementById("study-share") as HTMLElement;
   const sharedInput = document.getElementById("study-shared") as HTMLInputElement;
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
   const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
   const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
+  const navStartBtn = document.getElementById("nav-start") as HTMLButtonElement;
+  const navBackBtn = document.getElementById("nav-back") as HTMLButtonElement;
+  const navForwardBtn = document.getElementById("nav-forward") as HTMLButtonElement;
+  const navEndBtn = document.getElementById("nav-end") as HTMLButtonElement;
+  const studyLinksEl = document.getElementById("study-links") as HTMLElement;
+  const studyMenuEl = document.getElementById("study-menu") as HTMLDetailsElement;
+  const commentBtn = document.getElementById("comment-btn") as HTMLButtonElement;
+  const commentEditorEl = document.getElementById("comment-editor") as HTMLElement;
+  const explorerSummaryEl = document.getElementById("explorer-summary") as HTMLElement;
+  const explorerSettingsBtn = document.getElementById("explorer-settings-btn") as HTMLButtonElement;
+  const explorerSettingsEl = document.getElementById("explorer-settings") as HTMLElement;
+  const tabButtons = {
+    explorer: document.getElementById("tab-explorer") as HTMLButtonElement,
+    engine: document.getElementById("tab-engine") as HTMLButtonElement,
+  };
+  const tabPanels = {
+    explorer: document.getElementById("tool-explorer") as HTMLElement,
+    engine: document.getElementById("tool-engine") as HTMLElement,
+  };
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
   let studyId = existing?.id ?? null;
@@ -297,6 +360,10 @@ function renderEditor(
   let engineAnalysisId = 0;
   let boardOrientation = currentSide();
   let boardOrientationManuallySet = false;
+  // The Explorer and Stockfish share one panel; only the visible one runs.
+  let activeTool: Tool = getSavedTool();
+  // The comment box opens for a position that has a comment, or when asked.
+  let commentRequested = false;
 
   // Remembers, per node, which child was last navigated into from it — so
   // arrow-key "forward"/"end of line" continue along whichever branch you're
@@ -311,6 +378,10 @@ function renderEditor(
   function updateCommentEditor(): void {
     const node = tree.nodes[currentId];
     commentInputEl.value = node.comment ?? "";
+    const open = commentRequested || Boolean(node.comment?.trim());
+    commentEditorEl.hidden = !open;
+    commentBtn.setAttribute("aria-expanded", String(open));
+    commentBtn.classList.toggle("btn--active", open);
   }
 
   function setSaveStatus(message: string, failed = false): void {
@@ -393,8 +464,9 @@ function renderEditor(
           colorSelect.disabled = true;
           colorSelect.title = "The playing side is fixed once the study is created.";
         }
-        deleteStudyBtn.hidden = false;
-        shareWrapEl.hidden = false;
+        studyLinksEl.hidden = false;
+        (document.getElementById("study-stats-link") as HTMLAnchorElement).href = `/stat.html?id=${saved.id}`;
+        (document.getElementById("study-practice-link") as HTMLAnchorElement).href = `/practice-session.html?id=${saved.id}`;
         sharedInput.checked = saved.shared ?? true;
       }
       if (!deleting) {
@@ -491,12 +563,7 @@ function renderEditor(
   }
 
   async function updateExplorer(fen: string): Promise<void> {
-    if (!settings.enabled) {
-      explorerPanelEl.hidden = true;
-      return;
-    }
-    explorerPanelEl.hidden = false;
-
+    if (activeTool !== "explorer") return;
     const requestId = ++explorerRequestId;
     renderExplorerLoading(explorerPanelEl);
     try {
@@ -508,7 +575,11 @@ function renderEditor(
       }
       const data: ExplorerData = await res.json();
       if (requestId !== explorerRequestId) return;
-      renderExplorer(explorerPanelEl, data, playSan);
+      const chess = positionAt(tree, currentId);
+      renderExplorer(explorerPanelEl, data, playSan, {
+        inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
+        yourTurn: (chess.turn() === "w") === (currentSide() === "white"),
+      });
     } catch {
       if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl);
     }
@@ -531,7 +602,7 @@ function renderEditor(
 
   async function updateEngine(chess: Chess): Promise<void> {
     const analysisId = ++engineAnalysisId;
-    if (!engineEnabledEl.checked) return;
+    if (activeTool !== "engine") return;
 
     if (chess.isGameOver()) {
       board.set({ drawable: { autoShapes: [] } });
@@ -543,7 +614,7 @@ function renderEditor(
     if (!engine) engine = new Engine();
     engineStatusEl.textContent = "Thinking…";
     const analysis: EngineAnalysis = await engine.analyze(chess.fen());
-    if (analysisId !== engineAnalysisId || !engineEnabledEl.checked) return;
+    if (analysisId !== engineAnalysisId || activeTool !== "engine") return;
     const sideToMoveIsWhite = chess.turn() === "w";
 
     board.set({
@@ -616,6 +687,7 @@ function renderEditor(
       lastChild[path[i].id] = path[i + 1].id;
     }
 
+    if (nodeId !== currentId) commentRequested = false;
     currentId = nodeId;
     const chess = positionAt(tree, currentId);
     updateCommentEditor();
@@ -639,6 +711,8 @@ function renderEditor(
 
     renderTreeView();
     deleteBtn.disabled = currentId === tree.rootId;
+    navBackBtn.disabled = navStartBtn.disabled = currentId === tree.rootId;
+    navForwardBtn.disabled = navEndBtn.disabled = tree.nodes[currentId].children.length === 0;
     updateStartPointUI();
     void updateExplorer(chess.fen());
     void updateEngine(chess);
@@ -674,7 +748,58 @@ function renderEditor(
     goTo(startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId);
   }
 
+  function setTool(tool: Tool): void {
+    activeTool = tool;
+    saveTool(tool);
+    for (const name of ["explorer", "engine"] as const) {
+      tabButtons[name].setAttribute("aria-selected", String(name === tool));
+      tabButtons[name].tabIndex = name === tool ? 0 : -1;
+      tabPanels[name].hidden = name !== tool;
+    }
+    if (tool === "engine") {
+      void updateEngine(positionAt(tree, currentId));
+    } else {
+      // Stockfish stops when hidden: it is the expensive one.
+      engineAnalysisId++;
+      board?.set({ drawable: { autoShapes: [] } });
+      engineStatusEl.textContent = "";
+      enginePanelEl.innerHTML = "";
+      engine?.terminate();
+      engine = null;
+      void updateExplorer(positionAt(tree, currentId).fen());
+    }
+  }
+
+  tabButtons.explorer.addEventListener("click", () => setTool("explorer"));
+  tabButtons.engine.addEventListener("click", () => setTool("engine"));
+  for (const name of ["explorer", "engine"] as const) {
+    tabButtons[name].addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const other = name === "explorer" ? "engine" : "explorer";
+      setTool(other);
+      tabButtons[other].focus();
+    });
+  }
+
+  function updateExplorerSummary(): void {
+    explorerSummaryEl.textContent = explorerSummary(settings);
+  }
+  updateExplorerSummary();
+
+  explorerSettingsBtn.addEventListener("click", () => {
+    explorerSettingsEl.hidden = !explorerSettingsEl.hidden;
+    explorerSettingsBtn.setAttribute("aria-expanded", String(!explorerSettingsEl.hidden));
+    explorerSettingsBtn.textContent = explorerSettingsEl.hidden ? "Change" : "Done";
+  });
+
   board = createBoard(boardEl, onMove, boardOrientation);
+  for (const name of ["explorer", "engine"] as const) {
+    tabButtons[name].setAttribute("aria-selected", String(name === activeTool));
+    tabButtons[name].tabIndex = name === activeTool ? 0 : -1;
+    tabPanels[name].hidden = name !== activeTool;
+  }
   flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   goToStart();
 
@@ -702,7 +827,26 @@ function renderEditor(
 
   flipBoardBtn.addEventListener("click", flipBoard);
 
-  document.getElementById("start-btn")?.addEventListener("click", goToStart);
+  navStartBtn.addEventListener("click", goToStart);
+  navBackBtn.addEventListener("click", stepBack);
+  navForwardBtn.addEventListener("click", stepForward);
+  navEndBtn.addEventListener("click", goToLineEnd);
+
+  commentBtn.addEventListener("click", () => {
+    const open = commentEditorEl.hidden;
+    if (!open && tree.nodes[currentId].comment?.trim()) {
+      commentInputEl.focus(); // a comment is there: the box stays open
+      return;
+    }
+    commentRequested = open;
+    updateCommentEditor();
+    if (open) commentInputEl.focus();
+  });
+
+  // The "⋯" menu closes on any click outside it, like a native menu.
+  document.addEventListener("click", (event) => {
+    if (studyMenuEl.open && event.target instanceof Node && !studyMenuEl.contains(event.target)) studyMenuEl.open = false;
+  });
 
   deleteBtn.addEventListener("click", deleteCurrentMove);
 
@@ -849,8 +993,7 @@ function renderEditor(
       return;
     }
     const target = e.target as HTMLElement;
-    const navigatingFromEngineToggle = target === engineEnabledEl && e.key.startsWith("Arrow");
-    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) && !navigatingFromEngineToggle) return;
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
 
     switch (e.key) {
       case "ArrowLeft":
@@ -888,24 +1031,17 @@ function renderEditor(
 
   function updateExplorerControls(): void {
     const playerSelected = settings.database === "player";
-    explorerSourceEl.disabled = !settings.enabled;
     explorerSourceEl.querySelector<HTMLOptionElement>('option[value="lirep"]')!.disabled =
       playerSelected || !explorerDefaults?.lirepAvailable;
-    explorerDatabaseEl.disabled = !settings.enabled || (settings.source === "lirep" && !playerSelected);
+    explorerDatabaseEl.disabled = settings.source === "lirep" && !playerSelected;
     explorerDatabaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = settings.source === "lirep";
-    explorerMinRatingEl.disabled = !(settings.enabled && settings.database === "lichess");
-    explorerPlayerEl.hidden = !(settings.enabled && playerSelected);
+    explorerMinRatingEl.disabled = settings.database !== "lichess";
+    explorerPlayerEl.hidden = !playerSelected;
     explorerSpeedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
-      cb.disabled = !settings.enabled || settings.database === "masters";
+      cb.disabled = settings.database === "masters";
     });
+    updateExplorerSummary();
   }
-
-  explorerEnabledEl.addEventListener("change", () => {
-    settings.enabled = explorerEnabledEl.checked;
-    updateExplorerControls();
-    void updateExplorer(positionAt(tree, currentId).fen());
-    scheduleAutoSave();
-  });
 
   explorerSourceEl.addEventListener("change", () => {
     settings.source = explorerSourceEl.value as ExplorerSettings["source"];
@@ -929,6 +1065,7 @@ function renderEditor(
           if (me.username && !settings.player && settings.database === "player") {
             settings.player = me.username;
             explorerPlayerEl.value = me.username;
+            updateExplorerSummary();
             void updateExplorer(positionAt(tree, currentId).fen());
             scheduleAutoSave();
           }
@@ -942,12 +1079,14 @@ function renderEditor(
 
   explorerPlayerEl.addEventListener("change", () => {
     settings.player = explorerPlayerEl.value.trim() || null;
+    updateExplorerSummary();
     void updateExplorer(positionAt(tree, currentId).fen());
     scheduleAutoSave();
   });
 
   explorerMinRatingEl.addEventListener("change", () => {
     settings.minRating = Number(explorerMinRatingEl.value);
+    updateExplorerSummary();
     void updateExplorer(positionAt(tree, currentId).fen());
     scheduleAutoSave();
   });
@@ -961,22 +1100,9 @@ function renderEditor(
       return;
     }
     settings.speeds = target.checked ? [...settings.speeds, speed] : settings.speeds.filter((s) => s !== speed);
+    updateExplorerSummary();
     void updateExplorer(positionAt(tree, currentId).fen());
     scheduleAutoSave();
-  });
-
-  engineEnabledEl.addEventListener("change", () => {
-    if (engineEnabledEl.checked) {
-      void updateEngine(positionAt(tree, currentId));
-    } else {
-      engineAnalysisId++;
-      board.set({ drawable: { autoShapes: [] } });
-      engineStatusEl.textContent = "";
-      enginePanelEl.hidden = true;
-      enginePanelEl.innerHTML = "";
-      engine?.terminate();
-      engine = null;
-    }
   });
 
 }
