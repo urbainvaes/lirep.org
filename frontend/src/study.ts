@@ -3,7 +3,7 @@ import type { Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
 import { applyLichessBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
-import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, whiteGaugeShare, type EngineAnalysis } from "./engine";
+import { DEFAULT_SEARCH_DEPTH, Engine, formatScore, uciMoveToKeys, whiteGaugeShare, winningChances, type EngineAnalysis, type EngineLine } from "./engine";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
@@ -138,9 +138,46 @@ function describeStartPoint(tree: StudyTree, startNodeId: number | null): string
   return `Starts after ${moveNumber}.${isWhite ? "" : ".."}${node.san}`;
 }
 
-// Legend dot colors for the move list, matching the green (best) -> red
-// (worst) gradient of the RANK_BRUSHES arrow colors on the board.
-const RANK_LEGEND_COLORS = ["#15781B", "#6fae54", "#e68f00", "#b56a5a", "#882020"];
+// Stockfish's arrows: the colour says how good the move is, the width how
+// often it is played. At most MAX_ARROWS: Stockfish's top lines, plus the
+// Explorer's moves played in at least ARROW_MIN_SHARE of games that those
+// lines miss, which Stockfish then evaluates too.
+const MAX_ARROWS = 8;
+const ARROW_MIN_SHARE = 0.05;
+
+// Quality by the winning chances lost against the best move (on Lichess's
+// −1…1 scale, where it calls 0.1 an inaccuracy, 0.2 a mistake, 0.3 a blunder).
+const QUALITY = [
+  { maxLoss: 0.02, label: "best", color: "#15781B" },
+  { maxLoss: 0.1, label: "good", color: "#629924" },
+  { maxLoss: 0.2, label: "inaccuracy", color: "#d9a400" },
+  { maxLoss: 0.3, label: "mistake", color: "#e06a1a" },
+  { maxLoss: Infinity, label: "blunder", color: "#c52b2b" },
+] as const;
+
+const QUALITY_BRUSHES = Object.fromEntries(
+  QUALITY.map((q, i) => [`quality${i}`, { key: `q${i}`, color: q.color, opacity: 0.85, lineWidth: 10 }]),
+);
+
+function qualityIndex(loss: number): number {
+  return QUALITY.findIndex((q) => loss <= q.maxLoss);
+}
+
+// In Chessground's units (64 = a square): the square root of the move's
+// share of games, so a 5% move stays visible next to a 60% one.
+function arrowWidth(share: number | null): number {
+  if (share === null) return 10; // no Explorer data: all alike
+  return Math.round(4 + 16 * Math.sqrt(share));
+}
+
+function sanToUci(chess: Chess, san: string): string | null {
+  try {
+    const move = new Chess(chess.fen()).move(san);
+    return move.from + move.to + (move.promotion ?? "");
+  } catch {
+    return null;
+  }
+}
 
 function uciToSan(chess: Chess, uci: string): string {
   const clone = new Chess(chess.fen());
@@ -632,9 +669,14 @@ function renderEditor(
     gaugeEl.classList.toggle("eval-gauge--flipped", boardOrientation === "black");
   }
 
+  // Stockfish's top lines for the last position analysed, reused when only
+  // the Explorer side changes (turned on or off, other settings).
+  let topLines: { fen: string; analysis: EngineAnalysis } | null = null;
+
   async function updateEngine(chess: Chess): Promise<void> {
     const analysisId = ++engineAnalysisId;
     if (!shownTools.has("engine")) return;
+    const stale = () => analysisId !== engineAnalysisId || !shownTools.has("engine");
 
     if (chess.isGameOver()) {
       board.set({ drawable: { autoShapes: [] } });
@@ -645,30 +687,73 @@ function renderEditor(
     }
 
     if (!engine) engine = new Engine();
-    engineStatusEl.textContent = "Thinking…";
-    const analysis: EngineAnalysis = await engine.analyze(chess.fen());
-    if (analysisId !== engineAnalysisId || !shownTools.has("engine")) return;
+    const fen = chess.fen();
     const sideToMoveIsWhite = chess.turn() === "w";
+    // Fetched alongside the analysis; deduplicated with the Explorer panel's
+    // own request and served from the browser cache when it can be.
+    const explorerRequest = shownTools.has("explorer")
+      ? fetchExplorerData(fen, settings, currentSide(), { priority: "interactive" }).catch(() => null)
+      : Promise.resolve(null);
+
+    let analysis = topLines?.fen === fen ? topLines.analysis : null;
+    if (!analysis) {
+      engineStatusEl.textContent = "Thinking…";
+      analysis = await engine.analyze(fen);
+      if (stale()) return;
+      topLines = { fen, analysis };
+    }
     setGauge(whiteGaugeShare(analysis.lines[0], sideToMoveIsWhite));
 
+    const explorer = await explorerRequest;
+    if (stale()) return;
+    const games = new Map<string, number>(); // UCI move -> games in the Explorer
+    for (const move of explorer?.moves ?? []) {
+      const uci = sanToUci(chess, move.san);
+      if (uci) games.set(uci, move.white + move.draws + move.black);
+    }
+    const totalGames = [...games.values()].reduce((a, b) => a + b, 0);
+
+    const lines: EngineLine[] = [...analysis.lines];
+    const extra = [...games.entries()]
+      .filter(([uci, n]) => totalGames && n / totalGames >= ARROW_MIN_SHARE && !lines.some((l) => l.move === uci))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, Math.max(0, MAX_ARROWS - lines.length))
+      .map(([uci]) => uci);
+    if (extra.length) {
+      engineStatusEl.textContent = `depth ${analysis.depth} · checking popular moves…`;
+      const more = await engine.analyze(fen, DEFAULT_SEARCH_DEPTH, extra);
+      if (stale()) return;
+      lines.push(...more.lines.filter((l) => !lines.some((known) => known.move === l.move)));
+    }
+
+    const best = Math.max(...lines.map(winningChances));
+    const moves = lines.slice(0, MAX_ARROWS).map((line) => {
+      const quality = qualityIndex(best - winningChances(line));
+      const share = explorer ? (totalGames ? (games.get(line.move) ?? 0) / totalGames : 0) : null;
+      return { line, quality, share, san: uciToSan(chess, line.move) };
+    });
+
+    // The most played arrows first, so they sit underneath the thinner ones.
     board.set({
       drawable: {
-        autoShapes: analysis.lines.map((line, i) => {
-          const { orig, dest } = uciMoveToKeys(line.move);
-          return { orig: orig as Key, dest: dest as Key, brush: RANK_BRUSHES[i] ?? "red" };
-        }),
+        autoShapes: [...moves]
+          .sort((a, b) => (b.share ?? 0) - (a.share ?? 0))
+          .map(({ line, quality, share }) => {
+            const { orig, dest } = uciMoveToKeys(line.move);
+            return { orig: orig as Key, dest: dest as Key, brush: `quality${quality}`, modifiers: { lineWidth: arrowWidth(share) } };
+          }),
       },
     });
 
     engineStatusEl.textContent = `depth ${analysis.depth}`;
-    // One compact row: each candidate as a chip, best first, in its arrow's colour.
-    enginePanelEl.innerHTML = analysis.lines
-      .map((line, i) => {
-        const san = uciToSan(chess, line.move);
+    // One row of chips, best first, each in its arrow's colour.
+    enginePanelEl.innerHTML = [...moves]
+      .sort((a, b) => winningChances(b.line) - winningChances(a.line))
+      .map(({ line, quality, share, san }) => {
         const score = formatScore(line, sideToMoveIsWhite);
-        const color = RANK_LEGEND_COLORS[i] ?? "#888";
-        return `<button class="engine-chip" type="button" data-move="${escapeHtml(line.move)}" title="Play ${escapeHtml(san)}">
-            <span class="engine-chip__dot" style="background:${color}"></span><strong>${escapeHtml(san)}</strong> ${escapeHtml(score)}
+        const played = share === null ? "" : ` · played in ${share < 0.01 ? "under 1" : Math.round(share * 100)}% of games`;
+        return `<button class="engine-chip" type="button" data-move="${escapeHtml(line.move)}" title="Play ${escapeHtml(san)} (${QUALITY[quality].label}${played})">
+            <span class="engine-chip__dot" style="background:${QUALITY[quality].color}"></span><strong>${escapeHtml(san)}</strong> ${escapeHtml(score)}
           </button>`;
       })
       .join("");
@@ -791,6 +876,14 @@ function renderEditor(
     toolsCard?.classList.toggle("study-card--tools-none", shownTools.size === 0);
   }
 
+  // The Explorer panel, and Stockfish's arrow widths, which follow the
+  // Explorer's frequencies (Stockfish's own top lines are reused).
+  function refreshExplorerViews(): void {
+    const chess = positionAt(tree, currentId);
+    void updateExplorer(chess.fen());
+    if (shownTools.has("engine")) void updateEngine(chess);
+  }
+
   function toggleTool(tool: Tool): void {
     if (shownTools.has(tool)) shownTools.delete(tool);
     else shownTools.add(tool);
@@ -810,11 +903,12 @@ function renderEditor(
         engine?.terminate();
         engine = null;
       }
-    } else if (on) {
-      void updateExplorer(positionAt(tree, currentId).fen());
     } else {
-      explorerRequestId++; // drop a response still on its way
-      explorerPanelEl.innerHTML = "";
+      if (!on) {
+        explorerRequestId++; // drop a response still on its way
+        explorerPanelEl.innerHTML = "";
+      }
+      refreshExplorerViews();
     }
   }
 
@@ -833,6 +927,7 @@ function renderEditor(
   });
 
   board = createBoard(boardEl, onMove, boardOrientation);
+  board.set({ drawable: { brushes: { ...board.state.drawable.brushes, ...QUALITY_BRUSHES } } });
   syncGaugeOrientation();
   applyToolsUI();
   flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
@@ -1130,7 +1225,7 @@ function renderEditor(
       explorerDatabaseEl.value = "lichess";
     }
     updateExplorerControls();
-    void updateExplorer(positionAt(tree, currentId).fen());
+    refreshExplorerViews();
     scheduleAutoSave();
   });
 
@@ -1146,28 +1241,28 @@ function renderEditor(
             settings.player = me.username;
             explorerPlayerEl.value = me.username;
             updateExplorerSummary();
-            void updateExplorer(positionAt(tree, currentId).fen());
+            refreshExplorerViews();
             scheduleAutoSave();
           }
         });
       }
     }
     updateExplorerControls();
-    void updateExplorer(positionAt(tree, currentId).fen());
+    refreshExplorerViews();
     scheduleAutoSave();
   });
 
   explorerPlayerEl.addEventListener("change", () => {
     settings.player = explorerPlayerEl.value.trim() || null;
     updateExplorerSummary();
-    void updateExplorer(positionAt(tree, currentId).fen());
+    refreshExplorerViews();
     scheduleAutoSave();
   });
 
   explorerMinRatingEl.addEventListener("change", () => {
     settings.minRating = Number(explorerMinRatingEl.value);
     updateExplorerSummary();
-    void updateExplorer(positionAt(tree, currentId).fen());
+    refreshExplorerViews();
     scheduleAutoSave();
   });
 
@@ -1181,7 +1276,7 @@ function renderEditor(
     }
     settings.speeds = target.checked ? [...settings.speeds, speed] : settings.speeds.filter((s) => s !== speed);
     updateExplorerSummary();
-    void updateExplorer(positionAt(tree, currentId).fen());
+    refreshExplorerViews();
     scheduleAutoSave();
   });
 

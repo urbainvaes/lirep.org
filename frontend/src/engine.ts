@@ -25,6 +25,7 @@ export interface EngineAnalysis {
 interface PendingSearch {
   fen: string;
   depth: number;
+  searchMoves?: string[];
   resolve: (result: EngineAnalysis) => void;
 }
 
@@ -85,7 +86,9 @@ export class Engine {
     }
   };
 
-  async analyze(fen: string, depth = DEFAULT_SEARCH_DEPTH): Promise<EngineAnalysis> {
+  /** With `searchMoves` (UCI), only those moves are considered: how the
+   * study editor evaluates popular Explorer moves outside the top lines. */
+  async analyze(fen: string, depth = DEFAULT_SEARCH_DEPTH, searchMoves?: string[]): Promise<EngineAnalysis> {
     if (this.terminated) return { lines: [], depth: 0 };
     await this.readyPromise;
     return new Promise((resolve) => {
@@ -94,7 +97,7 @@ export class Engine {
         return;
       }
       if (this.nextSearch) this.nextSearch.resolve({ lines: [], depth: 0 });
-      this.nextSearch = { fen, depth, resolve };
+      this.nextSearch = { fen, depth, searchMoves, resolve };
       if (this.activeSearch && !this.stopping) {
         this.stopping = true;
         this.worker.postMessage("stop");
@@ -111,7 +114,8 @@ export class Engine {
     this.nextSearch = null;
     this.activeSearch = search;
     this.worker.postMessage(`position fen ${search.fen}`);
-    this.worker.postMessage(`go depth ${search.depth}`);
+    const only = search.searchMoves?.length ? ` searchmoves ${search.searchMoves.join(" ")}` : "";
+    this.worker.postMessage(`go depth ${search.depth}${only}`);
   }
 
   terminate(): void {
@@ -124,17 +128,21 @@ export function uciMoveToKeys(uci: string): { orig: string; dest: string } {
   return { orig: uci.slice(0, 2), dest: uci.slice(2, 4) };
 }
 
+// The side to move's winning chances, −1 to 1, on the curve Lichess uses:
+// 2 / (1 + e^(-0.00368208·cp)) − 1; a forced mate counts as ±1.
+export function winningChances(line: EngineLine | undefined): number {
+  if (line?.scoreMate != null) return line.scoreMate > 0 ? 1 : -1;
+  if (line?.scoreCp != null) return 2 / (1 + Math.exp(-0.00368208 * line.scoreCp)) - 1;
+  return 0;
+}
+
 // White's share of Lichess's evaluation gauge, 0 to 1, from the same
 // win-chance curve Lichess uses: 2 / (1 + e^(-0.00368208·cp)) − 1, mapped to
 // [0, 1]. A forced mate fills the gauge for the side that mates.
 export function whiteGaugeShare(line: EngineLine | undefined, sideToMoveIsWhite: boolean): number {
-  const sign = sideToMoveIsWhite ? 1 : -1;
-  if (line?.scoreMate != null) return line.scoreMate * sign > 0 ? 1 : 0;
-  if (line?.scoreCp != null) {
-    const winningChances = 2 / (1 + Math.exp(-0.00368208 * line.scoreCp * sign)) - 1;
-    return (1 + winningChances) / 2;
-  }
-  return 0.5;
+  if (!line || (line.scoreMate == null && line.scoreCp == null)) return 0.5;
+  const chances = winningChances(line) * (sideToMoveIsWhite ? 1 : -1);
+  return (1 + chances) / 2;
 }
 
 export function formatScore(line: EngineLine, sideToMoveIsWhite: boolean): string {

@@ -1674,16 +1674,20 @@ body {
   gap: 8px;
 }
 
+/* Up to eight chips on one line, scrolling sideways when they don't fit. */
 .engine-chips {
   display: flex;
   flex: 1;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .engine-chip {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
   padding: 2px 6px;
