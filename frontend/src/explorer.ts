@@ -176,6 +176,9 @@ export interface RepertoireView {
   yourTurn: boolean;
 }
 
+// The move list shows this many rows; the rest scroll inside it.
+const VISIBLE_EXPLORER_ROWS = 6;
+
 export function renderExplorer(
   panel: HTMLElement,
   data: ExplorerData,
@@ -240,4 +243,16 @@ export function renderExplorer(
   panel.querySelectorAll<HTMLButtonElement>("[data-san]").forEach((btn) => {
     btn.addEventListener("click", () => onPlay(btn.dataset.san as string));
   });
+
+  // Measured rather than fixed in CSS, so it holds whatever the fonts.
+  const list = panel.querySelector<HTMLElement>(".explorer-rows");
+  const items = list?.children;
+  if (list && items && items.length > VISIBLE_EXPLORER_ROWS) {
+    const top = items[0].getBoundingClientRect().top;
+    const bottom = items[VISIBLE_EXPLORER_ROWS - 1].getBoundingClientRect().bottom;
+    if (bottom > top) {
+      list.style.maxHeight = `${Math.ceil(bottom - top)}px`;
+      list.classList.add("explorer-rows--scroll");
+    }
+  }
 }

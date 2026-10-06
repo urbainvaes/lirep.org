@@ -266,11 +266,6 @@ function renderEditor(
             </div>
 
             <div class="study-card study-card--tools">
-
-              <div id="tool-engine" class="tool-panel tool-panel--engine" hidden>
-                <div id="engine-panel" class="engine-chips"></div>
-              </div>
-
               <div id="tool-explorer" class="tool-panel tool-panel--explorer">
                 <div class="explorer-settings-line">
                   <span id="explorer-summary"></span>
@@ -302,12 +297,16 @@ function renderEditor(
                 <div id="explorer-panel" class="explorer-panel"></div>
               </div>
 
+              <div id="tool-engine" class="tool-panel tool-panel--engine" hidden>
+                <div id="engine-panel" class="engine-chips"></div>
+              </div>
+
               <div class="tool-tabs" role="group" aria-label="Analysis tools">
-                <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine">
-                  <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span>Stockfish
-                </button>
                 <button id="tab-explorer" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-explorer">
                   <span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span>Opening Explorer
+                </button>
+                <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine">
+                  <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span>Stockfish
                 </button>
                 <span id="engine-status" class="engine-eval tool-tabs__status" title="Stockfish runs in this browser"></span>
               </div>

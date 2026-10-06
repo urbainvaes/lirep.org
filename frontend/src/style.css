@@ -1606,8 +1606,8 @@ body {
 }
 
 /* Collapsed to its toggles when no tool is on, one line more with Stockfish
-   alone; with the Explorer on it takes the larger share of the column. The
-   toggles are at the bottom, so they stay put while the tools open above. */
+   alone. The toggles are at the bottom, so they stay put while the tools
+   open above. */
 .study-card--tools {
   display: flex;
   flex-direction: column;
@@ -1616,8 +1616,10 @@ body {
   padding: 8px 14px 4px;
 }
 
+/* With the Explorer on, the card takes what its six visible moves need
+   (shrinking if the column is short); the tree keeps the rest. */
 .study-card--tools.study-card--tools-explorer {
-  flex: 3 1 0;
+  flex: 0 1 auto;
   padding-top: 12px;
 }
 
@@ -1658,11 +1660,11 @@ body {
   padding-bottom: 10px;
 }
 
-/* With both tools on, Stockfish's few lines sit at the top at their natural
-   height and the Explorer takes the rest of the card. */
+/* With both tools on, the Explorer takes the card's height and Stockfish's
+   single row sits below it, next to its toggle. */
 .study-card--tools-both .tool-panel--engine {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .tool-panel--engine {
@@ -2206,6 +2208,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* More than six moves: the list scrolls (see renderExplorer). */
+.explorer-rows--scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .explorer-row {
