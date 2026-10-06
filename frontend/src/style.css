@@ -3207,12 +3207,6 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.leaderboard h3 {
-  margin: 0 0 4px;
-  color: var(--text-strong);
-  font-size: 1.1rem;
-}
-
 /* Inside a leaderboard the per-side headings sit one level below the
    leaderboard's own title, so they are lighter than on the home page. */
 .leaderboard .opening-groups {
@@ -3245,8 +3239,17 @@ body {
   margin: 0;
 }
 
-/* Which Explorer's data the leaderboards rank: two segments, the chosen one
-   filled. Shown only when the 2016 sample has something to rank. */
+/* The metric and Explorer data switches, together at the right of the title. */
+.leaderboards-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+}
+
+/* A choice between two options (the leaderboards' metric, their Explorer
+   data): two segments, the chosen one filled. The Explorer data switch is
+   shown only when the 2016 sample has something to rank. */
 .source-switch {
   display: inline-flex;
   flex: none;

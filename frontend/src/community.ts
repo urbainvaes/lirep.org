@@ -193,8 +193,7 @@ const renderTables = <T extends LeaderboardRow>(board: Leaderboard<T>, openings:
 
 function renderLeaderboard<T extends LeaderboardRow>(board: Leaderboard<T>, openings: T[], signedIn: boolean): string {
   return `
-    <section class="leaderboard" aria-labelledby="${board.id}-title">
-      <h3 id="${board.id}-title">${board.title}</h3>
+    <section class="leaderboard" id="${board.id}-section" aria-label="${board.title}" ${board.id === BY_EXPECTED_SCORE.id ? "" : "hidden"}>
       <p class="profile-subtitle">${board.description}</p>
       <div id="${board.id}" class="opening-groups">
         ${renderTables(board, openings, signedIn)}
@@ -223,10 +222,17 @@ function render(
     <section class="profile-section">
       <div class="profile-section__heading leaderboards-heading">
         <h2>Leaderboards</h2>
-        <div class="source-switch" role="group" aria-label="Explorer data" ${summary.lirepOpenings ? "" : "hidden"}>
-          <span class="source-switch__label">Explorer data</span>
-          <button type="button" data-source="lichess" aria-pressed="true">Lichess</button>
-          <button type="button" data-source="lirep" aria-pressed="false" title="${escapeHtml(SAMPLE_TITLE)}">2016 sample</button>
+        <div class="leaderboards-options">
+          <div class="source-switch" role="group" aria-label="Metric">
+            <span class="source-switch__label">Metric</span>
+            <button type="button" data-metric="score" aria-pressed="true">Expected score</button>
+            <button type="button" data-metric="eval" aria-pressed="false">Expected evaluation</button>
+          </div>
+          <div class="source-switch" role="group" aria-label="Explorer data" ${summary.lirepOpenings ? "" : "hidden"}>
+            <span class="source-switch__label">Explorer data</span>
+            <button type="button" data-source="lichess" aria-pressed="true">Lichess</button>
+            <button type="button" data-source="lirep" aria-pressed="false" title="${escapeHtml(SAMPLE_TITLE)}">2016 sample</button>
+          </div>
         </div>
       </div>
       <p class="community-note">
@@ -299,6 +305,21 @@ function render(
   }
 
   switchButtons.forEach((b) => b.addEventListener("click", () => void showSource(b.dataset.source as Source)));
+
+  // One leaderboard at a time; both are already loaded, so switching is instant.
+  const metricButtons = [...main.querySelectorAll<HTMLButtonElement>(".source-switch [data-metric]")];
+  const sections = {
+    score: main.querySelector<HTMLElement>(`#${BY_EXPECTED_SCORE.id}-section`)!,
+    eval: main.querySelector<HTMLElement>(`#${BY_EXPECTED_EVALUATION.id}-section`)!,
+  };
+  metricButtons.forEach((button) =>
+    button.addEventListener("click", () => {
+      const metric = button.dataset.metric as keyof typeof sections;
+      metricButtons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      sections.score.hidden = metric !== "score";
+      sections.eval.hidden = metric !== "eval";
+    }),
+  );
 }
 
 async function init(): Promise<void> {
