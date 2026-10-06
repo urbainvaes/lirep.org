@@ -21,13 +21,15 @@
   --page-bg: #161512;
   --panel-bg: #262421;
   --header-bg: #2e2a24;
-  /* A neutral, noticeably lighter gray for cards nested inside another card
-     (e.g. the Stats detail page's metric cards) — --header-bg reads too
-     close to --panel-bg to tell the two apart there. */
-  --card-nested-bg: #3d3d3d;
-  --border: #383838;
+  /* Boxes nested inside a panel, on every page (the Stats page's cards, the
+     editor's Explorer settings and shortcuts, the docs' callouts): a step
+     lighter than --panel-bg, in the same warm palette, so that --text-dim
+     still reads at over 5:1 on it. Borders are a step lighter again, so
+     their edges show. */
+  --card-nested-bg: #33302c;
+  --border: #403d39;
   --text: #bababa;
-  --text-dim: #949494;
+  --text-dim: #a3a3a3;
   --text-strong: #ffffff;
   --primary: #3692e7;
   --primary-hover: #4aa0f0;
@@ -2059,7 +2061,7 @@ body {
   max-height: 40vh;
   overflow-y: auto;
   padding: 12px 14px;
-  background: var(--header-bg);
+  background: var(--card-nested-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
@@ -2504,7 +2506,7 @@ body {
 .doc-main .callout {
   padding: 12px 14px;
   border-left: 3px solid var(--primary);
-  background: var(--header-bg);
+  background: var(--card-nested-bg);
 }
 
 .doc-main > nav[aria-label="Documentation"] {
