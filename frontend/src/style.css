@@ -917,6 +917,7 @@ body {
   flex-wrap: wrap;
   gap: 4px 12px;
   padding: 12px 20px;
+  background: var(--card-nested-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-dim);
