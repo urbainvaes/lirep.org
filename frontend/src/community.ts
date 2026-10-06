@@ -231,7 +231,8 @@ function render(
       </div>
       <p class="community-note">
         Each row shows the rating band and time controls it was calculated with, so compare rows with the same
-        settings. Studies are shared by default; authors can switch sharing off for any study on its page.
+        settings; results from one player's games are not ranked. Studies are shared by default; authors can
+        switch sharing off for any study on its page.
       </p>
       <div id="community-message" class="community-message" role="status" aria-live="polite" hidden></div>
       <div class="leaderboards">
