@@ -3,15 +3,11 @@
 Design draft for a new tab: **choose a study, then drill it** — the app
 quizzes you on your own repertoire's book moves and keeps a per-position
 "knowledge" score that fades over time, so you always know what's actually
-solid versus what's gone rusty. This is the concrete, single-study version
-of the ideas already sketched in the original CLI-first roadmap — mainly
-[§5 "Training modes"](README.md#5-training-modes) (specifically 5.1, puzzle
-mode) and [§6 "Mastery & scheduling"](README.md#6-mastery--scheduling) —
-the same relationship [stats.md](stats.md) has to
-[§2 "Core idea"](README.md#2-core-idea): restricted to exactly the tree of
-one study instead of a full profile-wide item bank, and built directly on
-top of the study page and (where set) its
-[starting point](starting-point.md), the same way the Stats page is.
+solid versus what's gone rusty. This single-study practice feature is
+described in the README's [Practice section](README.md#the-practice-tab). It
+uses the same study tree and optional [starting point](starting-point.md) as
+the Stats page; see [How it works](README.md#how-it-works) for the shared
+Explorer-weighted tree model.
 
 **Status: implemented**, per the same "draft it, then build it" process used
 for the starting-point feature. Code lives in `backend/app/practice.py`
