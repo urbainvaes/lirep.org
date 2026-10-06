@@ -18,6 +18,7 @@ import {
   type ExplorerSpeed,
 } from "./explorer";
 import { errorMessage, fetchExplorerData } from "./explorerClient";
+import { materialBalance, materialHtml } from "./material";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
@@ -277,7 +278,9 @@ function renderEditor(
       <div class="study-grid">
         <div class="study-board-col">
           <div class="study-card study-card--board">
+            <div id="material-top" class="material" aria-label="Material"></div>
             <div id="board" class="study-board"></div>
+            <div id="material-bottom" class="material" aria-label="Material"></div>
             <div id="eval-gauge" class="eval-gauge" role="img" aria-label="Evaluation" hidden>
               <div id="eval-gauge-black" class="eval-gauge__black"></div>
             </div>
@@ -405,6 +408,8 @@ function renderEditor(
   const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
   const navStartBtn = document.getElementById("nav-start") as HTMLButtonElement;
   const gaugeEl = document.getElementById("eval-gauge") as HTMLElement;
+  const materialTopEl = document.getElementById("material-top") as HTMLElement;
+  const materialBottomEl = document.getElementById("material-bottom") as HTMLElement;
   const gaugeBlackEl = document.getElementById("eval-gauge-black") as HTMLElement;
   const navBackBtn = document.getElementById("nav-back") as HTMLButtonElement;
   const navForwardBtn = document.getElementById("nav-forward") as HTMLButtonElement;
@@ -547,7 +552,7 @@ function renderEditor(
           if (!boardOrientationManuallySet) {
             boardOrientation = saved.side;
             board.set({ orientation: boardOrientation });
-            syncGaugeOrientation();
+            syncOrientation();
           }
           colorSelect.replaceWith(sidePawn(saved.side));
         }
@@ -690,8 +695,20 @@ function renderEditor(
     gaugeEl.setAttribute("aria-label", `Evaluation: White ${Math.round(whiteShare * 100)}%`);
   }
 
-  function syncGaugeOrientation(): void {
+  // The material balance above and below the board, as during a Lichess
+  // game: the row nearest each side's pieces shows what that side is up.
+  function renderMaterial(): void {
+    const balance = materialBalance(positionAt(tree, currentId));
+    const bottom = boardOrientation === "white" ? "w" : "b";
+    const top = bottom === "w" ? "b" : "w";
+    materialTopEl.innerHTML = materialHtml(balance[top]);
+    materialBottomEl.innerHTML = materialHtml(balance[bottom]);
+  }
+
+  // What depends on which side is at the bottom: the gauge and the material rows.
+  function syncOrientation(): void {
     gaugeEl.classList.toggle("eval-gauge--flipped", boardOrientation === "black");
+    renderMaterial();
   }
 
   // Stockfish's top lines for the last position analysed, reused when only
@@ -851,6 +868,7 @@ function renderEditor(
       lastMove: lastMoveAt(tree, currentId),
       movable: { color: toColor(chess), dests: computeDests(chess) },
     });
+    renderMaterial();
 
     renderTreeView();
     deleteBtn.disabled = currentId === tree.rootId;
@@ -980,7 +998,7 @@ function renderEditor(
 
   board = createBoard(boardEl, onMove, boardOrientation);
   board.set({ drawable: { brushes: { ...board.state.drawable.brushes, ...QUALITY_BRUSHES } } });
-  syncGaugeOrientation();
+  syncOrientation();
   applyToolsUI();
   flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   goToStart();
@@ -989,7 +1007,7 @@ function renderEditor(
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     boardOrientationManuallySet = true;
     board.set({ orientation: boardOrientation });
-    syncGaugeOrientation();
+    syncOrientation();
     flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   }
 
@@ -1100,7 +1118,7 @@ function renderEditor(
     if (!boardOrientationManuallySet) {
       boardOrientation = currentSide();
       board.set({ orientation: boardOrientation });
-      syncGaugeOrientation();
+      syncOrientation();
     }
     scheduleAutoSave();
   });

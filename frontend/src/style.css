@@ -1259,7 +1259,39 @@ body {
 .study-card--board {
   position: relative;
   display: block;
-  aspect-ratio: 1;
+}
+
+/* The material rows above and below the board in the editor (see
+   material.ts); empty when material is level, but they keep their height
+   so the board doesn't move. */
+.material {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--material-row);
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+#material-top {
+  margin-bottom: var(--material-gap);
+}
+
+#material-bottom {
+  margin-top: var(--material-gap);
+}
+
+.material__group {
+  letter-spacing: -0.3em;
+  padding-right: 0.3em;
+}
+
+.material__score {
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 /* Lichess's evaluation gauge, in the board card's left-hand padding so the
@@ -1267,8 +1299,9 @@ body {
    other, with a tick every eighth and a stronger one at equality. */
 .eval-gauge {
   position: absolute;
-  top: 16px;
-  bottom: 16px;
+  /* Alongside the board only, not the material rows. */
+  top: calc(16px + var(--material-row, 0px) + var(--material-gap, 0px));
+  bottom: calc(16px + var(--material-row, 0px) + var(--material-gap, 0px));
   left: 3px;
   width: 10px;
   overflow: hidden;
@@ -1850,10 +1883,15 @@ body {
 /* Scrolled all the way down, the board column (card and navigation) fills
    the window with a 12px margin above and below, and the header scrolls out
    of view: scrolling down works as a full-screen mode. The board is
-   --board-size square: the window height minus that margin, the card's
-   padding and border (34px) and the navigation row (46px), and narrower if
-   the window is too narrow to leave about 520px for the moves and tools.
-   The page widens to fit. */
+   --board-size square: the window height minus that margin (24px), the
+   card's padding and border (34px), the two material rows (2 × 26px) and
+   the navigation row (46px), and narrower if the window is too narrow to
+   leave about 610px for the moves and tools. The page widens to fit. */
+.study-editor--edit {
+  --material-row: 22px;
+  --material-gap: 4px;
+}
+
 /* The editor is a work surface: less space above it than on other pages. */
 .site-main--board {
   padding-top: 20px;
@@ -1861,8 +1899,8 @@ body {
 
 @media (min-width: 981px) {
   .site-main--board {
-    --board-size: max(360px, min(calc(100vh - 104px), calc(100vw - 600px)));
-    max-width: calc(var(--board-size) + 600px);
+    --board-size: max(360px, min(calc(100vh - 156px), calc(100vw - 700px)));
+    max-width: calc(var(--board-size) + 700px);
     padding-bottom: 12px;
   }
 
