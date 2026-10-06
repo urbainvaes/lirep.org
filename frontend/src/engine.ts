@@ -124,6 +124,19 @@ export function uciMoveToKeys(uci: string): { orig: string; dest: string } {
   return { orig: uci.slice(0, 2), dest: uci.slice(2, 4) };
 }
 
+// White's share of Lichess's evaluation gauge, 0 to 1, from the same
+// win-chance curve Lichess uses: 2 / (1 + e^(-0.00368208·cp)) − 1, mapped to
+// [0, 1]. A forced mate fills the gauge for the side that mates.
+export function whiteGaugeShare(line: EngineLine | undefined, sideToMoveIsWhite: boolean): number {
+  const sign = sideToMoveIsWhite ? 1 : -1;
+  if (line?.scoreMate != null) return line.scoreMate * sign > 0 ? 1 : 0;
+  if (line?.scoreCp != null) {
+    const winningChances = 2 / (1 + Math.exp(-0.00368208 * line.scoreCp * sign)) - 1;
+    return (1 + winningChances) / 2;
+  }
+  return 0.5;
+}
+
 export function formatScore(line: EngineLine, sideToMoveIsWhite: boolean): string {
   const sign = sideToMoveIsWhite ? 1 : -1;
   if (line.scoreMate !== null) {

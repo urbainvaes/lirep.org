@@ -1257,8 +1257,49 @@ body {
 }
 
 .study-card--board {
+  position: relative;
   display: block;
   aspect-ratio: 1;
+}
+
+/* Lichess's evaluation gauge, in the board card's left-hand padding so the
+   board keeps its size: White's share from White's side, Black's from the
+   other, with a tick every eighth and a stronger one at equality. */
+.eval-gauge {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 3px;
+  width: 10px;
+  overflow: hidden;
+  background: #f4f4f4;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.eval-gauge__black {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  background: #404040;
+  transition: height 1s ease;
+}
+
+.eval-gauge--flipped .eval-gauge__black {
+  top: auto;
+  bottom: 0;
+}
+
+.eval-gauge::after {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, transparent calc(50% - 1px), #d6492e calc(50% - 1px), #d6492e calc(50% + 1px), transparent calc(50% + 1px)),
+    repeating-linear-gradient(to bottom, transparent 0, transparent calc(12.5% - 1px), rgba(128, 128, 128, 0.6) calc(12.5% - 1px), rgba(128, 128, 128, 0.6) 12.5%);
+  content: "";
+  pointer-events: none;
 }
 
 .study-board-tools {
@@ -1493,28 +1534,36 @@ body {
   min-height: 48px;
 }
 
+/* Collapsed to its toggles when no tool is on, one line more with Stockfish
+   alone; with the Explorer on it takes the larger share of the column. The
+   toggles are at the bottom, so they stay put while the tools open above. */
 .study-card--tools {
   display: flex;
   flex-direction: column;
-  flex: 3 1 0;
+  flex: none;
   min-height: 0;
-  padding: 8px 14px 12px;
+  padding: 8px 14px 4px;
+}
+
+.study-card--tools.study-card--tools-explorer {
+  flex: 3 1 0;
+  padding-top: 12px;
 }
 
 .tool-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
 .tool-tab {
   display: inline-flex;
   align-items: center;
-  margin-bottom: -1px;
+  margin-top: -1px;
   padding: 8px 10px;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent;
   color: var(--text-dim);
   font: inherit;
   font-size: 0.88rem;
@@ -1525,8 +1574,8 @@ body {
   color: var(--text-strong);
 }
 
-.tool-tab[aria-selected="true"] {
-  border-bottom-color: var(--primary);
+.tool-tab[aria-pressed="true"] {
+  border-top-color: var(--primary);
   color: var(--text-strong);
   font-weight: 600;
 }
@@ -1535,7 +1584,70 @@ body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* With both tools on, Stockfish's few lines sit at the top at their natural
+   height and the Explorer takes the rest of the card. */
+.study-card--tools-both .tool-panel--engine {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-panel--engine {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.engine-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.engine-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-dim);
+  font: inherit;
+  font-family: "Courier New", monospace;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.engine-chip strong {
+  color: var(--text-strong);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.engine-chip:hover {
+  border-color: var(--primary);
+}
+
+.engine-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.tool-tabs__status {
+  align-self: center;
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+
+.study-card--tools-none .tool-tabs {
+  border-top-color: transparent;
 }
 
 .explorer-settings-line {
@@ -1610,7 +1722,7 @@ body {
     max-height: 320px;
   }
 
-  .study-card--tools .tool-panel {
+  .study-card--tools .tool-panel--explorer {
     min-height: 200px;
   }
 
@@ -1621,6 +1733,35 @@ body {
 
   .study-head__links {
     width: 100%;
+  }
+}
+
+/* Scrolled all the way down, the board column (card and navigation) fills
+   the window with a 12px margin above and below, and the header scrolls out
+   of view: scrolling down works as a full-screen mode. The board is
+   --board-size square: the window height minus that margin, the card's
+   padding and border (34px) and the navigation row (46px), and narrower if
+   the window is too narrow to leave about 520px for the moves and tools.
+   The page widens to fit. */
+/* The editor is a work surface: less space above it than on other pages. */
+.site-main--board {
+  padding-top: 20px;
+}
+
+@media (min-width: 981px) {
+  .site-main--board {
+    --board-size: max(360px, min(calc(100vh - 104px), calc(100vw - 600px)));
+    max-width: calc(var(--board-size) + 600px);
+    padding-bottom: 12px;
+  }
+
+  .site-main--board .study-editor--edit {
+    max-width: none;
+  }
+
+  .site-main--board .study-editor--edit .study-grid {
+    grid-template-columns: calc(var(--board-size) + 34px) minmax(0, 1fr);
+    margin-bottom: 0;
   }
 }
 

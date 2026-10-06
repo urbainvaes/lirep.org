@@ -3,7 +3,7 @@ import type { Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
 import { applyLichessBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
-import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
+import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, whiteGaugeShare, type EngineAnalysis } from "./engine";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
@@ -45,19 +45,23 @@ interface Study {
 }
 
 type Tool = "explorer" | "engine";
-const TOOL_STORAGE_KEY = "study-tool";
+const TOOLS_STORAGE_KEY = "study-tools";
 
-function getSavedTool(): Tool {
+// Which of the Explorer and Stockfish are on, remembered in this browser;
+// neither by default, so the move tree has the whole column.
+function getSavedTools(): Set<Tool> {
   try {
-    return localStorage.getItem(TOOL_STORAGE_KEY) === "engine" ? "engine" : "explorer";
+    const saved = localStorage.getItem(TOOLS_STORAGE_KEY);
+    if (saved === null) return new Set();
+    return new Set(saved.split(",").filter((t): t is Tool => t === "explorer" || t === "engine"));
   } catch {
-    return "explorer";
+    return new Set();
   }
 }
 
-function saveTool(tool: Tool): void {
+function saveTools(tools: Set<Tool>): void {
   try {
-    localStorage.setItem(TOOL_STORAGE_KEY, tool);
+    localStorage.setItem(TOOLS_STORAGE_KEY, [...tools].join(","));
   } catch {
     // The choice just isn't remembered.
   }
@@ -160,6 +164,8 @@ function renderEditor(
   };
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
 
+  // Sized so that, scrolled to the bottom, the board fills the screen height.
+  main.classList.add("site-main--board");
   main.innerHTML = `
     <div class="study-editor study-editor--edit">
       <header class="study-head">
@@ -208,6 +214,9 @@ function renderEditor(
         <div class="study-board-col">
           <div class="study-card study-card--board">
             <div id="board" class="study-board"></div>
+            <div id="eval-gauge" class="eval-gauge" role="img" aria-label="Evaluation" hidden>
+              <div id="eval-gauge-black" class="eval-gauge__black"></div>
+            </div>
           </div>
           <div class="board-nav" role="group" aria-label="Move navigation">
             <button id="nav-start" class="board-nav__btn" type="button" title="Go to start (↑)" aria-label="Go to start"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
@@ -247,16 +256,12 @@ function renderEditor(
             </div>
 
             <div class="study-card study-card--tools">
-              <div class="tool-tabs" role="tablist" aria-label="Analysis tools">
-                <button id="tab-explorer" class="tool-tab" type="button" role="tab" aria-controls="tool-explorer">
-                  <span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span>Opening Explorer
-                </button>
-                <button id="tab-engine" class="tool-tab" type="button" role="tab" aria-controls="tool-engine">
-                  <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span>Stockfish
-                </button>
+
+              <div id="tool-engine" class="tool-panel tool-panel--engine" hidden>
+                <div id="engine-panel" class="engine-chips"></div>
               </div>
 
-              <div id="tool-explorer" class="tool-panel" role="tabpanel" aria-labelledby="tab-explorer">
+              <div id="tool-explorer" class="tool-panel tool-panel--explorer">
                 <div class="explorer-settings-line">
                   <span id="explorer-summary"></span>
                   <button id="explorer-settings-btn" class="btn btn-secondary btn-small" type="button" aria-expanded="false" aria-controls="explorer-settings">Change</button>
@@ -287,9 +292,14 @@ function renderEditor(
                 <div id="explorer-panel" class="explorer-panel"></div>
               </div>
 
-              <div id="tool-engine" class="tool-panel" role="tabpanel" aria-labelledby="tab-engine" hidden>
-                <p class="engine-status-line">Stockfish, in this browser · <span id="engine-status" class="engine-eval"></span></p>
-                <div id="engine-panel" class="engine-panel"></div>
+              <div class="tool-tabs" role="group" aria-label="Analysis tools">
+                <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine">
+                  <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span>Stockfish
+                </button>
+                <button id="tab-explorer" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-explorer">
+                  <span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span>Opening Explorer
+                </button>
+                <span id="engine-status" class="engine-eval tool-tabs__status" title="Stockfish runs in this browser"></span>
               </div>
             </div>
           </div>
@@ -321,6 +331,8 @@ function renderEditor(
   const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
   const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
   const navStartBtn = document.getElementById("nav-start") as HTMLButtonElement;
+  const gaugeEl = document.getElementById("eval-gauge") as HTMLElement;
+  const gaugeBlackEl = document.getElementById("eval-gauge-black") as HTMLElement;
   const navBackBtn = document.getElementById("nav-back") as HTMLButtonElement;
   const navForwardBtn = document.getElementById("nav-forward") as HTMLButtonElement;
   const navEndBtn = document.getElementById("nav-end") as HTMLButtonElement;
@@ -360,8 +372,8 @@ function renderEditor(
   let engineAnalysisId = 0;
   let boardOrientation = currentSide();
   let boardOrientationManuallySet = false;
-  // The Explorer and Stockfish share one panel; only the visible one runs.
-  let activeTool: Tool = getSavedTool();
+  // The Explorer and Stockfish can each be on or off; only those on run.
+  const shownTools: Set<Tool> = getSavedTools();
   // The comment box opens for a position that has a comment, or when asked.
   let commentRequested = false;
 
@@ -460,6 +472,7 @@ function renderEditor(
           if (!boardOrientationManuallySet) {
             boardOrientation = saved.side;
             board.set({ orientation: boardOrientation });
+            syncGaugeOrientation();
           }
           colorSelect.disabled = true;
           colorSelect.title = "The playing side is fixed once the study is created.";
@@ -563,7 +576,7 @@ function renderEditor(
   }
 
   async function updateExplorer(fen: string): Promise<void> {
-    if (activeTool !== "explorer") return;
+    if (!shownTools.has("explorer")) return;
     const requestId = ++explorerRequestId;
     renderExplorerLoading(explorerPanelEl);
     try {
@@ -600,22 +613,35 @@ function renderEditor(
     scheduleAutoSave();
   }
 
+  // Lichess's evaluation gauge, beside the board while Stockfish is on:
+  // White's share fills from White's side of the board, so it flips with it.
+  function setGauge(whiteShare: number): void {
+    gaugeBlackEl.style.height = `${(1 - whiteShare) * 100}%`;
+    gaugeEl.setAttribute("aria-label", `Evaluation: White ${Math.round(whiteShare * 100)}%`);
+  }
+
+  function syncGaugeOrientation(): void {
+    gaugeEl.classList.toggle("eval-gauge--flipped", boardOrientation === "black");
+  }
+
   async function updateEngine(chess: Chess): Promise<void> {
     const analysisId = ++engineAnalysisId;
-    if (activeTool !== "engine") return;
+    if (!shownTools.has("engine")) return;
 
     if (chess.isGameOver()) {
       board.set({ drawable: { autoShapes: [] } });
+      setGauge(chess.isCheckmate() ? (chess.turn() === "w" ? 0 : 1) : 0.5);
       engineStatusEl.textContent = "Game over";
-      enginePanelEl.hidden = true;
+      enginePanelEl.innerHTML = "";
       return;
     }
 
     if (!engine) engine = new Engine();
     engineStatusEl.textContent = "Thinking…";
     const analysis: EngineAnalysis = await engine.analyze(chess.fen());
-    if (analysisId !== engineAnalysisId || activeTool !== "engine") return;
+    if (analysisId !== engineAnalysisId || !shownTools.has("engine")) return;
     const sideToMoveIsWhite = chess.turn() === "w";
+    setGauge(whiteGaugeShare(analysis.lines[0], sideToMoveIsWhite));
 
     board.set({
       drawable: {
@@ -627,19 +653,15 @@ function renderEditor(
     });
 
     engineStatusEl.textContent = `depth ${analysis.depth}`;
-    enginePanelEl.hidden = analysis.lines.length === 0;
+    // One compact row: each candidate as a chip, best first, in its arrow's colour.
     enginePanelEl.innerHTML = analysis.lines
       .map((line, i) => {
         const san = uciToSan(chess, line.move);
         const score = formatScore(line, sideToMoveIsWhite);
         const color = RANK_LEGEND_COLORS[i] ?? "#888";
-        return `
-          <button class="engine-line" type="button" data-move="${escapeHtml(line.move)}">
-            <span class="engine-line__dot" style="background:${color}"></span>
-            <span class="engine-line__san">${escapeHtml(san)}</span>
-            <span class="engine-line__score">${escapeHtml(score)}</span>
-          </button>
-        `;
+        return `<button class="engine-chip" type="button" data-move="${escapeHtml(line.move)}" title="Play ${escapeHtml(san)}">
+            <span class="engine-chip__dot" style="background:${color}"></span><strong>${escapeHtml(san)}</strong> ${escapeHtml(score)}
+          </button>`;
       })
       .join("");
 
@@ -748,40 +770,48 @@ function renderEditor(
     goTo(startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId);
   }
 
-  function setTool(tool: Tool): void {
-    activeTool = tool;
-    saveTool(tool);
+  function applyToolsUI(): void {
     for (const name of ["explorer", "engine"] as const) {
-      tabButtons[name].setAttribute("aria-selected", String(name === tool));
-      tabButtons[name].tabIndex = name === tool ? 0 : -1;
-      tabPanels[name].hidden = name !== tool;
+      tabButtons[name].setAttribute("aria-pressed", String(shownTools.has(name)));
+      tabPanels[name].hidden = !shownTools.has(name);
     }
+    gaugeEl.hidden = !shownTools.has("engine");
+    // The tools card takes only the room its open tools need; the tree has the rest.
+    const toolsCard = document.querySelector(".study-card--tools");
+    toolsCard?.classList.toggle("study-card--tools-both", shownTools.size === 2);
+    toolsCard?.classList.toggle("study-card--tools-explorer", shownTools.has("explorer"));
+    toolsCard?.classList.toggle("study-card--tools-none", shownTools.size === 0);
+  }
+
+  function toggleTool(tool: Tool): void {
+    if (shownTools.has(tool)) shownTools.delete(tool);
+    else shownTools.add(tool);
+    saveTools(shownTools);
+    applyToolsUI();
+    const on = shownTools.has(tool);
     if (tool === "engine") {
-      void updateEngine(positionAt(tree, currentId));
-    } else {
-      // Stockfish stops when hidden: it is the expensive one.
-      engineAnalysisId++;
-      board?.set({ drawable: { autoShapes: [] } });
-      engineStatusEl.textContent = "";
-      enginePanelEl.innerHTML = "";
-      engine?.terminate();
-      engine = null;
+      if (on) {
+        void updateEngine(positionAt(tree, currentId));
+      } else {
+        // Stockfish stops when turned off: it is the expensive one.
+        engineAnalysisId++;
+        board.set({ drawable: { autoShapes: [] } });
+        engineStatusEl.textContent = "";
+        enginePanelEl.innerHTML = "";
+        setGauge(0.5);
+        engine?.terminate();
+        engine = null;
+      }
+    } else if (on) {
       void updateExplorer(positionAt(tree, currentId).fen());
+    } else {
+      explorerRequestId++; // drop a response still on its way
+      explorerPanelEl.innerHTML = "";
     }
   }
 
-  tabButtons.explorer.addEventListener("click", () => setTool("explorer"));
-  tabButtons.engine.addEventListener("click", () => setTool("engine"));
-  for (const name of ["explorer", "engine"] as const) {
-    tabButtons[name].addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      event.preventDefault();
-      event.stopPropagation();
-      const other = name === "explorer" ? "engine" : "explorer";
-      setTool(other);
-      tabButtons[other].focus();
-    });
-  }
+  tabButtons.explorer.addEventListener("click", () => toggleTool("explorer"));
+  tabButtons.engine.addEventListener("click", () => toggleTool("engine"));
 
   function updateExplorerSummary(): void {
     explorerSummaryEl.textContent = explorerSummary(settings);
@@ -795,11 +825,8 @@ function renderEditor(
   });
 
   board = createBoard(boardEl, onMove, boardOrientation);
-  for (const name of ["explorer", "engine"] as const) {
-    tabButtons[name].setAttribute("aria-selected", String(name === activeTool));
-    tabButtons[name].tabIndex = name === activeTool ? 0 : -1;
-    tabPanels[name].hidden = name !== activeTool;
-  }
+  syncGaugeOrientation();
+  applyToolsUI();
   flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   goToStart();
 
@@ -807,6 +834,7 @@ function renderEditor(
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     boardOrientationManuallySet = true;
     board.set({ orientation: boardOrientation });
+    syncGaugeOrientation();
     flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   }
 
@@ -919,6 +947,7 @@ function renderEditor(
     if (!boardOrientationManuallySet) {
       boardOrientation = currentSide();
       board.set({ orientation: boardOrientation });
+      syncGaugeOrientation();
     }
     scheduleAutoSave();
   });
