@@ -613,7 +613,7 @@ interface LeaderboardEntry {
 async function leaderboardStatus(study: Study): Promise<{ score: string; evaluation: string }> {
   const stats = study.stats;
   const sideName = study.side === "white" ? "White" : "Black";
-  const link = `<a href="/community.html">community leaderboard</a>`;
+  const link = `<a href="/community.html">leaderboard</a>`;
   if (!study.shared) {
     const text = `Not on the ${link}: this study isn't shared.`;
     return { score: stats?.winProbability !== undefined ? text : "", evaluation: stats?.evalCp !== undefined ? text : "" };
@@ -622,19 +622,23 @@ async function leaderboardStatus(study: Study): Promise<{ score: string; evaluat
     const res = await fetch(url, { credentials: "same-origin" });
     return res.ok ? res.json() : [];
   };
+  // Each result is ranked among scores from the same Explorer: Lichess's, or
+  // the 2016 sample's (a separate view of the leaderboards).
+  const scoreSource = stats?.source ?? "lichess";
+  const evalSource = stats?.evalSettings?.source ?? "lichess";
   const [byScore, byEval] = await Promise.all([
-    fetchBoard("/api/community/openings"),
-    fetchBoard("/api/community/openings-by-eval"),
+    fetchBoard(`/api/community/openings?source=${scoreSource}`),
+    fetchBoard(`/api/community/openings-by-eval?source=${evalSource}`),
   ]);
 
   const status = (entries: LeaderboardEntry[], settings: CalculationSettings | undefined, depth?: number | null): string => {
+    const where = settings?.source === "lirep" ? `${link} (2016 sample)` : link;
     const rank = entries.find((e) => e.id === study.id)?.rank;
-    if (rank) return `Ranked #${rank} for ${sideName} on the ${link}.`;
+    if (rank) return `Ranked #${rank} for ${sideName} on the ${where}.`;
     if (settings?.database === "player") return `Not ranked: calculated from one player's games.`;
-    if (settings?.source === "lirep") return `Not ranked by default: calculated with the Lirep Explorer.`;
     if (depth !== undefined && !depth) return `Not ranked: Stockfish depth unknown. Recalculate to rank it.`;
     if (depth !== undefined && depth! < 12) return `Not ranked: depth ${depth}. Recalculate at Balanced (12) or more.`;
-    return `Not in the top 10 for ${sideName} on the ${link}.`;
+    return `Not in the top 10 for ${sideName} on the ${where}.`;
   };
   return {
     score: stats?.winProbability !== undefined ? status(byScore, stats) : "",

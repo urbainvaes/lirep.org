@@ -3112,8 +3112,15 @@ body {
 
 .leaderboards {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 40px;
   margin-top: 24px;
+}
+
+/* Keep wide tables scrolling inside their wrapper on a phone, instead of
+   widening the page. */
+.leaderboard .opening-groups {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .leaderboard h3 {
@@ -3143,38 +3150,60 @@ body {
   margin-bottom: 18px;
 }
 
-.community-options {
-  display: flex;
+/* The title on the left, the Explorer data switch on the right. */
+.leaderboards-heading {
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
+  row-gap: 8px;
 }
 
-.community-toggle {
+.leaderboards-heading h2 {
+  margin: 0;
+}
+
+/* Which Explorer's data the leaderboards rank: two segments, the chosen one
+   filled. Shown only when the 2016 sample has something to rank. */
+.source-switch {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
+  gap: 0;
+  font-size: 0.82rem;
 }
 
-.community-help {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: transparent;
+.source-switch__label {
+  margin-right: 8px;
   color: var(--text-dim);
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1;
+}
+
+.source-switch button {
+  padding: 4px 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
   cursor: pointer;
 }
 
-.community-help:hover,
-.community-help[aria-expanded="true"] {
+.source-switch button:first-of-type {
+  border-radius: 6px 0 0 6px;
+}
+
+.source-switch button:last-of-type {
+  margin-left: -1px;
+  border-radius: 0 6px 6px 0;
+}
+
+.source-switch button[aria-pressed="true"] {
+  position: relative;
+  background: var(--primary);
   border-color: var(--primary);
-  color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.source-switch[hidden] {
+  display: none;
 }
 
 .beta-tag {

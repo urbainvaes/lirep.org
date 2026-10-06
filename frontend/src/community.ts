@@ -7,7 +7,12 @@ interface Summary {
   sharedStudies: number;
   maxUsers: number;
   activeThisWeek: number;
+  // Shared studies with a result ranked on the 2016 sample; the switch to
+  // that view is only offered when there is one.
+  lirepOpenings: number;
 }
+
+type Source = "lichess" | "lirep";
 
 interface Opening {
   rank: number | null;
@@ -62,7 +67,7 @@ function formatEval(cp: number): string {
 // Returns HTML: "Lirep" and "Lichess" link to the docs that say what their data is.
 function settingsLabel(opening: ExplorerSettingsRow): string {
   const database = opening.source === "lirep"
-    ? `<a class="source-lirep" href="/doc/stats.html#explorer-settings" title="${escapeHtml(LIREP_DATASET)}">Lirep</a>`
+    ? `<a class="source-lirep" href="/doc/stats.html#explorer-settings" title="${escapeHtml(LIREP_DATASET)}">2016 sample</a>`
     : opening.database === "masters"
       ? "Masters games"
       : `<a class="source-lichess" href="/doc/stats.html#explorer-settings" title="Lichess's full Explorer, all Lichess players' games">Lichess</a>`;
@@ -198,11 +203,11 @@ function renderLeaderboard<T extends LeaderboardRow>(board: Leaderboard<T>, open
   `;
 }
 
-const LIREP_HELP =
-  "Lirep is this site's own Explorer. It is built from Lichess's public game database, but holds only " +
-  "a few months of games (" + LIREP_DATASET.replace("Lichess games, ", "") + ", about 10.7 million rated games), a much smaller and older sample " +
-  "than the full Lichess Explorer. Scores calculated with it are less reliable and not comparable with the " +
-  "Lichess Explorer's scores, so they are left out of the leaderboards unless you include them here.";
+// The leaderboards rank one Explorer's scores at a time, since the two
+// aren't comparable: Lichess's (the default) or the local 2016 sample's.
+const SAMPLE_TITLE =
+  `This site's own Explorer: ${LIREP_DATASET} (about 10.7 million rated games), a much smaller and older ` +
+  "sample than Lichess's Explorer, so its scores are ranked separately.";
 
 function render(
   main: HTMLElement,
@@ -216,29 +221,18 @@ function render(
     ${renderStats(summary)}
 
     <section class="profile-section">
-      <div class="profile-section__heading">
-        <div>
-          <h2>Leaderboards</h2>
-          <p class="profile-subtitle">
-            Up to ten shared openings per side, best first, ranked two ways. Only openings calculated with Lichess's
-            Explorer, on all Lichess players' games or on Masters games, are listed; results calculated from one
-            particular player's games are left out. Names open their Lirep profiles.
-          </p>
+      <div class="profile-section__heading leaderboards-heading">
+        <h2>Leaderboards</h2>
+        <div class="source-switch" role="group" aria-label="Explorer data" ${summary.lirepOpenings ? "" : "hidden"}>
+          <span class="source-switch__label">Explorer data</span>
+          <button type="button" data-source="lichess" aria-pressed="true">Lichess</button>
+          <button type="button" data-source="lirep" aria-pressed="false" title="${escapeHtml(SAMPLE_TITLE)}">2016 sample</button>
         </div>
       </div>
       <p class="community-note">
         Each row shows the rating band and time controls it was calculated with, so compare rows with the same
         settings. Studies are shared by default; authors can switch sharing off for any study on its page.
       </p>
-      <div class="community-options">
-        <label class="community-toggle">
-          <input type="checkbox" id="include-lirep" />
-          Include Lirep evaluations
-        </label>
-        <button id="lirep-help-btn" class="community-help" type="button" title="${LIREP_HELP}"
-          aria-label="What are Lirep evaluations?" aria-expanded="false" aria-controls="lirep-help">?</button>
-      </div>
-      <p id="lirep-help" class="community-note community-help-text" hidden>${LIREP_HELP}</p>
       <div id="community-message" class="community-message" role="status" aria-live="polite" hidden></div>
       <div class="leaderboards">
         ${renderLeaderboard(BY_EXPECTED_SCORE, openings, signedIn)}
@@ -275,18 +269,14 @@ function render(
   }
   bindImports();
 
-  const helpButton = main.querySelector<HTMLButtonElement>("#lirep-help-btn")!;
-  const helpText = main.querySelector<HTMLElement>("#lirep-help")!;
-  helpButton.addEventListener("click", () => {
-    helpText.hidden = !helpText.hidden;
-    helpButton.setAttribute("aria-expanded", String(!helpText.hidden));
-  });
+  const switchButtons = [...main.querySelectorAll<HTMLButtonElement>(".source-switch [data-source]")];
+  let source: Source = "lichess";
 
-  const includeLirep = main.querySelector<HTMLInputElement>("#include-lirep")!;
-  includeLirep.addEventListener("change", async () => {
-    includeLirep.disabled = true;
+  async function showSource(wanted: Source): Promise<void> {
+    if (wanted === source) return;
+    switchButtons.forEach((b) => (b.disabled = true));
     try {
-      const query = `includeLirep=${includeLirep.checked}`;
+      const query = `source=${wanted}`;
       const [res, evalRes] = await Promise.all([
         fetch(`/api/community/openings?${query}`, { credentials: "same-origin" }),
         fetch(`/api/community/openings-by-eval?${query}`, { credentials: "same-origin" }),
@@ -294,17 +284,20 @@ function render(
       if (!res.ok || !evalRes.ok) throw new Error(String(res.ok ? evalRes.status : res.status));
       const fresh: Opening[] = await res.json();
       const freshEval: EvalOpening[] = await evalRes.json();
+      source = wanted;
       tables.innerHTML = renderTables(BY_EXPECTED_SCORE, fresh, signedIn);
       evalTables.innerHTML = renderTables(BY_EXPECTED_EVALUATION, freshEval, signedIn);
       bindImports();
+      switchButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.source === source)));
     } catch {
-      includeLirep.checked = !includeLirep.checked;
       message.hidden = false;
-      message.textContent = "Could not update the leaderboard. Please try again.";
+      message.textContent = "Could not update the leaderboards. Please try again.";
     } finally {
-      includeLirep.disabled = false;
+      switchButtons.forEach((b) => (b.disabled = false));
     }
-  });
+  }
+
+  switchButtons.forEach((b) => b.addEventListener("click", () => void showSource(b.dataset.source as Source)));
 }
 
 async function init(): Promise<void> {
