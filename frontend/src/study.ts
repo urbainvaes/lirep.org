@@ -67,6 +67,14 @@ function saveTools(tools: Set<Tool>): void {
   }
 }
 
+function sidePawn(side: "white" | "black"): HTMLElement {
+  const pawn = document.createElement("span");
+  pawn.className = `side-pawn side-pawn--${side} study-head__side`;
+  pawn.title = pawn.ariaLabel = side === "white" ? "Playing White" : "Playing Black";
+  pawn.textContent = side === "white" ? "♙" : "♟";
+  return pawn;
+}
+
 function getStudyId(): number | null {
   const id = new URLSearchParams(window.location.search).get("id");
   return id ? Number(id) : null;
@@ -169,7 +177,19 @@ function renderEditor(
   main.innerHTML = `
     <div class="study-editor study-editor--edit">
       <header class="study-head">
-        <div class="study-head__main">
+        <div class="study-head__title">
+          ${
+            existing
+              ? `<span class="side-pawn side-pawn--${existing.side} study-head__side" title="${existing.side === "white" ? "Playing White" : "Playing Black"}" aria-label="${existing.side === "white" ? "Playing White" : "Playing Black"}">${existing.side === "white" ? "♙" : "♟"}</span>`
+              : `<select id="study-color" class="study-color-select" aria-label="Side" title="Which side is this repertoire for? This can't be changed after saving.">
+                    <option value="white" ${newStudySide === "white" ? "selected" : ""}>Playing White</option>
+                    <option value="black" ${newStudySide === "black" ? "selected" : ""}>Playing Black</option>
+                  </select>`
+          }
+          <h1 id="study-title" class="study-title" title="Rename" ${existing ? "" : "hidden"}>${existing ? escapeHtml(existing.name) : ""}</h1>
+          <button id="rename-btn" class="study-rename-btn" type="button" aria-label="Rename study" title="Rename" ${existing ? "" : "hidden"}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
           <input
             id="study-name"
             class="study-name-input"
@@ -177,25 +197,16 @@ function renderEditor(
             placeholder="Name this study"
             aria-label="Study name"
             value="${existing ? escapeHtml(existing.name) : ""}"
+            ${existing ? "hidden" : ""}
           />
-          <div class="study-head__meta">
-            ${
-              existing
-                ? `<span class="study-color-badge">${existing.side === "white" ? "Playing White" : "Playing Black"}</span>`
-                : `<select id="study-color" class="study-color-select" aria-label="Side" title="Which side is this repertoire for? This can't be changed after saving.">
-                      <option value="white" ${newStudySide === "white" ? "selected" : ""}>Playing White</option>
-                      <option value="black" ${newStudySide === "black" ? "selected" : ""}>Playing Black</option>
-                    </select>`
-            }
-            <span id="study-start-badge" class="study-start-badge" hidden></span>
-            <span id="study-save-status" class="study-save-status" role="status" aria-live="polite">
-              ${existing ? "All changes saved." : "Name this study to start auto-saving."}
-            </span>
-          </div>
+          <button id="study-start-badge" class="study-start-badge" type="button" title="Go to the starting point" hidden></button>
+          <span id="study-save-status" class="study-save-status" role="status" aria-live="polite">
+            ${existing ? "Saved" : "Name this study to start auto-saving."}
+          </span>
         </div>
         <div class="study-head__links" id="study-links" ${existing ? "" : "hidden"}>
-          <a class="btn btn-secondary" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}">Stats</a>
-          <a class="btn btn-secondary" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}">Practice</a>
+          <a class="study-head__link" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}">Stats</a>
+          <a class="study-head__link" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}">Practice</a>
           <details class="study-menu" id="study-menu">
             <summary class="btn btn-secondary" aria-label="More study options">⋯</summary>
             <div class="study-menu__panel">
@@ -322,6 +333,8 @@ function renderEditor(
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const nameInput = document.getElementById("study-name") as HTMLInputElement;
+  const titleEl = document.getElementById("study-title") as HTMLElement;
+  const renameBtn = document.getElementById("rename-btn") as HTMLButtonElement;
   const colorSelect = document.getElementById("study-color") as HTMLSelectElement | null;
   const saveStatusEl = document.getElementById("study-save-status") as HTMLElement;
   const deleteStudyBtn = document.getElementById("delete-study-btn") as HTMLButtonElement;
@@ -430,7 +443,7 @@ function renderEditor(
     }
     if (nameInput.value.trim()) {
       nameInput.classList.remove("study-name-input--attention");
-      setSaveStatus("Unsaved changes…");
+      setSaveStatus("Unsaved changes");
     }
     saveTimer = window.setTimeout(() => {
       saveTimer = null;
@@ -444,7 +457,9 @@ function renderEditor(
       saveAgain = true;
       return;
     }
-    const name = nameInput.value.trim() || savedName;
+    // Once the study exists, its name changes only when a rename is
+    // committed (see finishRename), not with every keystroke in the field.
+    const name = (studyId === null ? nameInput.value.trim() : titleEl.textContent?.trim()) || savedName;
     if (!name) {
       setSaveStatus("Enter a name to start auto-saving.");
       return;
@@ -474,10 +489,11 @@ function renderEditor(
             board.set({ orientation: boardOrientation });
             syncGaugeOrientation();
           }
-          colorSelect.disabled = true;
-          colorSelect.title = "The playing side is fixed once the study is created.";
+          colorSelect.replaceWith(sidePawn(saved.side));
         }
         studyLinksEl.hidden = false;
+        titleEl.textContent = saved.name;
+        if (document.activeElement !== nameInput) showTitle();
         (document.getElementById("study-stats-link") as HTMLAnchorElement).href = `/stat.html?id=${saved.id}`;
         (document.getElementById("study-practice-link") as HTMLAnchorElement).href = `/practice-session.html?id=${saved.id}`;
         sharedInput.checked = saved.shared ?? true;
@@ -486,7 +502,7 @@ function renderEditor(
         if (!nameInput.value.trim()) {
           setSaveStatus("Saved with the current name; enter a name to rename this study.");
         } else {
-          setSaveStatus(editVersion === savingVersion && !saveAgain ? "All changes saved." : "Saving latest changes…");
+          setSaveStatus(editVersion === savingVersion && !saveAgain ? "Saved" : "Saving…");
         }
       }
     } catch {
@@ -899,9 +915,7 @@ function renderEditor(
       });
       if (!res.ok) throw new Error("share failed");
       setSaveStatus(
-        wanted
-          ? "Shared with the community (it is ranked once its stats are calculated with Lichess's Explorer)."
-          : "No longer shared.",
+        wanted ? "Shared with the community" : "No longer shared",
       );
     } catch {
       sharedInput.checked = !wanted;
@@ -952,7 +966,52 @@ function renderEditor(
     scheduleAutoSave();
   });
 
-  nameInput.addEventListener("input", () => scheduleAutoSave(500));
+  // A new study saves as its name is typed (that creates it); afterwards the
+  // name is a title with a pencil, and renaming saves on Enter or on leaving
+  // the field. Esc cancels.
+  function showTitle(): void {
+    nameInput.hidden = true;
+    titleEl.hidden = false;
+    renameBtn.hidden = false;
+  }
+
+  function startRename(): void {
+    if (studyId === null) return;
+    nameInput.value = titleEl.textContent ?? "";
+    titleEl.hidden = true;
+    renameBtn.hidden = true;
+    nameInput.hidden = false;
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  function finishRename(commit: boolean): void {
+    if (studyId === null || nameInput.hidden) return;
+    const name = nameInput.value.trim();
+    if (commit && name && name !== titleEl.textContent) {
+      titleEl.textContent = name;
+      scheduleAutoSave(0);
+    }
+    showTitle();
+  }
+
+  titleEl.addEventListener("click", startRename);
+  renameBtn.addEventListener("click", startRename);
+  nameInput.addEventListener("input", () => {
+    if (studyId === null) scheduleAutoSave(500);
+  });
+  nameInput.addEventListener("keydown", (event) => {
+    if (studyId === null) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finishRename(true);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      finishRename(false);
+    }
+  });
+  nameInput.addEventListener("blur", () => finishRename(true));
+  document.getElementById("study-start-badge")?.addEventListener("click", goToStart);
   window.addEventListener("online", () => scheduleAutoSave(0));
 
   commentInputEl.addEventListener("input", () => {

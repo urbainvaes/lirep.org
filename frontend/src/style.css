@@ -1343,47 +1343,109 @@ body {
   display: none !important;
 }
 
+/* One line: side, name (a title with a pencil; a field while renaming or
+   before the first save), starting point and save status on the left; the
+   study's links and menu on the right. Wraps on narrow screens. */
 .study-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px 20px;
-  margin-bottom: 16px;
+  gap: 8px 20px;
+  margin-bottom: 14px;
 }
 
-.study-head__main {
+.study-head__title {
+  display: flex;
   flex: 1 1 320px;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
-.study-head__main .study-name-input {
-  width: 100%;
+.study-head__side {
+  margin: 0;
+  font-size: 1.5rem;
+  cursor: default;
 }
 
-.study-head__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+.study-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 1.35rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
 }
 
-.study-head__meta .study-color-badge,
-.study-head__meta .study-start-badge,
-.study-head__meta .study-color-select {
-  height: 28px;
-  font-size: 0.82rem;
+.study-rename-btn {
+  display: inline-flex;
+  flex: none;
+  padding: 4px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
 }
 
-.study-head__meta .study-save-status {
+.study-rename-btn:hover {
+  color: var(--text-strong);
+  background: var(--card-nested-bg);
+}
+
+.study-head__title .study-name-input {
+  flex: 0 1 380px;
+  min-width: 0;
+  padding: 5px 10px;
+  font-size: 1.1rem;
+}
+
+.study-head__title .study-color-select {
+  height: 32px;
+}
+
+.study-head__title .study-start-badge {
+  flex: none;
+  height: 26px;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.study-head__title .study-save-status {
   flex: 0 1 auto;
+  min-width: 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* An error must be read in full, even if it takes a second line. */
+.study-head__title .study-save-status--error {
+  white-space: normal;
+}
+
+.study-head__link {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.study-head__link:hover {
+  color: var(--text-strong);
+  text-decoration: underline;
+}
+
+.study-menu > summary.btn {
+  padding: 2px 10px;
 }
 
 .study-head__links {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
 }
 
 .study-menu {
