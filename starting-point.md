@@ -34,8 +34,8 @@ being weighted by how often Black even plays into that exact sequence.
   marking `2.Bb2` as the starting point doesn't renumber it as "move 1."
   Real move numbers are what you use to navigate and edit; the starting
   point is a separate, purely computational concept.
-- **Explorer/eval caching.** `explorer_cache` and `cloud_eval_cache` are
-  keyed by FEN, not by study or by "move number from some starting point" —
+- **Explorer/eval caching.** The browser's Explorer and evaluation caches
+  are keyed by FEN, not by study or by "move number from some starting point" —
   entirely unaffected.
 
 ## What it does change

@@ -123,17 +123,12 @@ export async function fetchExplorerDefaults(): Promise<ExplorerDefaults | null> 
   }
 }
 
-export function explorerUrl(fen: string, settings: ExplorerSettings, side: "white" | "black"): string {
-  const params = new URLSearchParams({ fen, source: settings.source, database: settings.database });
-  if (settings.database === "lichess") {
-    if (settings.minRating !== null) params.set("minRating", String(settings.minRating));
-    params.set("speeds", settings.speeds.join(","));
-  } else if (settings.database === "player") {
-    // One player's games as the side this study is played from.
-    params.set("speeds", settings.speeds.join(","));
-    params.set("player", settings.player ?? "");
-    params.set("color", side);
-  }
+/** The backend's Explorer endpoint, which serves only the local Lirep
+ * Explorer (the 2016 sample, Players database); Lichess's Explorer is queried
+ * from the browser by explorerClient.ts. */
+export function lirepExplorerUrl(fen: string, settings: ExplorerSettings): string {
+  const params = new URLSearchParams({ fen, speeds: settings.speeds.join(",") });
+  if (settings.minRating !== null) params.set("minRating", String(settings.minRating));
   return `/api/explorer?${params.toString()}`;
 }
 
@@ -166,8 +161,8 @@ export function renderExplorerLoading(panel: HTMLElement): void {
   panel.innerHTML = `<p class="explorer-empty">Loading opening explorer data…</p>`;
 }
 
-export function renderExplorerError(panel: HTMLElement): void {
-  panel.innerHTML = `<p class="explorer-empty">Explorer data unavailable right now.</p>`;
+export function renderExplorerError(panel: HTMLElement, message = "Explorer data unavailable right now."): void {
+  panel.innerHTML = `<p class="explorer-empty">${escapeHtml(message)}</p>`;
 }
 
 // Opponent replies played in at least this share of games are flagged when

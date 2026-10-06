@@ -1,79 +1,87 @@
 # Opening Explorer and evaluation caches
 
 Companion to the [Opening Explorer panel](README.md#the-study-page) and
-[stats.md's three actions](stats.md#4-three-actions). There are two active
-backend SQLite caches in `backend/app/store.py` and a separate browser
-evaluation cache. They have different ownership and freshness rules:
+[stats.md's calculations](stats.md#4-two-calculations). Where each piece of
+data lives:
 
 | Data | Storage and scope | Lifetime |
 | --- | --- | --- |
-| Lichess Explorer responses | Backend `explorer_cache`, shared across studies and accounts | 30-day TTL; 24 hours for the player database |
+| Lichess Explorer responses | Browser IndexedDB `lirep-explorer`, per browser profile | 30 days; 24 hours for the player database |
+| Lirep Explorer (2016 sample) responses | Not cached: the local Explorer is unlimited and never changes | — |
 | Resolved default rating bucket (for a new study's picker) | Backend `rating_cache`, per username | 1-hour TTL; stale fallback on refresh failure |
-| Stockfish position evals | Browser IndexedDB `positions`, keyed by `[username, fen]` | Until browser data is cleared; no sync |
+| Stockfish position evals | Browser IndexedDB `lirep-position-evals`, keyed by `[username, fen]` | Until browser data is cleared; no sync |
 
-Older databases may still contain the legacy global `cloud_eval_cache` table,
-but nothing reads or writes it, and new databases do not create it. There is
-**no Lichess Cloud Eval fallback**.
+Older databases may still contain the legacy `cloud_eval_cache` table, but
+nothing reads or writes it. There is **no Lichess Cloud Eval fallback**.
 
-## Why cache Explorer responses?
+## Lichess's Explorer is queried from the browser
 
-The Study editor's live panel requests a position whenever you visit it.
-**Update win probability** walks opponent-to-move positions in the tree on
-the backend. In the browser, **Update evaluations** and **Update expected
-evaluation** walk the reachable portion of the tree to discover evaluation
-frontier positions, using `/api/explorer` at opponent-to-move nodes. The
-first browser action needs only the positions; the second also needs move
-frequencies for its weighted expected-eval walk.
+Lichess's Opening Explorer (`explorer.lichess.org`) is rate-limited and needs
+a Lichess token. Every caller — the Study editor's panel, the shared-opening
+viewer, and both Stats-page calculations — goes through
+`fetchExplorerData` in `frontend/src/explorerClient.ts`, which asks Lichess
+**directly from the user's browser**, with the user's own token (fetched
+once per page from `GET /api/lichess-token`; its only scope is
+`preference:read`). Lichess allows this: it answers cross-origin requests
+from any site, including with an `Authorization` header.
 
-These callers all use the backend's `fetch_explorer_cached` in
-`backend/app/explorer.py`, directly or through `/api/explorer`. A repeated
-query should not repeatedly reach Lichess's rate-limited Explorer. Explorer
-move frequencies change slowly, making a bounded period of reuse useful.
-Lichess does not publish a fixed Explorer quota; its API guidance says to
-make one request at a time and, after HTTP 429, wait about a minute (or
-longer) and reduce request frequency. A live Explorer 429 fails fast rather
-than triggering an immediate retry.
+This matters because Lichess limits requests per IP address and per token.
+When the backend proxied every request, all users shared lirep.org's single
+IP and one user's large calculation could get everyone rate-limited. Now
+each user spends only their own allowance. For the same reason, the
+expected score is calculated in the browser, like the expected evaluation:
+see [stats.md](stats.md). The backend only stores the results it is sent.
 
-Only responses from Lichess's Explorer are cached. The local Lirep explorer
-has no rate limit and its data never changes, so its responses are fetched
-fresh every time; caching them would only fill the size cap below and evict
-Lichess entries.
+The local Lirep Explorer (the 2016 sample) is still reached through
+`GET /api/explorer`, which serves nothing else.
 
-`explorer_cache(cache_key, response, fetched_at)` stores the raw Explorer
-JSON. The key has the form
-`source|database|ratings|speeds|fen`: `source` is always `lichess`, and
-`ratings` is the actual comma-separated bucket list passed to the provider,
-not merely the configured minimum threshold. Masters queries have no rating
-filter. This lets different studies or accounts reuse exactly the same
-provider/query while keeping distinct settings separate. Responses older
-than `EXPLORER_CACHE_TTL_SECONDS` (30 days) are fetched again and replaced,
-except for the player database, whose games change whenever the player
-plays: it uses `EXPLORER_PLAYER_CACHE_TTL_SECONDS` (24 hours);
-there is no manual refresh bypass. The browser receives a shaped
-`/api/explorer` response, including `fetchedAt`; the Study editor displays
-its true age ("Fetched just now", "Fetched 3h ago", etc.). The backend
-win/coverage job also has an in-run FEN map to avoid even SQLite lookups on
-transpositions. Each browser calculation reuses Explorer responses in an
-in-memory map for its discovery and, for expected eval, weighting passes.
+## Pacing: one request at a time, half a second apart
 
-Expired rows are removed at backend startup and during a throttled cleanup
-(after an hour or 1,000 cache writes, whichever comes first). Cleanup also
-enforces `EXPLORER_CACHE_MAX_BYTES` (512 MiB of raw keys and responses),
-evicting the oldest entries first when needed. The fetched-at index makes
-expiry checks and oldest-first eviction efficient. The size cap is checked
-during cleanup rather than on every request; SQLite may keep freed pages in
-its file for reuse instead of immediately shrinking the file on disk.
+Lichess's API guidelines ask clients to make one request at a time and,
+after an HTTP 429, to wait a minute before trying again. `explorerClient.ts`
+enforces this for all of a browser tab's Lichess Explorer requests:
 
-Simultaneous requests for the same uncached key share one in-flight fetch
-and receive the same response or error. A failed fetch is not cached;
-cancelling one waiter does not cancel the task for others. If the initiating
-request closes its HTTP client while other callers still wait, the task
-retries with its own client. Separate backend worker processes do not share
-in-flight tasks, but still share SQLite.
+- **One at a time.** Requests wait in a queue; the next one is sent only
+  when the previous answer has arrived.
+- **At least 500 ms apart** (`EXPLORER_REQUEST_GAP_MS`), measured from the
+  end of one request to the start of the next, so a calculation walking a
+  large tree never bursts at the speed of Lichess's answers. The value is a
+  guess, since Lichess publishes no Explorer quota; raise it if 429s still
+  occur. Cached positions skip the queue entirely.
+- **After a 429, everything pauses for 60 s** (`RATE_LIMIT_PAUSE_MS`). A
+  calculation's request then retries once, and its progress label says
+  "Lichess asked to slow down; resuming at …"; a second 429 fails the
+  calculation with a clear message.
+- **Interactive requests go first.** The Study editor's panel (and the
+  shared-opening viewer's) jumps ahead of a calculation's queued requests,
+  so browsing stays responsive while a calculation runs. During a 429 pause
+  it fails at once with "please wait a minute" rather than hanging.
 
-The Lirep source uses its configured local rated-game archive; Lichess
-offers Players and Masters. The same backend cache keys include the source,
-so results from one provider cannot be mistaken for another.
+Simultaneous requests for the same position and settings share one fetch.
+
+## The browser cache
+
+Explorer move frequencies change slowly, so `explorerClient.ts` keeps each
+Lichess response in IndexedDB (`lirep-explorer`, store `responses`) for
+30 days; responses from the player database, whose games change whenever
+the player plays, are kept for 24 hours. The key holds the database, the
+query (the actual rating buckets and speeds, or the player and side) and
+the FEN, for example
+`lichess|1600,1800,2000,2200,2500|blitz,rapid,classical|<fen>` or
+`masters|<fen>`. A cached response carries its fetch time, which the
+editor's panel shows ("Fetched 3h ago").
+
+The cache is per browser profile, shared by the accounts used in it:
+Explorer data does not depend on who asks. Another device, or a cleared
+browser, fetches again. If IndexedDB is unavailable, responses are not
+cached and every lookup is a (paced) request. Each calculation also keeps
+the positions it has seen in memory, so transpositions within one tree
+cost nothing.
+
+Browsers cannot feed a cache shared between users: anyone could then
+upload invented move statistics and skew other people's scores. Before this
+change, the backend kept such a shared cache (`explorer_cache` in SQLite);
+it now drops that table on startup.
 
 ## Rating bucket default
 
@@ -92,8 +100,8 @@ resolution actually earns its keep: `/api/explorer-defaults`, which
 pre-selects a brand-new (or otherwise-untouched) study's picker at the
 player's own bracket. It still caches that bucket in `rating_cache` by
 username for `RATING_CACHE_TTL_SECONDS` (one hour), surviving backend
-restarts, and the win-probability job falls back to it too if a study's
-saved `minRating` is still `null` from before this change. The reference
+restarts. A study whose saved `minRating` is still `null` from before this
+change uses the static default, 1400. The reference
 rating preference is Rapid, then Blitz, then Classical, with 1500 as the
 unrated default. The chosen bucket and all higher buckets form the Players
 rating filter.
@@ -110,8 +118,8 @@ instead of an engine. See [stats.md §3](stats.md#3-expected-evaluation-at-the-e
 for the weighted walk.
 
 `findRequiredEvaluations` in `frontend/src/stat.ts` discovers only this
-frontier using `/api/explorer`. Both **Update evaluations** and **Update
-expected evaluation** check each frontier FEN against the signed-in account's
+frontier, with Explorer data from `explorerClient.ts`. The expected
+evaluation checks each frontier FEN against the signed-in account's
 local browser cache and run the Study editor's Stockfish WASM engine only for
 missing FENs. This is incremental across studies and tree changes on the
 same account and device: a new reply may require new FENs without discarding
@@ -140,39 +148,34 @@ SQLite eval table. The old `POST /api/studies/{id}/evals` and
 `cloud_eval_cache` table, if present in an older database, is neither a
 lookup source nor a destination for new values.
 
-**Update expected evaluation** uses the same local frontier discovery and
-evaluation, then weights those values with Explorer frequencies in the
-browser. It sends only the scalar `evalCp`, `evalMisses`, and selected
-`explorerSettings` to synchronous `POST /api/studies/{id}/expected-eval`.
-The backend persists the study summary and settings; it does not run an
-engine, access Cloud Eval, or start a job for this action. **Update win
-probability** remains a backend Explorer-only job, polled through
-`/api/jobs/{jobId}`. Explorer responses and rating buckets remain backend
-SQLite data across restarts even though engine evaluations do not.
+The expected evaluation weights those values with Explorer frequencies in
+the browser and sends only the scalar `evalCp`, `evalMisses`, the depth and
+the selected `explorerSettings` to `POST /api/studies/{id}/expected-eval`.
+The expected score and coverage are likewise calculated in the browser
+(`frontend/src/expectedScore.ts`) and sent to
+`POST /api/studies/{id}/expected-score`. The backend persists the results
+and settings; it runs no engine and makes no Explorer request for either.
 
 ## Stored shapes
 
 ```jsonc
-// explorer_cache: raw provider response; key includes source, database,
-// actual rating buckets, speeds, and FEN (in that order).
-{
-  "cache_key": "lichess|lichess|1600,1800,2000,2200,2500|blitz,rapid,classical|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-  "response": { "white": 1234, "draws": 456, "black": 789, "moves": [], "opening": null },
-  "fetched_at": "2026-09-23T11:42:03+00:00"
-}
+// Browser IndexedDB lirep-explorer / responses: key as described above,
+// value the shaped response and its fetch time (ms since the epoch).
+// "lichess|2000,2200,2500|blitz,rapid|rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" ->
+{ "data": { "source": "lichess", "database": "lichess", "minRating": 2000, "opening": "King's Pawn Game",
+            "totals": { "white": 1234, "draws": 456, "black": 789 }, "moves": [], "fetchedAt": "2026-10-07T11:42:03Z" },
+  "fetchedAt": 1791366123000 }
 
-// rating_cache: one row per signed-in username.
+// Backend rating_cache: one row per signed-in username.
 {
   "username": "ExampleUser",
   "bucket": 1600,
   "fetched_at": "2026-09-23T11:42:03+00:00"
 }
 
-// Browser IndexedDB positions: key [username, fen], value White-POV cp.
-// Example: ["ExampleUser", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"] -> 18
+// Browser IndexedDB positions: key [username, fen, depth], value White-POV cp.
+// Example: ["ExampleUser", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 16] -> 18
 ```
 
-The Explorer cache has expiry cleanup and a 512 MiB raw-payload limit;
-`rating_cache` remains small (one row per username) and checks its one-hour
-TTL on reads. Backend `/api/jobs` progress is in-memory rather than part of
-either persisted cache.
+`rating_cache` stays small (one row per username) and checks its one-hour
+TTL on reads.

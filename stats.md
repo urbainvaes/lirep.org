@@ -89,26 +89,33 @@ and displayed in pawns (`cp / 100`). Engine-reported mates use a
 distance-sensitive value near the `±100,000` cap. The cap is a finite
 stand-in for a decisive result when averaging with ordinary cp values.
 
-## 4. Three actions
+## 4. Two calculations
 
-All actions are manual and independent. The study detail disables the other
-buttons while an action runs; each action has its own progress display.
+Both run in the browser and are started from the Stats page: **Recalculate**
+runs both, one after the other, and each result's own button runs it alone.
+The other buttons are disabled while one runs; each result has its own
+progress display.
 
-| Button | Work | Persistence |
+| Calculation | Work | Persistence |
 | --- | --- | --- |
-| **Update evaluations** | Discover the current frontier with `/api/explorer`, run Stockfish only for FENs absent from this browser's cache | Save each completed evaluation in browser IndexedDB |
-| **Update win probability** | Backend Explorer-only job for win/draw/loss probabilities and coverage | Merge its fields into the study's `stats` row |
-| **Update expected evaluation** | Discover/evaluate any missing frontier FENs locally, then perform the weighted tree walk locally | Synchronous `POST /api/studies/{id}/expected-eval` with only `evalCp`, `evalMisses`, and `explorerSettings`; backend saves the study summary |
+| **Expected score** | The weighted tree walk for win/draw/loss probabilities and coverage (`frontend/src/expectedScore.ts`), with Explorer data from the browser | `POST /api/studies/{id}/expected-score` with the results and `explorerSettings`; the backend checks the ranges and saves them |
+| **Expected evaluation** | Discover the frontier, run Stockfish only for FENs absent from this browser's cache, then the weighted walk | `POST /api/studies/{id}/expected-eval` with `evalCp`, `evalMisses`, the depth and `explorerSettings` |
 
-Both browser actions share the same frontier discovery and evaluation code.
+All Explorer data comes from `explorerClient.ts`, which asks Lichess's
+Explorer directly from the browser, one request at a time and at least
+500 ms apart, pausing a minute after a 429; see
+[explorer-cache.md](explorer-cache.md). Since the browser calculates the
+results, the server cannot check them beyond their ranges; this is the
+price of each user's Explorer requests counting against their own Lichess
+rate limit rather than the server's.
+
 An existing FEN evaluation is reused across tree edits and studies **on
 that account and device**. A new reply or changed Explorer settings can
-expose new frontier FENs; running **Update expected evaluation** evaluates
-them itself if needed, so **Update evaluations** is optional, not a
-prerequisite. Only frontier FENs, not every tree node, are analyzed. Each
-successful evaluation is persisted as soon as it finishes, so an interrupted
-run can resume without repeating completed work. If the engine yields no
-score, the position remains missing and can be retried on a later run.
+expose new frontier FENs, which the expected evaluation evaluates first.
+Only frontier FENs, not every tree node, are analyzed. Each successful
+evaluation is persisted as soon as it finishes, so an interrupted run can
+resume without repeating completed work. If the engine yields no score,
+the position remains missing and can be retried on a later run.
 
 On loading the detail page, legacy server-side `evals.byNode` values on the
 study are mapped from node IDs to FENs and imported into the browser cache
@@ -131,26 +138,18 @@ as legacy until recalculated locally; the replacement summary records
 `evalOrigin: "local"` so it is not mistaken for a result that may have used
 the former shared FEN cache.
 
-**Update win probability** calls `POST /api/studies/{id}/win-probability`,
-receives `{jobId}`, and polls `GET /api/jobs/{jobId}`. Job progress is
-in-memory and does not survive a backend restart. The UI estimates its
-total using tree size because the Explorer branching factor is not known
-in advance. **Update evaluations** shows an indeterminate discovery phase,
-then an exact count of missing FENs; **Update expected evaluation** shows
-discovery and local engine progress before saving the summary, without
-starting a backend job or polling `/api/jobs`. No server-side engine or
-Cloud Eval work is done for either evaluation action.
+The expected score's progress bar estimates its total from the tree's size,
+because the Explorer's branching is not known in advance; the expected
+evaluation shows its discovery phase, then an exact count of positions to
+evaluate. No server-side engine or Cloud Eval work is done.
 
-The detail page's editable Explorer source, database, minimum rating, and
-speed settings affect which replies the browser discovers and weights.
-**Update win probability** and **Update expected evaluation** each send
-the selected `explorerSettings` and persist them on the study. Simply
-changing the controls or clicking **Update evaluations** does not save
-settings. Win/coverage and expected eval can be recalculated separately
-at different settings; each merges only its own metric fields rather than
-clearing the other result. Explorer responses and automatic rating buckets
-remain persistently cached on the backend (see
-[explorer-cache.md](explorer-cache.md)).
+The Stats page's Explorer settings (source, database, minimum rating,
+speeds) and Stockfish depth decide which replies are weighted and how deep
+positions are evaluated. Each calculation sends the settings it used and
+saves them as the study's settings; changing the controls alone saves
+nothing and only marks results calculated with other settings as out of
+date. The two results can be calculated at different settings; each merges
+only its own fields rather than clearing the other.
 
 ## Assumptions and limits
 
@@ -167,8 +166,9 @@ remain persistently cached on the backend (see
 - Calculations start at `startNodeId` if set and still present, otherwise the
   tree root; see [starting-point.md](starting-point.md).
 - Recalculation is manual because Explorer lookups and local Stockfish
-  searches can take time. Backend Lichess Explorer responses are cached for 30 days (24 hours for
-  the player database); the local Lirep explorer is not cached.
+  searches can take time. Lichess Explorer responses are cached in the
+  browser for 30 days (24 hours for the player database); the local Lirep
+  explorer is not cached.
 
 ## Stored shape
 

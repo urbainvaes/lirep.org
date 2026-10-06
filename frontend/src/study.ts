@@ -7,18 +7,17 @@ import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, whiteGaugeShare, type
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
-  explorerUrl,
   fetchExplorerDefaults,
   ratingOptionsHtml,
   renderExplorer,
   renderExplorerError,
   renderExplorerLoading,
   speedCheckboxesHtml,
-  type ExplorerData,
   type ExplorerDefaults,
   type ExplorerSettings,
   type ExplorerSpeed,
 } from "./explorer";
+import { errorMessage, fetchExplorerData } from "./explorerClient";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
@@ -596,21 +595,15 @@ function renderEditor(
     const requestId = ++explorerRequestId;
     renderExplorerLoading(explorerPanelEl);
     try {
-      const res = await fetch(explorerUrl(fen, settings, currentSide()), { credentials: "same-origin" });
-      if (requestId !== explorerRequestId) return;
-      if (!res.ok) {
-        renderExplorerError(explorerPanelEl);
-        return;
-      }
-      const data: ExplorerData = await res.json();
+      const data = await fetchExplorerData(fen, settings, currentSide(), { priority: "interactive" });
       if (requestId !== explorerRequestId) return;
       const chess = positionAt(tree, currentId);
       renderExplorer(explorerPanelEl, data, playSan, {
         inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
         yourTurn: (chess.turn() === "w") === (currentSide() === "white"),
       });
-    } catch {
-      if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl);
+    } catch (err) {
+      if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl, errorMessage(err));
     }
   }
 

@@ -3,7 +3,7 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -21,20 +21,6 @@ DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {
     "speeds": ["blitz", "rapid", "classical"],
 }
 DEFAULT_SIDE = "white"
-
-# A position's real-world move frequencies shift slowly, so a month-old cached
-# Lichess or Masters Explorer response is still practically accurate — and it's
-# shared across every study and user, keyed by provider and query (fen +
-# database + ratings + speeds), not tied to any one study. A single player's
-# games change whenever they play, so the player database expires after a day.
-EXPLORER_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
-EXPLORER_PLAYER_CACHE_TTL_SECONDS = 24 * 60 * 60
-EXPLORER_CACHE_MAX_BYTES = 512 * 1024 * 1024
-EXPLORER_CACHE_CLEANUP_INTERVAL_SECONDS = 60 * 60
-EXPLORER_CACHE_CLEANUP_WRITE_INTERVAL = 1000
-
-_last_explorer_cache_cleanup: datetime | None = None
-_explorer_cache_writes_since_cleanup = 0
 
 # How long a resolved "my current rating" bucket is trusted before
 # re-checking Lichess. Persisted (not in-memory) specifically so a backend
@@ -144,16 +130,9 @@ def init_db() -> None:
             """
         )
 
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS explorer_cache (
-                cache_key TEXT PRIMARY KEY,
-                response TEXT NOT NULL,
-                fetched_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS explorer_cache_fetched_at ON explorer_cache(fetched_at)")
+        # Lichess Explorer responses used to be cached here; the browser now
+        # queries Lichess itself and caches them (see explorer-cache.md).
+        conn.execute("DROP TABLE IF EXISTS explorer_cache")
 
         conn.execute(
             """
@@ -179,7 +158,6 @@ def init_db() -> None:
             """
         )
 
-    prune_explorer_cache()
 
 
 def moves_fingerprint(tree: dict[str, Any], start_node_id: int | None) -> str:
@@ -462,81 +440,6 @@ def merge_study_stats(
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
     assert row is not None
     return _row_to_study(row)
-
-
-def _is_player_cache_key(cache_key: str) -> bool:
-    # Keys are "source|database|..." (see explorer.fetch_explorer_cached).
-    parts = cache_key.split("|")
-    return len(parts) > 1 and parts[1] == "player"
-
-
-def _explorer_cache_ttl(cache_key: str) -> int:
-    return EXPLORER_PLAYER_CACHE_TTL_SECONDS if _is_player_cache_key(cache_key) else EXPLORER_CACHE_TTL_SECONDS
-
-
-def get_explorer_cache(cache_key: str) -> dict[str, Any] | None:
-    """None on a miss, whether that's because the key was never fetched or
-    because the cached entry is older than its TTL (_explorer_cache_ttl) —
-    either way the caller should fetch fresh and call set_explorer_cache."""
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT response, fetched_at FROM explorer_cache WHERE cache_key = ?", (cache_key,)
-        ).fetchone()
-    if row is None:
-        return None
-    fetched_at = datetime.fromisoformat(row["fetched_at"])
-    if (datetime.now(UTC) - fetched_at).total_seconds() > _explorer_cache_ttl(cache_key):
-        return None
-    return {"response": json.loads(row["response"]), "fetchedAt": row["fetched_at"]}
-
-
-def set_explorer_cache(cache_key: str, response: dict[str, Any], fetched_at: str) -> None:
-    global _explorer_cache_writes_since_cleanup
-    with _connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO explorer_cache (cache_key, response, fetched_at) VALUES (?, ?, ?)
-            ON CONFLICT(cache_key) DO UPDATE SET response = excluded.response, fetched_at = excluded.fetched_at
-            """,
-            (cache_key, json.dumps(response), fetched_at),
-        )
-    _explorer_cache_writes_since_cleanup += 1
-    now = datetime.now(UTC)
-    if (
-        _last_explorer_cache_cleanup is None
-        or (now - _last_explorer_cache_cleanup).total_seconds() >= EXPLORER_CACHE_CLEANUP_INTERVAL_SECONDS
-        or _explorer_cache_writes_since_cleanup >= EXPLORER_CACHE_CLEANUP_WRITE_INTERVAL
-    ):
-        prune_explorer_cache(now)
-
-
-def prune_explorer_cache(now: datetime | None = None) -> None:
-    global _last_explorer_cache_cleanup, _explorer_cache_writes_since_cleanup
-    now = now or datetime.now(UTC)
-    cutoff = (now - timedelta(seconds=EXPLORER_CACHE_TTL_SECONDS)).isoformat()
-    player_cutoff = (now - timedelta(seconds=EXPLORER_PLAYER_CACHE_TTL_SECONDS)).isoformat()
-    with _connect() as conn:
-        conn.execute("DELETE FROM explorer_cache WHERE fetched_at < ?", (cutoff,))
-        conn.execute(
-            "DELETE FROM explorer_cache WHERE cache_key LIKE '%|player|%' AND fetched_at < ?", (player_cutoff,)
-        )
-        total = conn.execute(
-            "SELECT coalesce(sum(length(cache_key) + length(response)), 0) FROM explorer_cache"
-        ).fetchone()[0]
-        if total > EXPLORER_CACHE_MAX_BYTES:
-            oldest = conn.execute(
-                "SELECT cache_key, length(cache_key) + length(response) AS size "
-                "FROM explorer_cache ORDER BY fetched_at, cache_key"
-            )
-            to_delete = []
-            for row in oldest:
-                to_delete.append((row["cache_key"],))
-                total -= row["size"]
-                if total <= EXPLORER_CACHE_MAX_BYTES:
-                    break
-            conn.executemany("DELETE FROM explorer_cache WHERE cache_key = ?", to_delete)
-    _last_explorer_cache_cleanup = now
-    _explorer_cache_writes_since_cleanup = 0
 
 
 def get_rating_cache(username: str, *, allow_stale: bool = False) -> int | None:

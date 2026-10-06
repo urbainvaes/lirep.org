@@ -4,13 +4,12 @@ import { Chess } from "chess.js";
 import { applyBoardTheme, createBoard, toColor } from "./board";
 import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
 import {
-  explorerUrl,
   renderExplorer,
   renderExplorerError,
   renderExplorerLoading,
-  type ExplorerData,
   type ExplorerSettings,
 } from "./explorer";
+import { errorMessage, fetchExplorerData } from "./explorerClient";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
@@ -130,17 +129,11 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
     const requestId = ++explorerRequestId;
     renderExplorerLoading(explorerPanelEl);
     try {
-      const res = await fetch(explorerUrl(fen, opening.explorerSettings, side), { credentials: "same-origin" });
-      if (requestId !== explorerRequestId) return;
-      if (!res.ok) {
-        renderExplorerError(explorerPanelEl);
-        return;
-      }
-      const data: ExplorerData = await res.json();
+      const data = await fetchExplorerData(fen, opening.explorerSettings, side, { priority: "interactive" });
       if (requestId !== explorerRequestId) return;
       renderExplorer(explorerPanelEl, data, followSan);
-    } catch {
-      if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl);
+    } catch (err) {
+      if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl, errorMessage(err));
     }
   }
 

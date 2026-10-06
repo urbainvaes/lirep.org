@@ -5,7 +5,7 @@ import secrets
 from urllib.parse import quote, urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
 from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, MAX_USERS, REDIRECT_URI
@@ -187,6 +187,19 @@ async def logout(request: Request) -> RedirectResponse:
         except httpx.HTTPError as exc:
             logger.warning("Could not revoke Lichess token during logout: %s", type(exc).__name__)
     return RedirectResponse(FRONTEND_URL)
+
+
+@router.get("/api/lichess-token")
+def lichess_token(request: Request, response: Response) -> dict:
+    """The signed-in user's own Lichess token, so their browser can query
+    Lichess's Opening Explorer directly: each user's requests then count
+    against their own rate limit instead of all sharing this server's. The
+    token's only scope is preference:read (see OAUTH_SCOPE)."""
+    token = request.session.get("access_token")
+    if not request.session.get("username") or not token:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    response.headers["Cache-Control"] = "no-store"
+    return {"token": token}
 
 
 @router.get("/api/me")

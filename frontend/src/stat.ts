@@ -6,7 +6,6 @@ import { openEvaluationCache, type EvaluationCache } from "./evalCache";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
-  explorerUrl,
   fetchExplorerDefaults,
   ratingOptionsHtml,
   speedCheckboxesHtml,
@@ -15,6 +14,8 @@ import {
   type ExplorerSettings,
   type ExplorerSpeed,
 } from "./explorer";
+import { calculateExpectedScore } from "./expectedScore";
+import { fetchExplorerData } from "./explorerClient";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { mainLineSans, sanPathTo, type StudyTree } from "./tree";
 
@@ -100,60 +101,6 @@ async function loadPracticeKnowledge(studyId: number): Promise<number | null> {
   } catch {
     return null;
   }
-}
-
-interface JobStatus<T> {
-  status: "running" | "done" | "error";
-  done: number;
-  total: number | null;
-  result: T | null;
-  error: string | null;
-}
-
-async function startJob(url: string, body?: unknown): Promise<{ jobId: string; total: number | null }> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify(body ?? {}),
-  });
-  if (!res.ok) throw new Error("failed to start job");
-  const data = await res.json();
-  return { jobId: data.jobId, total: data.total ?? null };
-}
-
-async function pollJob<T>(jobId: string, onProgress: (done: number, total: number | null) => void): Promise<T> {
-  for (;;) {
-    const res = await fetch(`/api/jobs/${jobId}`, { credentials: "same-origin" });
-    if (!res.ok) throw new Error("job status fetch failed");
-    const job: JobStatus<T> = await res.json();
-    onProgress(job.done, job.total);
-    if (job.status === "done") return job.result as T;
-    if (job.status === "error") throw new Error(job.error ?? "job failed");
-    await new Promise((resolve) => setTimeout(resolve, 400));
-  }
-}
-
-// Starts a backend job and polls it to completion, driving a plain
-// (non-animated) percentage bar the whole time — same visual format as
-// the expected evaluation's bar. The server doesn't know its own job's total
-// upfront (it depends on live Explorer branching), so `estimatedTotal` (the
-// tree's node count — a reasonable proxy, since work roughly scales with it)
-// stands in for display purposes only; the percentage is capped at 100% in
-// case the real count runs a little past the estimate.
-async function runProgressJob(
-  url: string,
-  body: unknown,
-  estimatedTotal: number,
-  fill: HTMLElement,
-  label: HTMLElement,
-): Promise<Study> {
-  const { jobId } = await startJob(url, body);
-  return pollJob<Study>(jobId, (done) => {
-    const pct = estimatedTotal > 0 ? Math.min(100, Math.round((done / estimatedTotal) * 100)) : 100;
-    fill.style.width = `${pct}%`;
-    label.textContent = `${done} position${done === 1 ? "" : "s"} checked…`;
-  });
 }
 
 // A forced mate is capped at this centipawn value so it can be averaged
@@ -250,6 +197,10 @@ async function findRequiredEvaluations(
   return positions;
 }
 
+// Told when a calculation's Explorer requests wait out a Lichess rate-limit
+// pause, so its progress label can say so; set by the running calculation.
+let onRateLimited: ((resumeAt: number) => void) | null = null;
+
 async function fetchExplorerPosition(
   fen: string,
   settings: ExplorerSettings,
@@ -258,9 +209,10 @@ async function fetchExplorerPosition(
 ): Promise<ExplorerData> {
   const cached = cache.get(fen);
   if (cached) return cached;
-  const res = await fetch(explorerUrl(fen, settings, side), { credentials: "same-origin" });
-  if (!res.ok) throw new Error("Opening Explorer data unavailable for this position");
-  const data: ExplorerData = await res.json();
+  const data = await fetchExplorerData(fen, settings, side, {
+    priority: "background",
+    onRateLimited: (resumeAt) => onRateLimited?.(resumeAt),
+  });
   cache.set(fen, data);
   return data;
 }
@@ -972,13 +924,33 @@ function renderPage(
 
   async function calculateScore(current: Study, settings: ExplorerSettings): Promise<Study> {
     const { fill, label } = progressElements("score");
-    return runProgressJob(
-      `/api/studies/${current.id}/win-probability`,
-      { explorerSettings: settings },
-      Object.keys(current.tree.nodes).length,
-      fill,
-      label,
-    );
+    const startNodeId = current.startNodeId !== null && current.startNodeId in current.tree.nodes
+      ? current.startNodeId
+      : current.tree.rootId;
+    // The number of positions isn't known in advance; the tree's size is a
+    // fair stand-in for the bar, capped at 100%.
+    const estimate = Object.keys(current.tree.nodes).length;
+    label.textContent = "Checking positions…";
+    const explorerCache = new Map<string, ExplorerData>();
+    const result = await calculateExpectedScore(current.tree, startNodeId, current.side, async (fen) => {
+      const known = explorerCache.has(fen);
+      const data = await fetchExplorerPosition(fen, settings, current.side, explorerCache);
+      if (!known) {
+        const positions = explorerCache.size;
+        fill.style.width = `${Math.min(100, Math.round((positions / Math.max(1, estimate)) * 100))}%`;
+        label.textContent = `${positions} position${positions === 1 ? "" : "s"} checked…`;
+      }
+      return data;
+    });
+    label.textContent = "Saving…";
+    const res = await fetch(`/api/studies/${current.id}/expected-score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ ...result, explorerSettings: settings }),
+    });
+    if (!res.ok) throw new Error("Could not save the expected score");
+    return res.json();
   }
 
   async function calculateEvaluation(current: Study, settings: ExplorerSettings, depth: number): Promise<Study> {
@@ -1028,12 +1000,19 @@ function renderPage(
     let current = study;
     setBusy(true);
     for (const id of which) {
+      onRateLimited = (resumeAt) => {
+        const label = document.getElementById(`${id}-progress-label`) as HTMLElement;
+        const time = new Date(resumeAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        label.textContent = `Lichess asked to slow down; resuming at ${time}…`;
+      };
       try {
         current = id === "score" ? await calculateScore(current, settings) : await calculateEvaluation(current, settings, depth);
       } catch (err) {
         showError(id, err);
         setBusy(false);
         return;
+      } finally {
+        onRateLimited = null;
       }
     }
     renderPage(main, current, explorerDefaults, knowledge, cache);

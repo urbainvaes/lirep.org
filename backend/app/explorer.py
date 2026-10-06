@@ -1,7 +1,9 @@
-import asyncio
-import json
+"""The Opening Explorer on the backend: rating defaults for the picker, and
+the local Lirep Explorer (the 2016 sample). Lichess's own Explorer is queried
+by the browser directly, with the user's token (frontend/src/explorerClient.ts),
+so each user's requests count against their own rate limit."""
+
 from datetime import UTC, datetime
-from typing import Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -9,14 +11,6 @@ from fastapi import APIRouter, HTTPException, Request
 from . import store
 from .auth import ACCOUNT_URL
 from .config import DEFAULT_EXPLORER_SOURCE, HTTP_TIMEOUT, LOCAL_LICHESS_EXPLORER_URL
-
-LICHESS_EXPLORER_URL = "https://explorer.lichess.org/lichess"
-MASTERS_EXPLORER_URL = "https://explorer.lichess.org/masters"
-PLAYER_EXPLORER_URL = "https://explorer.lichess.org/player"
-# The player endpoint streams NDJSON while it indexes the player's recent
-# games; the last line received is the most complete picture. Stop reading
-# after this long and use what has arrived.
-PLAYER_STREAM_SECONDS = 25
 
 # All speeds selectable in the UI, and what's included when a study hasn't
 # customized this yet. Ultra-bullet and correspondence are left off the
@@ -34,7 +28,6 @@ REFERENCE_SPEEDS = ("rapid", "blitz", "classical")
 DEFAULT_REFERENCE_RATING = 1500
 
 router = APIRouter()
-_inflight_explorer: dict[str, asyncio.Task[tuple[dict, str]]] = {}
 
 
 def _reference_rating(perfs: dict) -> int:
@@ -121,151 +114,21 @@ def _shape_response(
     }
 
 
-async def _fetch_player(
-    client: httpx.AsyncClient, headers: dict[str, str], fen: str, player: str, color: str, speeds: str
-) -> dict:
-    """One player's games, as `color`, from Lichess's explorer."""
-    last: dict | None = None
+async def fetch_lirep(client: httpx.AsyncClient, fen: str, min_rating: int, speeds: str) -> dict:
+    """One position from the local Lirep Explorer. It has no rate limit and
+    its data never changes, so nothing is cached."""
+    if not LOCAL_LICHESS_EXPLORER_URL:
+        raise HTTPException(status_code=503, detail="Lirep Explorer is not configured")
     try:
-        async with asyncio.timeout(PLAYER_STREAM_SECONDS):
-            async with client.stream(
-                "GET",
-                PLAYER_EXPLORER_URL,
-                params={"player": player, "color": color, "fen": fen, "speeds": speeds, "recentGames": 0},
-                headers=headers,
-            ) as resp:
-                if resp.status_code == 429:
-                    raise HTTPException(
-                        status_code=429,
-                        detail="rate limited by lichess's opening explorer (429) — please wait a minute before trying again",
-                    )
-                if resp.status_code == 404:
-                    raise HTTPException(status_code=404, detail=f"Lichess has no player named {player}")
-                if resp.status_code != 200:
-                    raise HTTPException(status_code=502, detail=f"lichess explorer fetch failed ({resp.status_code})")
-                async for line in resp.aiter_lines():
-                    if line.strip():
-                        last = json.loads(line)
-    except TimeoutError:
-        pass  # use the latest partial result below
-    if last is None:
-        raise HTTPException(status_code=504, detail="lichess's player explorer did not answer in time")
-    return last
-
-
-async def fetch_explorer(
-    client: httpx.AsyncClient,
-    headers: dict[str, str],
-    fen: str,
-    source: Literal["lirep", "lichess"],
-    database: str,
-    min_rating: int | None,
-    speeds: str,
-    player: str | None = None,
-    color: str | None = None,
-) -> dict:
-    """Raw, uncached fetch — see fetch_explorer_cached below, which every
-    caller (the live /api/explorer endpoint and stats.py's recalculation)
-    should use instead."""
-    if source == "lirep":
-        if not LOCAL_LICHESS_EXPLORER_URL:
-            raise HTTPException(status_code=503, detail="Lirep Explorer is not configured")
-        if database == "masters":
-            raise HTTPException(status_code=400, detail="Masters is only available from Lichess")
-        assert min_rating is not None
         resp = await client.get(
             f"{LOCAL_LICHESS_EXPLORER_URL}/lichess",
             params={"fen": fen, "speeds": speeds, "ratings": _ratings_from(min_rating)},
         )
-    elif database == "player":
-        if not player or color not in ("white", "black"):
-            raise HTTPException(status_code=400, detail="a player name and side are required for the Player database")
-        return await _fetch_player(client, headers, fen, player, color, speeds)
-    elif database == "masters":
-        resp = await client.get(MASTERS_EXPLORER_URL, params={"fen": fen}, headers=headers)
-    else:
-        assert min_rating is not None
-        resp = await client.get(
-            LICHESS_EXPLORER_URL,
-            params={"fen": fen, "speeds": speeds, "ratings": _ratings_from(min_rating)},
-            headers=headers,
-        )
-    if resp.status_code == 429:
-        raise HTTPException(
-            status_code=429,
-            detail="rate limited by lichess's opening explorer (429) — please wait a minute before trying again",
-        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail="could not reach the local Lirep explorer") from exc
     if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"lichess explorer fetch failed ({resp.status_code})")
+        raise HTTPException(status_code=502, detail=f"Lirep explorer fetch failed ({resp.status_code})")
     return resp.json()
-
-
-async def fetch_explorer_cached(
-    client: httpx.AsyncClient,
-    headers: dict[str, str],
-    fen: str,
-    source: Literal["lirep", "lichess"],
-    database: str,
-    min_rating: int | None,
-    speeds: str,
-    player: str | None = None,
-    color: str | None = None,
-) -> tuple[dict, str]:
-    """(data, fetchedAt ISO timestamp). Only Lichess responses are persisted:
-    the local Lirep explorer is unlimited and its data never changes, so
-    caching it would only fill the size cap and evict Lichess entries.
-    Lichess responses are persisted across studies *and* users:
-    a position's real-world move frequencies don't depend on who's asking, so
-    the cache key is the provider plus its exact query (see
-    store.EXPLORER_CACHE_TTL_SECONDS for the staleness window). This is what
-    keeps repeated "Calculate scores" runs, and different studies that share
-    early-game positions, from re-fetching the same data over and over — see
-    explorer-cache.md for the full writeup and why this matters for staying
-    under Lichess's (undocumented) rate limit.
-    """
-    ratings = _ratings_from(min_rating) if database == "lichess" else ""
-    who = f"{player.lower()}|{color}" if database == "player" and player else ""
-    cache_key = f"{source}|{database}|{who}|{ratings}|{speeds}|{fen}"
-    persist = source == "lichess"
-    cached = store.get_explorer_cache(cache_key) if persist else None
-    if cached is not None:
-        return cached["response"], cached["fetchedAt"]
-
-    pending = _inflight_explorer.get(cache_key)
-    if pending is None:
-        async def fetch_and_cache() -> tuple[dict, str]:
-            try:
-                data = await fetch_explorer(client, headers, fen, source, database, min_rating, speeds, player, color)
-            except RuntimeError:
-                if not client.is_closed:
-                    raise
-                # The initiating request can disconnect while another caller
-                # still awaits its fetch; retry with an independently owned client.
-                async with httpx.AsyncClient(timeout=client.timeout) as replacement:
-                    data = await fetch_explorer(replacement, headers, fen, source, database, min_rating, speeds, player, color)
-            except httpx.RequestError as exc:
-                # A genuine connection failure (host unreachable, timed out) —
-                # not the client-closed case above — so surface it as a clean
-                # error instead of letting it propagate as a raw, undetailed 500.
-                name = "the local Lirep explorer" if source == "lirep" else "lichess's opening explorer"
-                raise HTTPException(status_code=502, detail=f"could not reach {name}") from exc
-            fetched_at = datetime.now(UTC).isoformat()
-            if persist:
-                store.set_explorer_cache(cache_key, data, fetched_at)
-            return data, fetched_at
-
-        pending = asyncio.create_task(fetch_and_cache())
-        _inflight_explorer[cache_key] = pending
-
-        def clear_pending(done: asyncio.Task[tuple[dict, str]]) -> None:
-            if _inflight_explorer.get(cache_key) is done:
-                del _inflight_explorer[cache_key]
-            if not done.cancelled():
-                done.exception()  # Consume failures if all waiting requests were cancelled.
-
-        pending.add_done_callback(clear_pending)
-
-    return await asyncio.shield(pending)
 
 
 @router.get("/api/explorer-defaults")
@@ -295,43 +158,15 @@ async def explorer_defaults(request: Request) -> dict:
 async def explorer(
     fen: str,
     request: Request,
-    source: Literal["lirep", "lichess"] = DEFAULT_EXPLORER_SOURCE,
-    database: str = "lichess",
     minRating: int | None = None,
     speeds: str = ",".join(DEFAULT_SPEEDS),
-    player: str | None = None,
-    color: Literal["white", "black"] | None = None,
 ) -> dict:
-    token = request.session.get("access_token")
-    if not token:
+    """The local Lirep Explorer (Players database only). Lichess's Explorer
+    is not proxied here: the browser asks it directly."""
+    if not request.session.get("access_token"):
         raise HTTPException(status_code=401, detail="not authenticated")
-
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # A study's minRating is always a concrete bucket now (picked once, from
-    # /api/explorer-defaults, when the study was created — see
-    # ExplorerSettings). A live per-request "my current rating" lookup here
-    # used to mean an extra Lichess account call on every single position
-    # visited, plus a whole persisted-cache-with-TTL apparatus just to keep
-    # that affordable — None only still shows up for a study saved before
-    # this existed, and just gets the same static default the picker itself
-    # falls back to, no account lookup involved.
+    # minRating is None only for a study saved before it was always set.
     min_rating = minRating if minRating is not None else _bucket_for(DEFAULT_REFERENCE_RATING)
-
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-        if source == "lirep" and not LOCAL_LICHESS_EXPLORER_URL:
-            raise HTTPException(status_code=503, detail="Lirep Explorer is not configured")
-        if source == "lirep" and database == "masters":
-            raise HTTPException(status_code=400, detail="Masters is only available from Lichess")
-
-        if database == "player":
-            source = "lichess"  # one player's games exist only on Lichess's explorer
-        data, fetched_at = await fetch_explorer_cached(
-            client, headers, fen, source, database, min_rating, speeds, player, color
-        )
-
-    shaped = _shape_response(source, database, min_rating if database == "lichess" else None, data, fetched_at)
-    if database == "player":
-        shaped["player"] = player
-        shaped["color"] = color
-    return shaped
+        data = await fetch_lirep(client, fen, min_rating, speeds)
+    return _shape_response("lirep", "lichess", min_rating, data, datetime.now(UTC).isoformat())

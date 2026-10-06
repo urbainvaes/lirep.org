@@ -2,7 +2,7 @@
 knowledge score that fades over time. See practice.md for the full design
 writeup this implements.
 
-Unlike stats.py's `_Evaluator` (which walks a tree *backward* from leaves to
+Unlike the Stats page's expected-score walk (which works *backward* from leaves to
 compute an expectation), everything here walks *forward* from a study's
 effective starting point, since drilling is about enumerating and grading
 individual decisions, not aggregating values.
