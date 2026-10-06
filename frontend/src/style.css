@@ -444,7 +444,8 @@ body {
   gap: 44px;
 }
 
-.opening-group h2 {
+.opening-group h2,
+.opening-group h4 {
   margin: 0 0 14px;
   padding-bottom: 8px;
   border-bottom: 2px solid var(--primary-hover);
@@ -750,49 +751,186 @@ body {
   margin-top: 16px;
 }
 
-.stat-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin: 18px 0 28px;
+/* The legend, the settings body and the progress bars set their own display,
+   which would otherwise override the hidden attribute. */
+.stat-page [hidden] {
+  display: none !important;
 }
 
-.stat-metric-card {
+.stat-page a:not(.btn) {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.stat-page a:not(.btn):hover {
+  text-decoration: underline;
+}
+
+.stat-page__sub {
+  margin: 4px 0 20px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* The inputs of both calculations, in one panel above the results. */
+.calc-settings {
+  margin: 0 0 24px;
+  padding: 16px 18px;
   background: var(--card-nested-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 16px 18px 18px;
 }
 
-.stat-metric-card .stat-detail__score {
-  margin-top: 0;
-}
-
-.stat-metric-card .stat-card__meta {
-  margin-bottom: 0;
-}
-
-.stat-outcome-pair {
+.calc-settings__head {
   display: flex;
-  align-items: baseline;
-  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.stat-outcome-pair .stat-detail__score {
-  margin-top: 0;
+.calc-settings h2 {
+  margin: 0 0 4px;
+  color: var(--text-strong);
+  font-size: 1.05rem;
 }
 
-.stat-loss-probability {
+.calc-settings__summary {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.calc-settings__body {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.calc-settings__group h3 {
+  margin: 0 0 2px;
+  color: var(--text-strong);
+  font-size: 0.92rem;
+}
+
+.calc-settings__group .stat-card__meta {
+  margin: 0 0 10px;
+}
+
+.calc-settings__group .explorer-settings-panel {
+  margin: 0;
+}
+
+.calc-settings__actions {
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.calc-settings__actions .stat-card__meta {
+  margin: 0;
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+/* One block per result: what it means, the number, what it was calculated
+   with, whether it is out of date and where it ranks. */
+.stat-result {
+  margin: 0 0 20px;
+  padding: 18px 20px;
+  background: var(--card-nested-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.stat-result__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stat-result__head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.15rem;
+}
+
+.stat-result__what {
+  margin: 4px 0 12px;
   color: var(--text-dim);
   font-size: 0.82rem;
 }
 
-.stat-loss-probability strong {
+.stat-result .stat-detail__score {
+  margin-top: 0;
+}
+
+.stat-result__subtitle {
+  margin: 22px 0 4px;
   color: var(--text-strong);
-  font-size: 1.2rem;
+  font-size: 0.98rem;
+}
+
+.stat-result .stat-card__meta {
+  margin: 0 0 8px;
+}
+
+.stat-outcomes {
+  margin: 4px 0 8px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.stat-outcomes strong {
+  color: var(--text-strong);
+}
+
+.stat-stale {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.stat-rank {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.stat-rank:empty {
+  display: none;
+}
+
+.stat-knowledge {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 12px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.stat-knowledge strong {
+  color: var(--text-strong);
+  font-size: 1.1rem;
+}
+
+.stat-knowledge .stat-card__meta {
+  margin: 0;
+  flex: 1 1 200px;
 }
 
 /* The score-tier chess piece, shown before the study name. A single glyph,
@@ -916,65 +1054,8 @@ body {
   gap: 7px;
 }
 
-.stat-settings {
-  margin: 22px 0 28px;
-  padding: 14px 16px;
-  background: var(--card-nested-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.stat-settings summary {
-  color: var(--text-strong);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.stat-settings[open] summary {
-  margin-bottom: 12px;
-}
-
-.stat-settings > .stat-card__meta {
-  margin-bottom: 0;
-}
-
-.stat-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 32px;
-  margin: 20px 0 28px;
-}
-
-.stat-actions--single {
-  margin-bottom: 8px;
-}
-
-.stat-actions--compact {
-  gap: 18px;
-  margin-top: 8px;
-}
-
-.stat-action {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 240px;
-  flex: 1 1 240px;
-}
-
-.stat-action .stat-card__meta {
-  margin: 0;
-}
-
 .stat-card__meta--warning {
   color: var(--warn);
-}
-
-.eval-update-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
 }
 
 .eval-depth-control {
@@ -992,11 +1073,6 @@ body {
   border-radius: 4px;
   color: var(--text);
   font: inherit;
-}
-
-.eval-count {
-  color: var(--text-dim);
-  font-size: 0.8rem;
 }
 
 .status-check {
@@ -1065,12 +1141,6 @@ body {
   100% {
     margin-left: 0%;
   }
-}
-
-.stat-detail__chart-title {
-  margin: 28px 0 4px;
-  color: var(--text-strong);
-  font-size: 1.1rem;
 }
 
 .coverage-chart-wrap {
@@ -2196,12 +2266,13 @@ body {
     min-height: 420px;
   }
 
-  .stat-metrics {
-    grid-template-columns: 1fr;
+  .stat-page {
+    padding: 14px;
   }
 
-  .stat-page {
-    padding: 18px;
+  .calc-settings,
+  .stat-result {
+    padding: 14px;
   }
 
   .practice-layout {
@@ -2486,6 +2557,39 @@ body {
   .username__icon {
     display: block;
   }
+}
+
+.leaderboards {
+  display: grid;
+  gap: 40px;
+  margin-top: 24px;
+}
+
+.leaderboard h3 {
+  margin: 0 0 4px;
+  color: var(--text-strong);
+  font-size: 1.1rem;
+}
+
+/* Inside a leaderboard the per-side headings sit one level below the
+   leaderboard's own title, so they are lighter than on the home page. */
+.leaderboard .opening-groups {
+  gap: 28px;
+}
+
+.leaderboard .opening-group h4 {
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom-width: 1px;
+  font-size: 0.95rem;
+}
+
+.leaderboard .empty-state {
+  padding: 18px 0;
+}
+
+.leaderboard > .profile-subtitle {
+  margin-bottom: 18px;
 }
 
 .community-options {

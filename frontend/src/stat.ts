@@ -30,25 +30,37 @@ function getSavedEvalDepth(): number {
   }
 }
 
-// winProbability/coverage and evalCp/evalMisses are computed by two
-// independent buttons now ("Update win probability" / "Update expected
-// evaluation"), so either half can exist without the other — hence both are
-// optional, each paired with its own calculatedAt timestamp.
-interface StudyStats {
+// The settings a result was calculated with; compared with the current
+// settings to mark the result out of date.
+interface CalculationSettings {
+  source?: "lirep" | "lichess";
+  database: "lichess" | "masters" | "player";
+  minRating: number | null;
+  speeds?: ExplorerSpeed[];
+  player?: string | null;
+}
+
+// The expected score (winProbability, coverage, …) and the expected
+// evaluation (evalCp, …) are calculated separately, so either can exist
+// without the other — hence both are optional, each with its own settings,
+// timestamp and moves fingerprint.
+interface StudyStats extends CalculationSettings {
+  // Despite the name, the expected score: wins plus half the draws. The
+  // score tiers and the community leaderboard use it.
   winProbability?: number;
   winRate?: number;
   lossProbability?: number;
   coverage?: number[]; // coverage[i] = fraction of games still in-book after the opponent's (i+1)th move
   winProbabilityCalculatedAt?: string;
+  winProbabilityMovesFingerprint?: string;
   nodesEvaluated?: number; // set together with winProbability, by the same job
   evalCp?: number; // expected Stockfish eval (centipawns, studied side's POV) at the end of prep
   evalMisses?: number; // positions without a usable local engine evaluation (counted as 0)
   evalCalculatedAt?: string;
   evalOrigin?: "local";
-  source?: "lirep" | "lichess";
-  database: "lichess" | "masters";
-  minRating: number | null;
-  speeds?: ExplorerSpeed[];
+  evalDepth?: number | null; // Stockfish depth; missing on evaluations saved before it was recorded
+  evalSettings?: CalculationSettings;
+  evalMovesFingerprint?: string;
   explorerCalls?: number;
 }
 
@@ -69,6 +81,10 @@ interface Study {
   // null (the default) means every stat below is calculated from the tree's
   // real root — see starting-point.md.
   startNodeId: number | null;
+  shared: boolean;
+  // Changes whenever the moves or the starting point do; see moves_fingerprint
+  // in store.py.
+  movesFingerprint: string;
 }
 
 interface PracticeSummary {
@@ -120,7 +136,7 @@ async function pollJob<T>(jobId: string, onProgress: (done: number, total: numbe
 
 // Starts a backend job and polls it to completion, driving a plain
 // (non-animated) percentage bar the whole time — same visual format as
-// "Update evaluations"'s bar. The server doesn't know its own job's total
+// the expected evaluation's bar. The server doesn't know its own job's total
 // upfront (it depends on live Explorer branching), so `estimatedTotal` (the
 // tree's node count — a reasonable proxy, since work roughly scales with it)
 // stands in for display purposes only; the percentage is capped at 100% in
@@ -353,10 +369,29 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function statsSourceLabel(stats: StudyStats, fallbackSource: ExplorerSettings["source"]): string {
-  const provider = (stats.source ?? fallbackSource) === "lirep" ? `Lirep (${LIREP_DATASET})` : "Lichess";
-  const database = stats.database === "masters" ? "Masters" : `Players ${stats.minRating ?? "?"}+`;
-  return `${provider} ${database}`;
+// One line describing Explorer settings, e.g. "Lichess · 1600+ · blitz, rapid".
+// The Lirep source names its dataset, since its games are few and old.
+function explorerSummary(settings: CalculationSettings): string {
+  const parts: string[] = [];
+  if (settings.database === "player") {
+    parts.push("Lichess", `games of ${settings.player ?? "?"}`);
+  } else {
+    parts.push(settings.source === "lirep" ? `Lirep (${LIREP_DATASET})` : "Lichess");
+    parts.push(settings.database === "masters" ? "Masters" : `${settings.minRating ?? "?"}+`);
+  }
+  if (settings.database !== "masters" && settings.speeds?.length) parts.push(settings.speeds.join(", "));
+  return parts.join(" · ");
+}
+
+// Whether two sets of Explorer settings select the same games. Controls the
+// database ignores (rating and speeds for Masters, the source and rating for
+// one player's games) don't count.
+function sameExplorerSettings(a: CalculationSettings, b: CalculationSettings): boolean {
+  if (a.database !== b.database) return false;
+  if (a.database === "masters") return (a.source ?? "lichess") === (b.source ?? "lichess");
+  const sameSpeeds = [...(a.speeds ?? [])].sort().join() === [...(b.speeds ?? [])].sort().join();
+  if (a.database === "player") return sameSpeeds && (a.player ?? "").toLowerCase() === (b.player ?? "").toLowerCase();
+  return (a.source ?? "lichess") === (b.source ?? "lichess") && a.minRating === b.minRating && sameSpeeds;
 }
 
 // Gamification tiers for the expected score. 50% is breakeven for any
@@ -371,9 +406,9 @@ const TIER_LABELS: Record<ScoreTier, string> = {
   none: "Below breakeven",
 };
 
-function scoreTier(winProbability: number | undefined): ScoreTier {
-  if (winProbability === undefined) return "none";
-  const pct = winProbability * 100;
+function scoreTier(expectedScore: number | undefined): ScoreTier {
+  if (expectedScore === undefined) return "none";
+  const pct = expectedScore * 100;
   if (pct >= 60) return "gold";
   if (pct >= 55) return "silver";
   if (pct >= 50) return "bronze";
@@ -415,9 +450,14 @@ function nodeCountsByMove(tree: StudyTree): number[] {
   return counts;
 }
 
-function trimTrailingCoverageZeros(coverage: number[] | undefined): number[] {
+// Deep lines leave a long tail of moves that almost no game reaches; on a
+// 0–100% axis they draw as a flat line at zero, so the chart stops at the
+// last move still reached by at least 1 game in 200.
+const MIN_DISPLAYED_COVERAGE = 0.005;
+
+function trimCoverageTail(coverage: number[] | undefined): number[] {
   const displayed = [...(coverage ?? [])];
-  while (displayed[displayed.length - 1] === 0) displayed.pop();
+  while (displayed.length > 1 && displayed[displayed.length - 1] < MIN_DISPLAYED_COVERAGE) displayed.pop();
   return displayed;
 }
 
@@ -543,6 +583,90 @@ function readSettingsFromDom(): ExplorerSettings {
   return { enabled: true, source: database === "player" ? "lichess" : source, database, player, minRating, speeds };
 }
 
+function readDepthFromDom(): number {
+  return Number((document.getElementById("eval-depth") as HTMLSelectElement).value);
+}
+
+// Why a result no longer matches the current settings or moves; empty when
+// it is up to date. Results saved before fingerprints (or the depth) were
+// recorded are not flagged for what wasn't recorded.
+function scoreStaleness(study: Study, current: ExplorerSettings): string[] {
+  const stats = study.stats;
+  if (stats?.winProbability === undefined) return [];
+  const reasons: string[] = [];
+  if (!sameExplorerSettings(stats, current)) reasons.push("Explorer settings changed");
+  const fingerprint = stats.winProbabilityMovesFingerprint;
+  if (fingerprint && fingerprint !== study.movesFingerprint) reasons.push("moves changed");
+  return reasons;
+}
+
+function evalStaleness(study: Study, current: ExplorerSettings, depth: number): string[] {
+  const stats = study.stats;
+  if (stats?.evalCp === undefined) return [];
+  const reasons: string[] = [];
+  if (stats.evalSettings && !sameExplorerSettings(stats.evalSettings, current)) reasons.push("Explorer settings changed");
+  if (stats.evalDepth && stats.evalDepth !== depth) reasons.push("Stockfish depth changed");
+  const fingerprint = stats.evalMovesFingerprint;
+  if (fingerprint && fingerprint !== study.movesFingerprint) reasons.push("moves changed");
+  return reasons;
+}
+
+function staleHtml(reasons: string[]): string {
+  if (!reasons.length) return "";
+  const text = reasons.join(", ");
+  return `<p class="stat-stale"><strong>Out of date:</strong> ${text[0].toUpperCase()}${text.slice(1)} since it was calculated.</p>`;
+}
+
+interface LeaderboardEntry {
+  id: number;
+  rank: number | null;
+}
+
+// Where each result stands on the community leaderboards, in the default
+// view (Lichess Explorer only). Fetched after the page renders.
+async function leaderboardStatus(study: Study): Promise<{ score: string; evaluation: string }> {
+  const stats = study.stats;
+  const sideName = study.side === "white" ? "White" : "Black";
+  const link = `<a href="/community.html">community leaderboard</a>`;
+  if (!study.shared) {
+    const text = `Not on the ${link}: this study isn't shared.`;
+    return { score: stats?.winProbability !== undefined ? text : "", evaluation: stats?.evalCp !== undefined ? text : "" };
+  }
+  const fetchBoard = async (url: string): Promise<LeaderboardEntry[]> => {
+    const res = await fetch(url, { credentials: "same-origin" });
+    return res.ok ? res.json() : [];
+  };
+  const [byScore, byEval] = await Promise.all([
+    fetchBoard("/api/community/openings"),
+    fetchBoard("/api/community/openings-by-eval"),
+  ]);
+
+  const status = (entries: LeaderboardEntry[], settings: CalculationSettings | undefined, depth?: number | null): string => {
+    const rank = entries.find((e) => e.id === study.id)?.rank;
+    if (rank) return `Ranked #${rank} for ${sideName} on the ${link}.`;
+    if (settings?.database === "player") return `Not ranked: calculated from one player's games.`;
+    if (settings?.source === "lirep") return `Not ranked by default: calculated with the Lirep Explorer.`;
+    if (depth !== undefined && !depth) return `Not ranked: Stockfish depth unknown. Recalculate to rank it.`;
+    if (depth !== undefined && depth! < 12) return `Not ranked: depth ${depth}. Recalculate at Balanced (12) or more.`;
+    return `Not in the top 10 for ${sideName} on the ${link}.`;
+  };
+  return {
+    score: stats?.winProbability !== undefined ? status(byScore, stats) : "",
+    evaluation: stats?.evalCp !== undefined ? status(byEval, stats.evalSettings, stats.evalDepth ?? null) : "",
+  };
+}
+
+function progressHtml(id: string): string {
+  return `<div class="progress-bar" id="${id}-progress" hidden>
+      <div class="progress-bar__track"><div class="progress-bar__fill" id="${id}-progress-fill"></div></div>
+      <span class="progress-bar__label" id="${id}-progress-label"></span>
+    </div>`;
+}
+
+// Survive the re-render after a calculation finishes.
+let settingsOpen = false;
+let lastEvalRun: { required: number; computed: number } | null = null;
+
 function renderPage(
   main: HTMLElement,
   study: Study,
@@ -552,57 +676,54 @@ function renderPage(
 ): void {
   const sideLabel = study.side === "white" ? "Playing White" : "Playing Black";
   const sidePawn = `<span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>`;
+  const sideName = study.side === "white" ? "White" : "Black";
   const opponent = study.side === "white" ? "Black" : "White";
   const hasMoves = mainLineSans(study.tree).length > 0 || Object.keys(study.tree.nodes).length > 1;
   const stats = study.stats;
-  const displayedCoverage = trimTrailingCoverageZeros(stats?.coverage);
+  const displayedCoverage = trimCoverageTail(stats?.coverage);
   const settings = study.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
   const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
   const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1400;
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
-
   const tier = scoreTier(stats?.winProbability);
   const startPoint = describeStartPoint(study.tree, study.startNodeId);
-  const startPointNote = startPoint ? ` — from move ${startPoint} onward` : "";
+  const disabled = hasMoves ? "" : "disabled";
 
-  const winProbCardHtml =
-    stats?.winRate !== undefined && stats.lossProbability !== undefined
-      ? (() => {
-          const drawProbability = Math.max(0, Math.min(1, 1 - stats.winRate! - stats.lossProbability!));
-          return `<div class="stat-outcome-pair">
-              <div class="stat-detail__score">${(stats.winRate * 100).toFixed(1)}%</div>
-              <div class="stat-loss-probability" aria-label="Loss probability ${(stats.lossProbability * 100).toFixed(1)}%"><strong>${(stats.lossProbability * 100).toFixed(1)}%</strong></div>
-            </div>
-            <p class="stat-card__label">Win probability${startPointNote}</p>
-            <p class="stat-card__meta">Draws are the remaining probability. Expected score (wins + half the draws) ${((stats.winProbability ?? stats.winRate + drawProbability / 2) * 100).toFixed(1)}% · ${statsSourceLabel(stats, settings.source)} · ${stats.nodesEvaluated ?? 0} positions evaluated · as of ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
-        })()
-      : stats?.winProbability !== undefined
-        ? `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
-           <p class="stat-card__label">Expected score${startPointNote}</p>
-           <p class="stat-card__meta">Recalculate to show win/draw/loss probabilities.</p>`
-      : `<div class="stat-detail__score stat-card__score--empty">—</div>
-         <p class="stat-card__label">Win probability${startPointNote}</p>
-         <p class="stat-card__meta">Not calculated yet.</p>`;
-
-  const evalCardHtml =
-    stats?.evalCp !== undefined
-      ? `<div class="stat-detail__score">${formatEval(stats.evalCp)}</div>
-          <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
-          <p class="stat-card__meta">From ${study.side === "white" ? "White" : "Black"}'s point of view · as of ${formatDate(stats.evalCalculatedAt ?? "")}${
-            stats.evalMisses
-              ? `<br>${stats.evalMisses} end-of-prep position${stats.evalMisses === 1 ? "" : "s"} had no engine eval (counted as 0.00)`
-              : ""
-          }${stats.evalOrigin !== "local" ? "<br>Legacy server calculation; recalculate locally to verify." : ""}</p>`
-      : `<div class="stat-detail__score stat-card__score--empty">—</div>
-         <p class="stat-card__label">Expected evaluation at the end of prep${startPointNote}</p>
-         <p class="stat-card__meta">Not calculated yet.</p>`;
-  const knowledgeCardHtml = knowledge !== null
-    ? `<div class="stat-detail__score">${Math.round(knowledge * 100)}%</div>
-       <p class="stat-card__label">Practice knowledge</p>
-       <p class="stat-card__meta">Average recall across all positions; decays over time.</p>`
+  const scoreHtml = stats?.winProbability !== undefined
+    ? (() => {
+        const outcomes = stats.winRate !== undefined && stats.lossProbability !== undefined
+          ? (() => {
+              const draw = Math.max(0, Math.min(1, 1 - stats.winRate! - stats.lossProbability!));
+              const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+              return `<p class="stat-outcomes">Win <strong>${pct(stats.winRate)}</strong> · Draw <strong>${pct(draw)}</strong> · Loss <strong>${pct(stats.lossProbability)}</strong></p>`;
+            })()
+          : `<p class="stat-outcomes">Recalculate to see wins, draws and losses.</p>`;
+        return `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
+          ${outcomes}
+          <p class="stat-card__meta">Calculated with ${explorerSummary(stats)} · ${stats.nodesEvaluated ?? 0} positions · ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
+      })()
     : `<div class="stat-detail__score stat-card__score--empty">—</div>
-       <p class="stat-card__label">Practice knowledge</p>
-       <p class="stat-card__meta">No practice positions yet.</p>`;
+       <p class="stat-card__meta">Not calculated yet.</p>`;
+
+  const evalHtml = stats?.evalCp !== undefined
+    ? `<div class="stat-detail__score">${formatEval(stats.evalCp)}</div>
+       <p class="stat-outcomes">In pawns, from ${sideName}'s point of view.</p>
+       <p class="stat-card__meta">Calculated with ${stats.evalSettings ? `${explorerSummary(stats.evalSettings)} · ` : ""}${
+         stats.evalDepth ? `Stockfish depth ${stats.evalDepth} · ` : ""
+       }${formatDate(stats.evalCalculatedAt ?? "")}${
+         stats.evalMisses
+           ? `<br>${stats.evalMisses} end-of-prep position${stats.evalMisses === 1 ? "" : "s"} had no engine eval (counted as 0.00).`
+           : ""
+       }${stats.evalOrigin !== "local" ? "<br>Legacy server calculation; recalculate to verify." : ""}</p>`
+    : `<div class="stat-detail__score stat-card__score--empty">—</div>
+       <p class="stat-card__meta">Not calculated yet.</p>`;
+
+  const cacheNote = cache.persistent
+    ? "Stockfish runs in this browser; evaluated positions are saved on this device and reused."
+    : "Browser storage is unavailable; evaluations last only until this tab closes.";
+  const lastRunNote = lastEvalRun
+    ? ` Last run: ${lastEvalRun.required} end-of-prep positions, ${lastEvalRun.computed} newly evaluated.`
+    : "";
 
   main.innerHTML = `
     <div class="stat-page">
@@ -615,105 +736,116 @@ function renderPage(
         </h1>
         <span class="stat-card__side">${sidePawn}${sideLabel}</span>
       </div>
+      <p class="stat-page__sub">
+        ${startPoint ? `Calculated from ${escapeHtml(startPoint)} onward · ` : ""}
+        <a href="/study.html?id=${study.id}">Edit the study</a> ·
+        <a href="/practice-session.html?id=${study.id}">Practice</a>
+      </p>
       <div class="piece-legend" id="piece-legend" hidden>
-        <p class="piece-legend__title">Score tiers, by win probability</p>
+        <p class="piece-legend__title">Score tiers, by expected score</p>
         <div class="piece-legend__row">${pieceBadgeHtml("gold", "sm")}<span>Gold — 60% or higher</span></div>
         <div class="piece-legend__row">${pieceBadgeHtml("silver", "sm")}<span>Silver — 55% or higher</span></div>
         <div class="piece-legend__row">${pieceBadgeHtml("bronze", "sm")}<span>Bronze — 50% or higher</span></div>
         <div class="piece-legend__row">${pieceBadgeHtml("none", "sm")}<span>Below 50% — behind on average</span></div>
       </div>
 
-      <div class="stat-metrics">
-        <div class="stat-metric-card">${winProbCardHtml}</div>
-        <div class="stat-metric-card">${evalCardHtml}</div>
-        <div class="stat-metric-card">${knowledgeCardHtml}</div>
-      </div>
-
-      <h2 class="stat-detail__chart-title">Analysis</h2>
-      <div class="stat-actions stat-actions--single">
-        <div class="stat-action">
-          <label class="eval-depth-control" for="eval-depth">
-            <span>Stockfish depth</span>
-            <select id="eval-depth" aria-label="Stockfish evaluation depth">
-              <option value="8">8 · Quick</option>
-              <option value="12">12 · Balanced</option>
-              <option value="16">16 · Thorough</option>
-            </select>
-          </label>
-          <div class="eval-update-row">
-            <button id="evals-btn" class="btn btn-secondary" type="button" ${hasMoves ? "" : "disabled"}>
-              Update evaluations
-            </button>
-            <span id="evals-count" class="eval-count" aria-live="polite">Click to check positions cached in this browser</span>
+      <section class="calc-settings">
+        <div class="calc-settings__head">
+          <div>
+            <h2>Calculation settings</h2>
+            <p class="calc-settings__summary" id="settings-summary"></p>
           </div>
-          <p class="stat-card__meta">${cache.persistent ? "Stockfish runs locally; positions are saved on this device." : "Browser storage is unavailable; evaluations last only until this tab closes."}</p>
-          <div class="progress-bar" id="evals-progress" hidden>
-            <div class="progress-bar__track"><div class="progress-bar__fill" id="evals-progress-fill"></div></div>
-            <span class="progress-bar__label" id="evals-progress-label"></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="stat-actions stat-actions--compact">
-        <div class="stat-action">
-          <button id="winprob-btn" class="btn btn-primary" type="button" ${hasMoves ? "" : "disabled"}>
-            Update win probability
+          <button type="button" class="btn btn-secondary" id="settings-toggle" aria-expanded="${settingsOpen}" aria-controls="settings-body">
+            ${settingsOpen ? "Done" : "Edit"}
           </button>
-          <p class="stat-card__meta">Based on how often players choose each reply.</p>
-          <div class="progress-bar" id="winprob-progress" hidden>
-            <div class="progress-bar__track"><div class="progress-bar__fill" id="winprob-progress-fill"></div></div>
-            <span class="progress-bar__label" id="winprob-progress-label"></span>
+        </div>
+        <div id="settings-body" class="calc-settings__body" ${settingsOpen ? "" : "hidden"}>
+          <div class="calc-settings__group">
+            <h3>Opening Explorer</h3>
+            <p class="stat-card__meta">Which games weight the opponent's replies, for both results.</p>
+            <div class="explorer-settings-panel">
+              <div class="analysis-header__settings">
+                <select id="stat-source" aria-label="Explorer data source">
+                  <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
+                  <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
+                </select>
+                <select id="stat-database" aria-label="Lichess database" ${settings.source === "lirep" ? "disabled" : ""}>
+                  <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
+                  <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
+                  <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
+                </select>
+                <select id="stat-min-rating" aria-label="Minimum rating" ${settings.database === "lichess" ? "" : "disabled"}>
+                  ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
+                </select>
+                <input id="stat-player" class="explorer-player" type="text" placeholder="Lichess username"
+                  aria-label="Player whose games to use" value="${escapeHtml(settings.player ?? "")}"
+                  ${settings.database === "player" ? "" : "hidden"} />
+              </div>
+              <div class="speed-checkboxes" id="stat-speeds">
+                ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database === "masters")}
+              </div>
+            </div>
+          </div>
+          <div class="calc-settings__group">
+            <h3>Stockfish</h3>
+            <p class="stat-card__meta">How deep Stockfish searches each end-of-prep position, for the expected evaluation.</p>
+            <label class="eval-depth-control" for="eval-depth">
+              <span>Depth</span>
+              <select id="eval-depth">
+                <option value="8">8 · Quick</option>
+                <option value="12">12 · Balanced</option>
+                <option value="16">16 · Thorough</option>
+              </select>
+            </label>
+            <p class="stat-card__meta">Balanced or more to appear on the evaluation leaderboard.</p>
           </div>
         </div>
-
-        <div class="stat-action">
-          <button id="eval-score-btn" class="btn btn-primary" type="button" ${hasMoves ? "" : "disabled"}>
-            Update expected evaluation
-          </button>
-          <p class="stat-card__meta">Combines Explorer frequencies with local Stockfish; missing positions are evaluated here first.</p>
-          <div class="progress-bar" id="eval-score-progress" hidden>
-            <div class="progress-bar__track"><div class="progress-bar__fill" id="eval-score-progress-fill"></div></div>
-            <span class="progress-bar__label" id="eval-score-progress-label"></span>
-          </div>
+        <div class="calc-settings__actions">
+          <button id="recalc-all" class="btn btn-primary" type="button" ${disabled}>Recalculate</button>
+          <span class="stat-card__meta" id="recalc-status" aria-live="polite"></span>
         </div>
-      </div>
+      </section>
 
-      <details class="stat-settings">
-        <summary>Opening Explorer settings</summary>
-        <p class="stat-card__meta">These settings determine which replies are weighted in recalculated scores.</p>
-        <div class="explorer-settings-panel">
-          <div class="analysis-header__settings">
-            <select id="stat-source" aria-label="Explorer data source">
-              <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
-              <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
-            </select>
-            <select id="stat-database" aria-label="Lichess database" ${settings.source === "lirep" ? "disabled" : ""}>
-              <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
-              <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
-              <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
-            </select>
-            <select id="stat-min-rating" ${settings.database === "lichess" ? "" : "disabled"}>
-              ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
-            </select>
-            <input id="stat-player" class="explorer-player" type="text" placeholder="Lichess username"
-              aria-label="Player whose games to use" value="${escapeHtml(settings.player ?? "")}"
-              ${settings.database === "player" ? "" : "hidden"} />
-          </div>
-          <div class="speed-checkboxes" id="stat-speeds">
-            ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database === "masters")}
-          </div>
+      <section class="stat-result">
+        <div class="stat-result__head">
+          <h2>Expected score</h2>
+          <button id="score-btn" class="btn btn-secondary btn-small" type="button" ${disabled}>Recalculate</button>
         </div>
-      </details>
+        <p class="stat-result__what">Wins plus half the draws, if you always play your prepared moves and opponents reply as in the Explorer.</p>
+        ${scoreHtml}
+        <div id="score-stale"></div>
+        <p class="stat-rank" id="score-rank"></p>
+        ${progressHtml("score")}
+        <h3 class="stat-result__subtitle">Coverage by ${opponent}'s move number</h3>
+        <p class="tree-hint">Share of games still following your lines after each ${opponent} reply.${startPoint ? ` Move numbers start from ${escapeHtml(startPoint)}.` : ""}</p>
+        <div class="coverage-chart-wrap">
+          ${
+            displayedCoverage.length
+              ? `<canvas id="coverage-chart"></canvas>`
+              : `<p class="empty-state">No coverage data yet — recalculate to generate it.</p>`
+          }
+        </div>
+      </section>
 
-      <h2 class="stat-detail__chart-title">Coverage by ${opponent.toLowerCase()}'s move number</h2>
-      <p class="tree-hint">Share of games still following your lines after each ${opponent} reply.${startPoint ? ` Move numbers start from ${startPoint}.` : ""}</p>
-      <div class="coverage-chart-wrap">
-        ${
-          displayedCoverage.length
-            ? `<canvas id="coverage-chart"></canvas>`
-            : `<p class="empty-state">No coverage data yet — recalculate to generate it.</p>`
-        }
-      </div>
+      <section class="stat-result">
+        <div class="stat-result__head">
+          <h2>Expected evaluation</h2>
+          <button id="eval-btn" class="btn btn-secondary btn-small" type="button" ${disabled}>Recalculate</button>
+        </div>
+        <p class="stat-result__what">Stockfish's evaluation where your preparation ends, averaged over the opponent's replies as weighted by the Explorer.</p>
+        ${evalHtml}
+        <div id="eval-stale"></div>
+        <p class="stat-rank" id="eval-rank"></p>
+        ${progressHtml("eval")}
+        <p class="stat-card__meta">${cacheNote}${lastRunNote}</p>
+      </section>
+
+      <section class="stat-knowledge">
+        <span>Practice knowledge</span>
+        <strong>${knowledge !== null ? `${Math.round(knowledge * 100)}%` : "—"}</strong>
+        <span class="stat-card__meta">${knowledge !== null ? "Average recall across all positions; decays over time." : "No practice positions yet."}</span>
+        <a href="/practice-session.html?id=${study.id}">Practice</a>
+      </section>
     </div>
   `;
 
@@ -727,8 +859,22 @@ function renderPage(
     legend.hidden = !legend.hidden;
   });
 
+  const settingsBody = document.getElementById("settings-body") as HTMLElement;
+  const settingsToggle = document.getElementById("settings-toggle") as HTMLButtonElement;
+  settingsToggle.addEventListener("click", () => {
+    settingsOpen = settingsBody.hidden;
+    settingsBody.hidden = !settingsOpen;
+    settingsToggle.textContent = settingsOpen ? "Done" : "Edit";
+    settingsToggle.setAttribute("aria-expanded", String(settingsOpen));
+  });
+
   const depthEl = document.getElementById("eval-depth") as HTMLSelectElement;
-  depthEl.value = String(getSavedEvalDepth());
+  // The depth the expected evaluation was last calculated at, like the Explorer
+  // settings; this browser's last choice for a study never calculated.
+  const studyDepth = stats?.evalDepth;
+  depthEl.value = String(
+    studyDepth && EVAL_DEPTHS.includes(studyDepth as (typeof EVAL_DEPTHS)[number]) ? studyDepth : getSavedEvalDepth(),
+  );
   depthEl.addEventListener("change", () => {
     try {
       localStorage.setItem(EVAL_DEPTH_STORAGE_KEY, depthEl.value);
@@ -741,7 +887,6 @@ function renderPage(
   const sourceEl = document.getElementById("stat-source") as HTMLSelectElement;
   const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
   const speedsEl = document.getElementById("stat-speeds") as HTMLElement;
-
   const playerEl = document.getElementById("stat-player") as HTMLInputElement;
 
   function updateExplorerControls(): void {
@@ -768,6 +913,7 @@ function renderPage(
     if (databaseEl.value === "player" && !playerEl.value.trim()) {
       void fetchMe().then((me) => {
         if (me.username && !playerEl.value.trim()) playerEl.value = me.username;
+        refreshStatus();
       });
     }
   });
@@ -779,166 +925,133 @@ function renderPage(
     if (!target.checked && checkedCount === 0) target.checked = true; // keep at least one speed selected
   });
 
-  const allActionButtons = () =>
-    ["evals-btn", "winprob-btn", "eval-score-btn"]
-      .map((id) => document.getElementById(id) as HTMLButtonElement)
-      .filter((el): el is HTMLButtonElement => el !== null);
+  // The summary line and the out-of-date markers follow the settings as they
+  // are edited; nothing recalculates until a Recalculate button is pressed.
+  function refreshStatus(): void {
+    const current = readSettingsFromDom();
+    const depth = readDepthFromDom();
+    (document.getElementById("settings-summary") as HTMLElement).textContent =
+      `${explorerSummary(current)} · Stockfish depth ${depth}`;
+    const scoreReasons = scoreStaleness(study, current);
+    const evalReasons = evalStaleness(study, current, depth);
+    (document.getElementById("score-stale") as HTMLElement).innerHTML = staleHtml(scoreReasons);
+    (document.getElementById("eval-stale") as HTMLElement).innerHTML = staleHtml(evalReasons);
+    const missing = [stats?.winProbability, stats?.evalCp].filter((v) => v === undefined).length;
+    const outdated = (scoreReasons.length ? 1 : 0) + (evalReasons.length ? 1 : 0);
+    (document.getElementById("recalc-status") as HTMLElement).textContent = !hasMoves
+      ? "Add moves to the study first."
+      : missing === 2
+        ? "Calculates the expected score and the expected evaluation."
+        : missing + outdated === 0
+          ? "Both results are up to date."
+          : `${missing + outdated === 2 ? "Both results need" : "One result needs"} recalculating.`;
+  }
+  main.querySelector(".calc-settings")!.addEventListener("change", refreshStatus);
+  main.querySelector(".calc-settings")!.addEventListener("input", refreshStatus);
+  refreshStatus();
 
-  document.getElementById("evals-btn")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget as HTMLButtonElement;
-    const others = allActionButtons().filter((el) => el !== btn);
-    const progress = document.getElementById("evals-progress") as HTMLElement;
-    const fill = document.getElementById("evals-progress-fill") as HTMLElement;
-    const label = document.getElementById("evals-progress-label") as HTMLElement;
-    const count = document.getElementById("evals-count") as HTMLElement;
-    const depth = Number(depthEl.value);
-    let readyPositions = 0;
-    let requiredPositions = 0;
-
-    allActionButtons().forEach((el) => (el.disabled = true));
-    btn.textContent = "Calculating…";
-    progress.hidden = false;
-    progress.classList.add("progress-bar--indeterminate");
-    fill.style.width = "0%";
-    label.textContent = "Finding required positions…";
-    label.classList.remove("progress-bar__label--error");
-    progress.classList.remove("progress-bar--error");
-
-    try {
-      const explorerCache = new Map<string, ExplorerData>();
-      await calculateEvaluationsLocally(
-        study.tree,
-        study.startNodeId !== null && study.startNodeId in study.tree.nodes ? study.startNodeId : study.tree.rootId,
-        study.side,
-        readSettingsFromDom(),
-        cache,
-        explorerCache,
-        depth,
-        (ready, required, work) => {
-          readyPositions = ready;
-          requiredPositions = required;
-          count.textContent = `${ready} / ${required} positions cached (${required - ready} to calculate)`;
-          progress.classList.remove("progress-bar--indeterminate");
-          fill.style.width = work === 0 ? "100%" : "0%";
-          label.textContent = work === 0 ? "Already up to date" : `0 / ${work}`;
-        },
-        (done, total) => {
-          readyPositions++;
-          count.textContent = `${readyPositions} / ${requiredPositions} positions ready (${requiredPositions - readyPositions} remaining)`;
-          fill.style.width = `${Math.round((done / total) * 100)}%`;
-          label.textContent = `${done} / ${total}`;
-        },
-      );
-      count.textContent = `${requiredPositions} / ${requiredPositions} positions ready on this device`;
-      btn.textContent = "Update evaluations";
-      allActionButtons().forEach((el) => (el.disabled = false));
-    } catch (err) {
-      if (requiredPositions) count.textContent = `${readyPositions} / ${requiredPositions} positions ready`;
-      btn.textContent = "Update evaluations";
-      btn.disabled = false;
-      others.forEach((el) => (el.disabled = false));
-      progress.classList.remove("progress-bar--indeterminate");
-      label.textContent = err instanceof Error ? err.message : "Something went wrong.";
-      label.classList.add("progress-bar__label--error");
-      progress.classList.add("progress-bar--error");
-      fill.style.width = "0%";
-    }
+  void leaderboardStatus(study).then(({ score, evaluation }) => {
+    const scoreRank = document.getElementById("score-rank");
+    const evalRank = document.getElementById("eval-rank");
+    if (scoreRank) scoreRank.innerHTML = score;
+    if (evalRank) evalRank.innerHTML = evaluation;
   });
 
-  document.getElementById("winprob-btn")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget as HTMLButtonElement;
-    const others = allActionButtons().filter((el) => el !== btn);
-    const progress = document.getElementById("winprob-progress") as HTMLElement;
-    const fill = document.getElementById("winprob-progress-fill") as HTMLElement;
-    const label = document.getElementById("winprob-progress-label") as HTMLElement;
+  const buttons = ["recalc-all", "score-btn", "eval-btn"].map((id) => document.getElementById(id) as HTMLButtonElement);
+  const setBusy = (busy: boolean) => buttons.forEach((b) => (b.disabled = busy || !hasMoves));
 
-    allActionButtons().forEach((el) => (el.disabled = true));
-    btn.textContent = "Calculating…";
+  function progressElements(id: "score" | "eval") {
+    const progress = document.getElementById(`${id}-progress`) as HTMLElement;
+    const fill = document.getElementById(`${id}-progress-fill`) as HTMLElement;
+    const label = document.getElementById(`${id}-progress-label`) as HTMLElement;
     progress.hidden = false;
+    progress.classList.remove("progress-bar--error", "progress-bar--indeterminate");
+    label.classList.remove("progress-bar__label--error");
     fill.style.width = "0%";
     label.textContent = "";
-    label.classList.remove("progress-bar__label--error");
-    progress.classList.remove("progress-bar--error");
+    return { progress, fill, label };
+  }
 
-    try {
-      const estimatedTotal = Object.keys(study.tree.nodes).length;
-      const updated = await runProgressJob(
-        `/api/studies/${study.id}/win-probability`,
-        { explorerSettings: readSettingsFromDom() },
-        estimatedTotal,
-        fill,
-        label,
-      );
-      renderPage(main, updated, explorerDefaults, knowledge, cache);
-    } catch (err) {
-      btn.textContent = "Update win probability";
-      btn.disabled = false;
-      others.forEach((el) => (el.disabled = false));
-      label.textContent = err instanceof Error ? err.message : "Something went wrong.";
-      label.classList.add("progress-bar__label--error");
-      progress.classList.add("progress-bar--error");
-      fill.style.width = "0%";
-    }
-  });
-
-  document.getElementById("eval-score-btn")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget as HTMLButtonElement;
-    const others = allActionButtons().filter((el) => el !== btn);
-    const progress = document.getElementById("eval-score-progress") as HTMLElement;
-    const fill = document.getElementById("eval-score-progress-fill") as HTMLElement;
-    const label = document.getElementById("eval-score-progress-label") as HTMLElement;
-    const depth = Number(depthEl.value);
-
-    allActionButtons().forEach((el) => (el.disabled = true));
-    btn.textContent = "Calculating…";
-    progress.hidden = false;
-    progress.classList.add("progress-bar--indeterminate");
+  function showError(id: "score" | "eval", err: unknown): void {
+    const { progress, fill, label } = progressElements(id);
+    label.textContent = err instanceof Error ? err.message : "Something went wrong.";
+    label.classList.add("progress-bar__label--error");
+    progress.classList.add("progress-bar--error");
     fill.style.width = "0%";
-    label.textContent = "Finding required positions…";
-    label.classList.remove("progress-bar__label--error");
-    progress.classList.remove("progress-bar--error");
+  }
 
-    try {
-      const settings = readSettingsFromDom();
-      const explorerCache = new Map<string, ExplorerData>();
-      const startNodeId = study.startNodeId !== null && study.startNodeId in study.tree.nodes
-        ? study.startNodeId
-        : study.tree.rootId;
-      const positions = await calculateEvaluationsLocally(
-        study.tree, startNodeId, study.side, settings, cache, explorerCache, depth,
-        (_ready, _required, work) => {
-          progress.classList.remove("progress-bar--indeterminate");
-          fill.style.width = work === 0 ? "100%" : "0%";
-          label.textContent = work === 0 ? "Evaluations ready" : `0 / ${work}`;
-        },
-        (done, total) => {
-          fill.style.width = `${Math.round((done / total) * 100)}%`;
-          label.textContent = `${done} / ${total} positions evaluated`;
-        },
-      );
-      label.textContent = "Weighting Explorer replies…";
-      const evalCp = await expectedEvaluation(study.tree, startNodeId, study.side, settings, positions, explorerCache);
-      const evalMisses = [...positions.values()].filter((cp) => cp === null).length;
-      const res = await fetch(`/api/studies/${study.id}/expected-eval`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ evalCp, evalMisses, explorerSettings: settings }),
-      });
-      if (!res.ok) throw new Error("Could not save expected evaluation");
-      const updated: Study = await res.json();
-      renderPage(main, updated, explorerDefaults, knowledge, cache);
-    } catch (err) {
-      btn.textContent = "Update expected evaluation";
-      btn.disabled = false;
-      others.forEach((el) => (el.disabled = false));
-      progress.classList.remove("progress-bar--indeterminate");
-      label.textContent = err instanceof Error ? err.message : "Something went wrong.";
-      label.classList.add("progress-bar__label--error");
-      progress.classList.add("progress-bar--error");
-      fill.style.width = "0%";
+  async function calculateScore(current: Study, settings: ExplorerSettings): Promise<Study> {
+    const { fill, label } = progressElements("score");
+    return runProgressJob(
+      `/api/studies/${current.id}/win-probability`,
+      { explorerSettings: settings },
+      Object.keys(current.tree.nodes).length,
+      fill,
+      label,
+    );
+  }
+
+  async function calculateEvaluation(current: Study, settings: ExplorerSettings, depth: number): Promise<Study> {
+    const { progress, fill, label } = progressElements("eval");
+    progress.classList.add("progress-bar--indeterminate");
+    label.textContent = "Finding end-of-prep positions…";
+    const explorerCache = new Map<string, ExplorerData>();
+    const startNodeId = current.startNodeId !== null && current.startNodeId in current.tree.nodes
+      ? current.startNodeId
+      : current.tree.rootId;
+    let required = 0;
+    let computed = 0;
+    const positions = await calculateEvaluationsLocally(
+      current.tree, startNodeId, current.side, settings, cache, explorerCache, depth,
+      (_ready, total, work) => {
+        required = total;
+        progress.classList.remove("progress-bar--indeterminate");
+        fill.style.width = work === 0 ? "100%" : "0%";
+        label.textContent = work === 0 ? "All positions already evaluated on this device" : `0 / ${work} positions evaluated`;
+      },
+      (done, total) => {
+        computed = done;
+        fill.style.width = `${Math.round((done / total) * 100)}%`;
+        label.textContent = `${done} / ${total} positions evaluated`;
+      },
+    );
+    label.textContent = "Weighting Explorer replies…";
+    const evalCp = await expectedEvaluation(current.tree, startNodeId, current.side, settings, positions, explorerCache);
+    const evalMisses = [...positions.values()].filter((cp) => cp === null).length;
+    const res = await fetch(`/api/studies/${current.id}/expected-eval`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ evalCp, evalMisses, depth, explorerSettings: settings }),
+    });
+    if (!res.ok) throw new Error("Could not save expected evaluation");
+    lastEvalRun = { required, computed };
+    return res.json();
+  }
+
+  // Runs the requested calculations one after the other with the settings
+  // as they are now, then re-renders once; a failure stops the run and stays
+  // on screen next to its card.
+  async function run(which: ("score" | "eval")[]): Promise<void> {
+    const settings = readSettingsFromDom();
+    const depth = readDepthFromDom();
+    let current = study;
+    setBusy(true);
+    for (const id of which) {
+      try {
+        current = id === "score" ? await calculateScore(current, settings) : await calculateEvaluation(current, settings, depth);
+      } catch (err) {
+        showError(id, err);
+        setBusy(false);
+        return;
+      }
     }
-  });
+    renderPage(main, current, explorerDefaults, knowledge, cache);
+  }
+
+  document.getElementById("recalc-all")!.addEventListener("click", () => void run(["score", "eval"]));
+  document.getElementById("score-btn")!.addEventListener("click", () => void run(["score"]));
+  document.getElementById("eval-btn")!.addEventListener("click", () => void run(["eval"]));
 }
 
 async function init(): Promise<void> {

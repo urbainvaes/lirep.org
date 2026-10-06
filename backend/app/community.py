@@ -9,6 +9,9 @@ from .config import MAX_USERS
 router = APIRouter()
 
 LEADERBOARD_SIZE = 10
+# The "Balanced" Stockfish depth on a study's Stats page; shallower expected
+# evaluations are too noisy to compare.
+MIN_LEADERBOARD_EVAL_DEPTH = 12
 
 
 def _count_moves_and_lines(tree: dict) -> tuple[int, int]:
@@ -134,6 +137,58 @@ def openings(request: Request, includeLirep: bool = False) -> list[dict]:
             key=lambda e: e["winProbability"],
             reverse=True,
         )
+        for rank, entry in enumerate(ranked[:LEADERBOARD_SIZE], start=1):
+            entry["rank"] = rank
+            shown.append(entry)
+    return shown
+
+
+def _eval_entry(owner: str, study: dict, me: str | None, include_lirep: bool) -> dict | None:
+    """A row of the expected-evaluation leaderboard, or None when the study's
+    expected evaluation is not comparable: not calculated, a legacy server
+    calculation (depth unknown), Stockfish below MIN_LEADERBOARD_EVAL_DEPTH,
+    or Explorer settings the score leaderboard leaves out too."""
+    stats = study.get("stats") or {}
+    eval_cp = stats.get("evalCp")
+    depth = stats.get("evalDepth")
+    settings = stats.get("evalSettings")
+    if eval_cp is None or settings is None or depth is None or depth < MIN_LEADERBOARD_EVAL_DEPTH:
+        return None
+    if settings["database"] == "player" or (settings["source"] != "lichess" and not include_lirep):
+        return None
+    moves, lines = _count_moves_and_lines(study["tree"])
+    return {
+        "id": study["id"],
+        "name": study["name"],
+        "side": study["side"],
+        "owner": owner,
+        "mine": me is not None and owner.lower() == me.lower(),
+        "evalCp": eval_cp,
+        "depth": depth,
+        "source": settings["source"],
+        "database": settings["database"],
+        "minRating": settings["minRating"],
+        "speeds": settings["speeds"] or [],
+        "calculatedAt": stats.get("evalCalculatedAt"),
+        "moves": moves,
+        "lines": lines,
+        "rank": None,
+    }
+
+
+@router.get("/api/community/openings-by-eval")
+def openings_by_eval(request: Request, includeLirep: bool = False) -> list[dict]:
+    """Like /api/community/openings, ranked by expected evaluation at the end
+    of prep instead of expected score. Only evaluations with Stockfish at depth
+    MIN_LEADERBOARD_EVAL_DEPTH ("Balanced") or more are ranked."""
+    me = request.session.get("username")
+    entries = [
+        e for owner, study in store.list_shared_studies()
+        if (e := _eval_entry(owner, study, me, includeLirep)) is not None
+    ]
+    shown: list[dict] = []
+    for side in ("white", "black"):
+        ranked = sorted((e for e in entries if e["side"] == side), key=lambda e: e["evalCp"], reverse=True)
         for rank, entry in enumerate(ranked[:LEADERBOARD_SIZE], start=1):
             entry["rank"] = rank
             shown.append(entry)

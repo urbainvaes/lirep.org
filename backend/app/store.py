@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import sqlite3
@@ -181,6 +182,29 @@ def init_db() -> None:
     prune_explorer_cache()
 
 
+def moves_fingerprint(tree: dict[str, Any], start_node_id: int | None) -> str:
+    """A short hash of what the stats depend on: every move in the tree, in
+    order (the first child of a prepared-side node is the prepared move), and
+    the starting point. Comments and node ids don't count. Each result stores
+    the fingerprint it was calculated from, so the Stats page can tell when
+    the moves changed since."""
+    nodes = tree["nodes"]
+
+    def serialize(node_id: int) -> str:
+        node = nodes[str(node_id)]
+        return f"{node.get('san') or ''}({','.join(serialize(child) for child in node['children'])})"
+
+    start = start_node_id if start_node_id is not None and str(start_node_id) in nodes else tree["rootId"]
+    path: list[str] = []
+    node_id: int | None = start
+    while node_id is not None and node_id != tree["rootId"]:
+        node = nodes[str(node_id)]
+        path.append(node.get("san") or "")
+        node_id = node.get("parentId")
+    payload = serialize(tree["rootId"]) + "|" + " ".join(reversed(path))
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
     # Merged with defaults so older rows saved before a new explorerSettings
     # field existed (e.g. "speeds") still come back with a sensible value.
@@ -190,10 +214,12 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
         explorer_settings["source"] = "lichess"
     if explorer_settings["source"] == "lirep" and explorer_settings["database"] == "masters":
         explorer_settings["database"] = "lichess"
+    tree = json.loads(row["tree"])
     return {
         "id": row["id"],
         "name": row["name"],
-        "tree": json.loads(row["tree"]),
+        "tree": tree,
+        "movesFingerprint": moves_fingerprint(tree, row["start_node_id"]),
         "explorerSettings": explorer_settings,
         "side": row["side"] or DEFAULT_SIDE,
         "stats": json.loads(row["stats"]) if row["stats"] else None,

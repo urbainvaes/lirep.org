@@ -250,6 +250,9 @@ class ExpectedEvalIn(BaseModel):
 
     evalCp: float = Field(strict=True, ge=-100_000, le=100_000, allow_inf_nan=False)
     evalMisses: int = Field(strict=True, ge=0)
+    # Stockfish depth the end-of-prep positions were evaluated at; the
+    # community leaderboard only ranks expected evaluations at depth 12 or more.
+    depth: int | None = Field(default=None, strict=True, ge=1, le=99)
     explorerSettings: ExplorerSettings | None = None
 
 
@@ -342,6 +345,9 @@ async def _run_win_probability_job(job_id: str, owner: str, study_id: int, token
                 "player": player,
                 "speeds": explorer_settings.get("speeds", list(DEFAULT_SPEEDS)),
                 "nodesEvaluated": evaluator.nodes_evaluated,
+                # The moves as they were when the job started, so the Stats
+                # page can mark the result out of date after an edit.
+                "winProbabilityMovesFingerprint": study["movesFingerprint"],
                 "explorerCalls": evaluator.explorer_calls,
             },
         )
@@ -403,10 +409,18 @@ def save_expected_eval(study_id: int, request: Request, payload: ExpectedEvalIn)
             "evalMisses": payload.evalMisses,
             "evalCalculatedAt": datetime.now(UTC).isoformat(),
             "evalOrigin": "local",
-            "source": settings["source"],
-            "database": settings["database"],
-            "minRating": settings["minRating"],
-            "speeds": settings["speeds"],
+            "evalDepth": payload.depth,
+            "evalMovesFingerprint": study["movesFingerprint"],
+            # Kept apart from source/database/minRating/speeds, which describe
+            # the win probability: the two can be calculated with different
+            # Explorer settings.
+            "evalSettings": {
+                "source": settings["source"],
+                "database": settings["database"],
+                "minRating": settings["minRating"],
+                "speeds": settings["speeds"],
+                "player": settings.get("player") if settings["database"] == "player" else None,
+            },
         },
         explorer_settings=settings if payload.explorerSettings is not None else None,
     )
