@@ -1723,6 +1723,40 @@ body {
   font-size: 0.75rem;
 }
 
+.engine-depth {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.engine-depth .engine-eval {
+  min-width: 5.5em;
+  text-align: center;
+}
+
+.engine-depth__btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.engine-depth__btn:hover:not(:disabled) {
+  border-color: var(--text-dim);
+  color: var(--text-strong);
+}
+
+.engine-depth__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .study-card--tools-none .tool-tabs {
   border-top-color: transparent;
 }

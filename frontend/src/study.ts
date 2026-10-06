@@ -3,7 +3,7 @@ import type { Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
 import { applyLichessBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
-import { DEFAULT_SEARCH_DEPTH, Engine, formatScore, uciMoveToKeys, whiteGaugeShare, winningChances, type EngineAnalysis, type EngineLine } from "./engine";
+import { Engine, formatScore, uciMoveToKeys, whiteGaugeShare, winningChances, type EngineAnalysis, type EngineLine } from "./engine";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
@@ -41,6 +41,23 @@ interface Study {
   // null (the default) means calculations start at the tree's real root —
   // see starting-point.md.
   startNodeId: number | null;
+}
+
+// The editor's Stockfish depth, changed 4 at a time with the arrows beside
+// it and remembered in this browser. (The Stats page has its own setting.)
+const ENGINE_DEPTH_STEP = 4;
+const ENGINE_DEPTH_MIN = 4;
+const ENGINE_DEPTH_MAX = 24;
+const ENGINE_DEPTH_DEFAULT = 12;
+const ENGINE_DEPTH_STORAGE_KEY = "study-engine-depth";
+
+function getSavedEngineDepth(): number {
+  try {
+    const depth = Number(localStorage.getItem(ENGINE_DEPTH_STORAGE_KEY));
+    return depth >= ENGINE_DEPTH_MIN && depth <= ENGINE_DEPTH_MAX && depth % ENGINE_DEPTH_STEP === 0 ? depth : ENGINE_DEPTH_DEFAULT;
+  } catch {
+    return ENGINE_DEPTH_DEFAULT;
+  }
 }
 
 type Tool = "explorer" | "engine";
@@ -345,7 +362,11 @@ function renderEditor(
                 <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine">
                   <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span>Stockfish
                 </button>
-                <span id="engine-status" class="engine-eval tool-tabs__status" title="Stockfish runs in this browser"></span>
+                <span id="engine-depth" class="engine-depth tool-tabs__status" hidden>
+                  <button id="depth-down" class="engine-depth__btn" type="button" aria-label="Search less deep">‹</button>
+                  <span id="engine-status" class="engine-eval" title="Stockfish's search depth, in this browser" aria-live="polite"></span>
+                  <button id="depth-up" class="engine-depth__btn" type="button" aria-label="Search deeper">›</button>
+                </span>
               </div>
             </div>
           </div>
@@ -366,6 +387,10 @@ function renderEditor(
   const explorerMinRatingEl = document.getElementById("explorer-min-rating") as HTMLSelectElement;
   const explorerSpeedsEl = document.getElementById("explorer-speeds") as HTMLElement;
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
+  const engineDepthEl = document.getElementById("engine-depth") as HTMLElement;
+  const depthDownBtn = document.getElementById("depth-down") as HTMLButtonElement;
+  const depthUpBtn = document.getElementById("depth-up") as HTMLButtonElement;
+  let engineDepth = getSavedEngineDepth();
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const nameInput = document.getElementById("study-name") as HTMLInputElement;
   const titleEl = document.getElementById("study-title") as HTMLElement;
@@ -671,7 +696,7 @@ function renderEditor(
 
   // Stockfish's top lines for the last position analysed, reused when only
   // the Explorer side changes (turned on or off, other settings).
-  let topLines: { fen: string; analysis: EngineAnalysis } | null = null;
+  let topLines: { fen: string; depth: number; analysis: EngineAnalysis } | null = null;
 
   async function updateEngine(chess: Chess): Promise<void> {
     const analysisId = ++engineAnalysisId;
@@ -695,12 +720,13 @@ function renderEditor(
       ? fetchExplorerData(fen, settings, currentSide(), { priority: "interactive" }).catch(() => null)
       : Promise.resolve(null);
 
-    let analysis = topLines?.fen === fen ? topLines.analysis : null;
+    const depth = engineDepth;
+    let analysis = topLines?.fen === fen && topLines.depth === depth ? topLines.analysis : null;
     if (!analysis) {
-      engineStatusEl.textContent = "Thinking…";
-      analysis = await engine.analyze(fen);
+      engineStatusEl.textContent = `depth ${depth}…`;
+      analysis = await engine.analyze(fen, depth);
       if (stale()) return;
-      topLines = { fen, analysis };
+      topLines = { fen, depth, analysis };
     }
     setGauge(whiteGaugeShare(analysis.lines[0], sideToMoveIsWhite));
 
@@ -720,8 +746,9 @@ function renderEditor(
       .slice(0, Math.max(0, MAX_ARROWS - lines.length))
       .map(([uci]) => uci);
     if (extra.length) {
-      engineStatusEl.textContent = `depth ${analysis.depth} · checking popular moves…`;
-      const more = await engine.analyze(fen, DEFAULT_SEARCH_DEPTH, extra);
+      engineStatusEl.textContent = `depth ${depth}…`;
+      engineStatusEl.title = "Evaluating popular Explorer moves";
+      const more = await engine.analyze(fen, depth, extra);
       if (stale()) return;
       lines.push(...more.lines.filter((l) => !lines.some((known) => known.move === l.move)));
     }
@@ -745,7 +772,8 @@ function renderEditor(
       },
     });
 
-    engineStatusEl.textContent = `depth ${analysis.depth}`;
+    engineStatusEl.textContent = `depth ${depth}`;
+    engineStatusEl.title = "Stockfish's search depth, in this browser";
     // One row of chips, best first, each in its arrow's colour.
     enginePanelEl.innerHTML = [...moves]
       .sort((a, b) => winningChances(b.line) - winningChances(a.line))
@@ -869,6 +897,7 @@ function renderEditor(
       tabPanels[name].hidden = !shownTools.has(name);
     }
     gaugeEl.hidden = !shownTools.has("engine");
+    engineDepthEl.hidden = !shownTools.has("engine");
     // The tools card takes only the room its open tools need; the tree has the rest.
     const toolsCard = document.querySelector(".study-card--tools");
     toolsCard?.classList.toggle("study-card--tools-both", shownTools.size === 2);
@@ -911,6 +940,29 @@ function renderEditor(
       refreshExplorerViews();
     }
   }
+
+  function setEngineDepth(depth: number): void {
+    engineDepth = Math.min(ENGINE_DEPTH_MAX, Math.max(ENGINE_DEPTH_MIN, depth));
+    depthDownBtn.disabled = engineDepth <= ENGINE_DEPTH_MIN;
+    depthUpBtn.disabled = engineDepth >= ENGINE_DEPTH_MAX;
+    depthDownBtn.title = `Depth ${Math.max(ENGINE_DEPTH_MIN, engineDepth - ENGINE_DEPTH_STEP)}`;
+    depthUpBtn.title = `Depth ${Math.min(ENGINE_DEPTH_MAX, engineDepth + ENGINE_DEPTH_STEP)}`;
+    try {
+      localStorage.setItem(ENGINE_DEPTH_STORAGE_KEY, String(engineDepth));
+    } catch {
+      // The choice just isn't remembered.
+    }
+  }
+
+  depthDownBtn.addEventListener("click", () => {
+    setEngineDepth(engineDepth - ENGINE_DEPTH_STEP);
+    void updateEngine(positionAt(tree, currentId));
+  });
+  depthUpBtn.addEventListener("click", () => {
+    setEngineDepth(engineDepth + ENGINE_DEPTH_STEP);
+    void updateEngine(positionAt(tree, currentId));
+  });
+  setEngineDepth(engineDepth);
 
   tabButtons.explorer.addEventListener("click", () => toggleTool("explorer"));
   tabButtons.engine.addEventListener("click", () => toggleTool("engine"));
