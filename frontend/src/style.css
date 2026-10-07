@@ -870,6 +870,47 @@ body {
   font-size: 0.82rem;
 }
 
+/* The expected score's title, which opens its caveat: it looks like a
+   heading, with a chevron that turns when open. */
+.stat-result__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stat-result__toggle:hover {
+  color: var(--primary);
+}
+
+.stat-result__chevron {
+  color: var(--text-dim);
+  transition: transform 0.15s;
+}
+
+.stat-result__toggle[aria-expanded="true"] .stat-result__chevron {
+  transform: rotate(90deg);
+}
+
+.stat-result__explain {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, var(--card-nested-bg));
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.stat-result__explain p {
+  margin: 0 0 6px;
+}
+
 .stat-result .stat-detail__score {
   margin-top: 0;
 }

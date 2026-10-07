@@ -750,10 +750,14 @@ function renderPage(
 
       <section class="stat-result">
         <div class="stat-result__head">
-          <h2>Expected score</h2>
+          <h2><button class="stat-result__toggle" type="button" aria-expanded="false" aria-controls="score-explain" title="Show the caveat">Expected score<svg class="stat-result__chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></h2>
           <button id="score-btn" class="btn btn-secondary btn-small" type="button" ${disabled}>Recalculate</button>
         </div>
         <p class="stat-result__what">Wins plus half the draws, if you always play your prepared moves and opponents reply as in the Explorer.</p>
+        <div class="stat-result__explain" id="score-explain" hidden>
+          <p>After play leaves your repertoire, Explorer results include how those players continued, sometimes with preparation you may not have. They may overstate your own score if you don't know the follow-up. This isn't a flaw in using empirical results; it's a limitation of treating the pool's average outcomes as a proxy for your own unprepared play.</p>
+          <a href="/doc/stats.html#expected-score">More in the docs</a>
+        </div>
         ${scoreHtml}
         <div id="score-stale"></div>
         <p class="stat-rank" id="score-rank"></p>
@@ -1017,6 +1021,15 @@ function renderPage(
     }
     renderPage(main, current, explorerDefaults, knowledge, cache);
   }
+
+  // The expected score's title opens its caveat.
+  document.querySelectorAll<HTMLButtonElement>(".stat-result__toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const panel = document.getElementById(toggle.getAttribute("aria-controls") as string) as HTMLElement;
+      panel.hidden = !panel.hidden;
+      toggle.setAttribute("aria-expanded", String(!panel.hidden));
+    });
+  });
 
   document.getElementById("recalc-all")!.addEventListener("click", () => void run(["score", "eval"]));
   document.getElementById("score-btn")!.addEventListener("click", () => void run(["score"]));

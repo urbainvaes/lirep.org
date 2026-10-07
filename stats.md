@@ -37,6 +37,13 @@ study's effective starting node:
    replies. For an unprepared reply, use that move's own Explorer W/D/L
    distribution and stop that branch. With no listed games, use neutral 0.5.
 
+This fallback is empirical, not an intrinsic evaluation of the position: it
+reflects what players in the selected pool actually played next, including
+prepared follow-ups. A favorable Explorer result may depend on a continuation
+the user has not prepared. This is not a flaw in using empirical results; it is
+a limitation of treating the pool's average outcomes as a proxy for the user's
+own unprepared play.
+
 The study detail shows win and loss probabilities; draws are the remainder.
 Expected score is `winProbability = winRate + 0.5 * drawProbability`.
 Study cards on the home page show the expected score, and their Stats
