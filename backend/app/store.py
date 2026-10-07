@@ -737,13 +737,14 @@ def _game_sections(conn: sqlite3.Connection, study_id: int) -> list[str]:
 
 def get_study_games(study_id: int) -> dict[str, Any]:
     """The study's sections in order, and its games in section order then
-    their place within the section."""
+    their place within the section. Games without a section (section "")
+    come first; "" is never in the list of sections."""
     with _connect() as conn:
         sections = _game_sections(conn, study_id)
         rows = conn.execute(
             "SELECT id, section, position, pgn, comment FROM study_games WHERE study_id = ?", (study_id,)
         ).fetchall()
-    order = {name: i for i, name in enumerate(sections)}
+    order = {"": -1, **{name: i for i, name in enumerate(sections)}}
     games = sorted(rows, key=lambda r: (order.get(r["section"], len(order)), r["position"], r["id"]))
     # A game whose section is missing from the list (shouldn't happen) still shows.
     sections += [name for name in dict.fromkeys(r["section"] for r in games) if name not in order]
@@ -760,10 +761,10 @@ def count_study_games(study_id: int) -> int:
 
 def add_study_games(study_id: int, section: str, games: list[dict[str, str]]) -> list[int]:
     """Appends games ({"pgn", "comment"}) to the end of a section, which is
-    created at the end of the list if new."""
+    created at the end of the list if new; section "" is no section."""
     with _connect() as conn:
         sections = _game_sections(conn, study_id)
-        if section not in sections:
+        if section and section not in sections:
             sections.append(section)
             conn.execute("UPDATE studies SET game_sections = ? WHERE id = ?", (json.dumps(sections), study_id))
         position = conn.execute(
@@ -797,8 +798,9 @@ def delete_study_game(study_id: int, game_id: int) -> bool:
 def set_study_game_layout(study_id: int, layout: list[dict[str, Any]]) -> bool:
     """Sets the sections, in order, and each one's games, in order:
     [{"name", "gameIds"}]. This is how sections are reordered, renamed,
-    added or removed, and games reordered or moved between sections. Every
-    game of the study must appear exactly once; False otherwise."""
+    added or removed, and games reordered or moved between sections; name ""
+    holds the games without a section. Every game of the study must appear
+    exactly once; False otherwise."""
     with _connect() as conn:
         existing = {r[0] for r in conn.execute("SELECT id FROM study_games WHERE study_id = ?", (study_id,))}
         listed = [game_id for section in layout for game_id in section["gameIds"]]
@@ -811,6 +813,6 @@ def set_study_game_layout(study_id: int, layout: list[dict[str, Any]]) -> bool:
                 )
         conn.execute(
             "UPDATE studies SET game_sections = ? WHERE id = ?",
-            (json.dumps([section["name"] for section in layout]), study_id),
+            (json.dumps([section["name"] for section in layout if section["name"]]), study_id),
         )
     return True

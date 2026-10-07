@@ -4449,6 +4449,24 @@ button.study-head__link:disabled:hover {
   color: var(--bad);
 }
 
+/* The games without a section, above the sections: no room taken when
+   there are none, except while dragging, to take a dropped card. */
+.games-grid--loose {
+  min-height: 0;
+  margin-bottom: 28px;
+}
+
+.games-grid--loose:empty {
+  margin-bottom: 0;
+}
+
+.games-page--dragging .games-grid--loose:empty {
+  min-height: 80px;
+  margin-bottom: 28px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
 /* The game view: the player's comment, under the moves. */
 .games-comment-card {
   display: grid;

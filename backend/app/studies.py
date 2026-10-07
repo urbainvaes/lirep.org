@@ -218,7 +218,8 @@ class GameIn(BaseModel):
 
 
 class GamesIn(BaseModel):
-    section: str = Field(min_length=1, max_length=MAX_SECTION_NAME)
+    # "" for no section.
+    section: str = Field(default="", max_length=MAX_SECTION_NAME)
     games: list[GameIn] = Field(min_length=1)
 
 
@@ -227,12 +228,13 @@ class CommentIn(BaseModel):
 
 
 class SectionIn(BaseModel):
-    name: str = Field(min_length=1, max_length=MAX_SECTION_NAME)
+    # "" holds the games without a section.
+    name: str = Field(max_length=MAX_SECTION_NAME)
     gameIds: list[int]
 
 
 class LayoutIn(BaseModel):
-    sections: list[SectionIn] = Field(max_length=MAX_SECTIONS)
+    sections: list[SectionIn] = Field(max_length=MAX_SECTIONS + 1)  # + the games without a section
 
 
 def _require_study(request: Request, study_id: int) -> None:
@@ -250,12 +252,10 @@ def list_games(study_id: int, request: Request) -> dict:
 def add_games(study_id: int, payload: GamesIn, request: Request) -> dict:
     _require_study(request, study_id)
     section = payload.section.strip()
-    if not section:
-        raise HTTPException(status_code=422, detail="the section needs a name")
     if store.count_study_games(study_id) + len(payload.games) > MAX_GAMES_PER_STUDY:
         raise HTTPException(status_code=422, detail=f"a study can have at most {MAX_GAMES_PER_STUDY} games")
     sections = store.get_study_games(study_id)["sections"]
-    if section not in sections and len(sections) >= MAX_SECTIONS:
+    if section and section not in sections and len(sections) >= MAX_SECTIONS:
         raise HTTPException(status_code=422, detail=f"a study can have at most {MAX_SECTIONS} sections")
     ids = store.add_study_games(study_id, section, [g.model_dump() for g in payload.games])
     return {"ids": ids}
@@ -283,8 +283,8 @@ def set_games_layout(study_id: int, payload: LayoutIn, request: Request) -> dict
     adding or removing sections, and moving games, all in one call."""
     _require_study(request, study_id)
     names = [s.name.strip() for s in payload.sections]
-    if any(not n for n in names) or len(set(names)) != len(names):
-        raise HTTPException(status_code=422, detail="section names must be distinct and not empty")
+    if len(set(names)) != len(names):
+        raise HTTPException(status_code=422, detail="section names must be distinct")
     layout = [{"name": n, "gameIds": s.gameIds} for n, s in zip(names, payload.sections)]
     if not store.set_study_game_layout(study_id, layout):
         raise HTTPException(status_code=409, detail="the games changed; reload the page")

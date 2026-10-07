@@ -165,11 +165,14 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
           <span id="add-games-status" class="games-status" role="status" aria-live="polite"></span>
         </div>
       </form>
+      <div id="games-loose" class="games-grid games-grid--loose" aria-label="Games without a section"></div>
       <div id="games-sections" class="games-sections"></div>
     </div>
   `;
 
   const sectionsEl = document.getElementById("games-sections") as HTMLElement;
+  const looseEl = document.getElementById("games-loose") as HTMLElement;
+  const pageEl = main.querySelector(".games-page") as HTMLElement;
   const addForm = document.getElementById("add-games") as HTMLFormElement;
   const addBtn = document.getElementById("add-games-btn") as HTMLButtonElement;
   const sectionSelect = document.getElementById("add-games-section") as HTMLSelectElement;
@@ -192,13 +195,21 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
   );
   applyOpenIn();
 
+  // The named sections, in order, with their games; the games without a
+  // section (section "") are kept apart, shown above the sections.
   function layout(): Layout {
     return data.sections.map((name) => ({ name, gameIds: data.games.filter((g) => g.section === name).map((g) => g.id) }));
   }
 
-  async function saveLayout(next: Layout): Promise<void> {
+  function looseIds(): number[] {
+    return data.games.filter((g) => g.section === "").map((g) => g.id);
+  }
+
+  async function saveLayout(next: Layout, loose: number[] = looseIds()): Promise<void> {
     try {
-      const res = await api(`/api/studies/${study.id}/games-layout`, "PUT", { sections: next });
+      const res = await api(`/api/studies/${study.id}/games-layout`, "PUT", {
+        sections: [{ name: "", gameIds: loose }, ...next],
+      });
       data = await res.json();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Could not save the change.");
@@ -209,9 +220,10 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
   function renderSectionOptions(): void {
     const preferred = sectionSelect.value;
     sectionSelect.innerHTML =
+      `<option value="">None</option>` +
       data.sections.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("") +
       `<option value="${NEW_SECTION}">New section…</option>`;
-    sectionSelect.value = data.sections.includes(preferred) ? preferred : data.sections[0] ?? NEW_SECTION;
+    sectionSelect.value = data.sections.includes(preferred) || preferred === NEW_SECTION ? preferred : "";
     newSectionInput.hidden = sectionSelect.value !== NEW_SECTION;
   }
 
@@ -247,7 +259,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
           ${player(top)}
           <div class="games-card__board" data-board="${game.id}"></div>
           ${player(bottom)}
-          <span class="games-card__details">${p ? escapeHtml([known(headers.Event), known(headers.Date)?.slice(0, 4)].filter(Boolean).join(" · ")) || "&nbsp;" : "Unreadable PGN"}</span>
+          <span class="games-card__details">${p ? escapeHtml([known(headers.Event), known(headers.Date?.slice(0, 4))].filter(Boolean).join(" · ")) || "&nbsp;" : "Unreadable PGN"}</span>
         </a>
         <button class="games-card__delete" type="button" data-delete-game="${game.id}" title="Delete this game" aria-label="Delete ${escapeHtml(gameTitle(headers))}">×</button>
       </div>`;
@@ -304,7 +316,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
   // turns the press and release into a click that would open the game:
   // clicks right after a drag are ignored.
   let justDragged = false;
-  sectionsEl.addEventListener(
+  pageEl.addEventListener(
     "click",
     (event) => {
       if (!justDragged) return;
@@ -314,10 +326,12 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     true,
   );
 
+  const idsIn = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>("[data-game-id]")].map((card) => Number(card.dataset.gameId));
+
   function layoutFromDom(): Layout {
     return [...sectionsEl.querySelectorAll<HTMLElement>(".games-section")].map((section) => ({
       name: data.sections[Number(section.dataset.sectionIndex)],
-      gameIds: [...section.querySelectorAll<HTMLElement>("[data-game-id]")].map((card) => Number(card.dataset.gameId)),
+      gameIds: idsIn(section),
     }));
   }
 
@@ -329,8 +343,9 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     sortables.forEach((s) => s.destroy());
     sortables = [];
 
-    if (!data.sections.length) {
-      sectionsEl.innerHTML = `<div class="empty-state profile-empty"><p>No games yet. Add games by pasting their PGN.</p></div>`;
+    looseEl.innerHTML = looseIds().map((id) => cardHtml(data.games.find((g) => g.id === id) as Game)).join("");
+    if (!data.sections.length && !data.games.length) {
+      sectionsEl.innerHTML = `<div class="empty-state profile-empty"><p>No games yet. Add games by pasting their PGN or Lichess links.</p></div>`;
       return;
     }
     sectionsEl.innerHTML =
@@ -362,10 +377,10 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
         }),
       { rootMargin: "200px" },
     );
-    sectionsEl.querySelectorAll<HTMLElement>("[data-board]").forEach((el) => observer!.observe(el));
+    pageEl.querySelectorAll<HTMLElement>("[data-board]").forEach((el) => observer!.observe(el));
 
     const on = (attr: string, handler: (value: string) => void) =>
-      sectionsEl.querySelectorAll<HTMLButtonElement>(`[${attr}]`).forEach((btn) =>
+      pageEl.querySelectorAll<HTMLButtonElement>(`[${attr}]`).forEach((btn) =>
         btn.addEventListener("click", () => handler(btn.getAttribute(attr) as string)),
       );
     on("data-section-rename", (v) => {
@@ -413,16 +428,19 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
       ghostClass: "games-ghost",
       onStart: () => {
         justDragged = true;
+        pageEl.classList.add("games-page--dragging");
       },
       onEnd: () => {
         window.setTimeout(() => (justDragged = false), 50);
+        pageEl.classList.remove("games-page--dragging");
         const next = layoutFromDom();
-        if (JSON.stringify(next) !== JSON.stringify(layout())) void saveLayout(next);
+        const loose = idsIn(looseEl);
+        if (JSON.stringify([loose, next]) !== JSON.stringify([looseIds(), layout()])) void saveLayout(next, loose);
       },
     };
     sortables = [
       Sortable.create(sectionsEl, { ...options, handle: "[data-grip-section]", draggable: ".games-section" }),
-      ...[...sectionsEl.querySelectorAll<HTMLElement>(".games-grid")].map((grid) =>
+      ...[...pageEl.querySelectorAll<HTMLElement>(".games-grid")].map((grid) =>
         Sortable.create(grid, {
           ...options,
           draggable: ".games-card",
@@ -449,13 +467,14 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
         );
       }),
     );
-    sectionsEl.querySelectorAll<HTMLElement>(".games-card").forEach((card) =>
+    pageEl.querySelectorAll<HTMLElement>(".games-card").forEach((card) =>
       card.addEventListener("keydown", (event) => {
         if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
         event.preventDefault();
         const id = Number(card.dataset.gameId);
         const delta = event.key === "ArrowLeft" ? -1 : 1;
-        const next = layout();
+        // The games without a section count as the first group.
+        const next: Layout = [{ name: "", gameIds: looseIds() }, ...layout()];
         const si = next.findIndex((s) => s.gameIds.includes(id));
         const gi = next[si].gameIds.indexOf(id);
         if (gi + delta >= 0 && gi + delta < next[si].gameIds.length) {
@@ -467,7 +486,9 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
         } else {
           return;
         }
-        void saveLayout(next).then(() => sectionsEl.querySelector<HTMLElement>(`[data-game-id="${id}"] a`)?.focus());
+        void saveLayout(next.slice(1), next[0].gameIds).then(() =>
+          pageEl.querySelector<HTMLElement>(`[data-game-id="${id}"] a`)?.focus(),
+        );
       }),
     );
   }
@@ -487,7 +508,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     const textEl = document.getElementById("add-games-pgn") as HTMLTextAreaElement;
     const section = sectionSelect.value === NEW_SECTION ? newSectionInput.value.trim() : sectionSelect.value;
     addStatus.classList.remove("games-status--error");
-    if (!section) {
+    if (sectionSelect.value === NEW_SECTION && !section) {
       addStatus.textContent = "Name the new section.";
       addStatus.classList.add("games-status--error");
       return;
@@ -582,7 +603,10 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
       startNodeId: null,
       explorerSettings: study.explorerSettings,
       title: gameTitle(headers),
-      bylineHtml: [escapeHtml(gameDetails(headers)), `<a class="community-owner" href="${back}">${escapeHtml(game.section)} · ${escapeHtml(study.name)}</a>`]
+      bylineHtml: [
+        escapeHtml(gameDetails(headers)),
+        `<a class="community-owner" href="${back}">${game.section ? `${escapeHtml(game.section)} · ` : ""}${escapeHtml(study.name)}</a>`,
+      ]
         .filter(Boolean)
         .join(" · "),
       intro: "Click a move to jump there. The game is read-only; your comment on it is saved as you type.",
@@ -593,8 +617,8 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
           </label>
           <div class="games-view__actions">
             <label>Section
-              <select id="game-section">${data.sections
-                .map((name) => `<option value="${escapeHtml(name)}" ${name === game.section ? "selected" : ""}>${escapeHtml(name)}</option>`)
+              <select id="game-section">${["", ...data.sections]
+                .map((name) => `<option value="${escapeHtml(name)}" ${name === game.section ? "selected" : ""}>${name ? escapeHtml(name) : "None"}</option>`)
                 .join("")}</select>
             </label>
             <span id="game-comment-status" class="games-status" role="status" aria-live="polite"></span>
@@ -631,7 +655,7 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
 
   document.getElementById("game-section")!.addEventListener("change", async (event) => {
     const target = (event.target as HTMLSelectElement).value;
-    const next: Layout = data.sections.map((name) => ({
+    const next: Layout = ["", ...data.sections].map((name) => ({
       name,
       gameIds: data.games.filter((g) => g.section === name && g.id !== game.id).map((g) => g.id),
     }));
@@ -639,7 +663,7 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
     try {
       await api(`/api/studies/${study.id}/games-layout`, "PUT", { sections: next });
       game.section = target;
-      commentStatus.textContent = `Moved to ${target}`;
+      commentStatus.textContent = target ? `Moved to ${target}` : "Moved out of its section";
     } catch (err) {
       commentStatus.textContent = err instanceof Error ? err.message : "Could not move the game.";
     }

@@ -15,7 +15,7 @@ export const STUDY_FILE_FORMAT = "lirep-study";
 export const STUDY_FILE_VERSION = 1;
 
 export interface FileGame {
-  section: string;
+  section?: string; // missing or "": no section
   pgn: string;
   comment?: string;
 }
@@ -86,7 +86,13 @@ export function studyToFile(study: ExportableStudy): StudyFile {
     explorerSettings,
     moves: first === undefined ? [] : line(first),
     ...(study.games?.length
-      ? { games: study.games.map((g) => ({ section: g.section, pgn: g.pgn, ...(g.comment ? { comment: g.comment } : {}) })) }
+      ? {
+          games: study.games.map((g) => ({
+            ...(g.section ? { section: g.section } : {}),
+            pgn: g.pgn,
+            ...(g.comment ? { comment: g.comment } : {}),
+          })),
+        }
       : {}),
   };
 }
@@ -197,8 +203,8 @@ export function studyFromFile(text: string): ImportedStudy {
       const game = raw as Partial<FileGame>;
       const where = `Game ${i + 1}`;
       if (typeof game !== "object" || game === null || typeof game.pgn !== "string") throw new Error(`${where}: it needs a "pgn".`);
-      if (typeof game.section !== "string" || !game.section.trim() || game.section.trim().length > 60) {
-        throw new Error(`${where}: "section" must be a name of 1 to 60 characters.`);
+      if (game.section !== undefined && (typeof game.section !== "string" || game.section.trim().length > 60)) {
+        throw new Error(`${where}: "section" must be a name of at most 60 characters.`);
       }
       if (game.comment !== undefined && typeof game.comment !== "string") throw new Error(`${where}: a comment must be text.`);
       try {
@@ -206,7 +212,7 @@ export function studyFromFile(text: string): ImportedStudy {
       } catch (err) {
         throw new Error(`${where}: ${err instanceof Error ? err.message : "unreadable PGN"}`);
       }
-      games.push({ section: game.section.trim(), pgn: game.pgn, ...(game.comment ? { comment: game.comment } : {}) });
+      games.push({ section: game.section?.trim() ?? "", pgn: game.pgn, ...(game.comment ? { comment: game.comment } : {}) });
     });
   }
 
