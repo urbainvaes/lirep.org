@@ -7,7 +7,7 @@ import { applyBoardTheme } from "./board";
 import type { ExplorerSettings } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { gameDetails, gameTitle, parseGame, splitPgnGames, type ParsedGame } from "./pgnGames";
-import { createEmptyTree, type StudyTree } from "./tree";
+import { createEmptyTree, lichessAnalysisUrl, type StudyTree } from "./tree";
 import { renderTreeViewer } from "./treeViewer";
 
 // A study's games (games.html?id=…): cards in sections the player names and
@@ -41,6 +41,59 @@ const NEW_SECTION = "__new__";
 const STANDARD_START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 // The replay on hover: a move every PLAYBACK_MS.
 const PLAYBACK_MS = 220;
+
+// Where a card opens its game: Lichess (the default) or Lirep's viewer
+// (remembered in this browser).
+type OpenIn = "lirep" | "lichess";
+const OPEN_IN_STORAGE_KEY = "games-open-in";
+
+function getOpenIn(): OpenIn {
+  try {
+    return localStorage.getItem(OPEN_IN_STORAGE_KEY) === "lirep" ? "lirep" : "lichess";
+  } catch {
+    return "lichess";
+  }
+}
+
+function saveOpenIn(value: OpenIn): void {
+  try {
+    localStorage.setItem(OPEN_IN_STORAGE_KEY, value);
+  } catch {
+    // The choice just isn't remembered.
+  }
+}
+
+// A Lichess game link: lichess.org/<8-character id>, possibly followed by
+// the 4 extra characters of a player's link, /white or /black, or #move.
+const LICHESS_GAME_URL = /^\s*(?:https?:\/\/)?(?:www\.)?lichess\.org\/(?:game\/export\/)?([a-zA-Z0-9]{8})(?:[a-zA-Z0-9]{4})?(?:\/(?:white|black))?\/?(?:[#?]\S*)?\s*$/;
+
+/** A game's PGN from Lichess's public export (no clock times or engine
+ * evaluations, which would show up as comments). */
+async function fetchLichessGame(id: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`https://lichess.org/game/export/${id}?clocks=false&evals=false`, {
+      headers: { Accept: "application/x-chess-pgn" },
+    });
+  } catch {
+    // Lichess's "not found" answer can't be read from another site, so a
+    // missing game looks like a network error here.
+    throw new Error(`Lichess game ${id} couldn't be fetched (no such game, or Lichess unreachable)`);
+  }
+  if (res.status === 404) throw new Error(`Lichess game ${id} not found`);
+  if (!res.ok) throw new Error(`Lichess didn't return game ${id} (${res.status})`);
+  return (await res.text()).trim();
+}
+
+/** Where the game is on Lichess: its own page when it was played there
+ * (from the PGN's Site header), otherwise Lichess's analysis board with the
+ * moves (or the position, for a game from a custom start). */
+function lichessHref(p: ParsedGame, side: "white" | "black"): string {
+  const site = p.headers.Site?.match(/^https:\/\/lichess\.org\/([a-zA-Z0-9]{8})$/);
+  if (site) return `https://lichess.org/${site[1]}${side === "black" ? "/black" : ""}`;
+  if (p.startFen === STANDARD_START) return lichessAnalysisUrl(p.moves.map((m) => m.san), 0);
+  return `https://lichess.org/analysis/standard/${p.startFen.replace(/ /g, "_")}`;
+}
 
 async function api(url: string, method = "GET", body?: unknown): Promise<Response> {
   const res = await fetch(url, {
@@ -92,10 +145,17 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
             <a href="/practice-session.html?id=${study.id}">Practice</a>
           </p>
         </div>
-        <button id="add-games-btn" class="btn btn-primary" type="button" aria-expanded="false" aria-controls="add-games">Add games</button>
+        <div class="games-page__actions">
+          <div class="source-switch" role="group" aria-label="Open games in">
+            <span class="source-switch__label">Open games in</span>
+            <button type="button" data-open-in="lirep" aria-pressed="false">Lirep</button>
+            <button type="button" data-open-in="lichess" aria-pressed="false">Lichess</button>
+          </div>
+          <button id="add-games-btn" class="btn btn-primary" type="button" aria-expanded="false" aria-controls="add-games">Add games</button>
+        </div>
       </div>
       <form id="add-games" class="games-add" hidden>
-        <textarea id="add-games-pgn" rows="8" placeholder="Paste one or more games in PGN" aria-label="Games in PGN" spellcheck="false"></textarea>
+        <textarea id="add-games-pgn" rows="8" placeholder="Paste games in PGN, or Lichess game links (one per line)" aria-label="Games in PGN, or Lichess game links" spellcheck="false"></textarea>
         <div class="games-add__row">
           <label>Section
             <select id="add-games-section"></select>
@@ -115,6 +175,22 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
   const sectionSelect = document.getElementById("add-games-section") as HTMLSelectElement;
   const newSectionInput = document.getElementById("add-games-new-section") as HTMLInputElement;
   const addStatus = document.getElementById("add-games-status") as HTMLElement;
+  let openIn = getOpenIn();
+
+  function applyOpenIn(): void {
+    main.querySelectorAll<HTMLButtonElement>("[data-open-in]").forEach((btn) =>
+      btn.setAttribute("aria-pressed", String(btn.dataset.openIn === openIn)),
+    );
+  }
+  main.querySelectorAll<HTMLButtonElement>("[data-open-in]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      openIn = btn.dataset.openIn as OpenIn;
+      saveOpenIn(openIn);
+      applyOpenIn();
+      render();
+    }),
+  );
+  applyOpenIn();
 
   function layout(): Layout {
     return data.sections.map((name) => ({ name, gameIds: data.games.filter((g) => g.section === name).map((g) => g.id) }));
@@ -145,9 +221,12 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     const p = parsedGame(game);
     const headers = p?.headers ?? {};
     const details = gameDetails(headers);
+    const onLichess = openIn === "lichess" && p !== null;
+    const href = onLichess ? lichessHref(p, study.side) : `/games.html?id=${study.id}&game=${game.id}`;
     return `
-      <a class="games-card" href="/games.html?id=${study.id}&amp;game=${game.id}" data-game-id="${game.id}" draggable="false"
-         title="Open the game (drag to reorder, or Alt+←/→)">
+      <a class="games-card" href="${escapeHtml(href)}" data-game-id="${game.id}" draggable="false"
+         ${onLichess ? 'target="_blank" rel="noopener noreferrer"' : ""}
+         title="Open the game${onLichess ? " on Lichess" : ""} (drag to reorder, or Alt+←/→)">
         <div class="games-card__board" data-board="${game.id}"></div>
         <strong class="games-card__players">${escapeHtml(gameTitle(headers))}</strong>
         <span class="games-card__details">${p ? escapeHtml(details) || "&nbsp;" : "Unreadable PGN"}</span>
@@ -354,9 +433,23 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
       addStatus.classList.add("games-status--error");
       return;
     }
-    const pgns = splitPgnGames(textEl.value);
+    // Lichess links (a line each) are fetched; the rest is read as PGN.
+    const lines = textEl.value.split(/\r?\n/);
+    const ids = lines.map((line) => line.match(LICHESS_GAME_URL)?.[1]).filter((id): id is string => Boolean(id));
+    const pgnText = lines.filter((line) => !LICHESS_GAME_URL.test(line)).join("\n");
     const valid: string[] = [];
     const problems: string[] = [];
+    for (const [i, id] of ids.entries()) {
+      addStatus.textContent = `Fetching game ${i + 1} of ${ids.length} from Lichess…`;
+      try {
+        const pgn = await fetchLichessGame(id);
+        parseGame(pgn);
+        valid.push(pgn);
+      } catch (err) {
+        problems.push(err instanceof Error ? err.message : `Lichess game ${id} unreadable`);
+      }
+    }
+    const pgns = splitPgnGames(pgnText);
     pgns.forEach((pgn, i) => {
       try {
         parseGame(pgn);
@@ -365,8 +458,11 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
         problems.push(`game ${i + 1}: ${err instanceof Error ? err.message : "unreadable"}`);
       }
     });
+    const pastedCount = ids.length + pgns.length;
     if (!valid.length) {
-      addStatus.textContent = pgns.length ? `No game could be read (${problems.join("; ")}).` : "Paste some PGN first.";
+      addStatus.textContent = pastedCount
+        ? `No game could be read (${problems.join("; ")}).`
+        : "Paste some PGN or Lichess game links first.";
       addStatus.classList.add("games-status--error");
       return;
     }

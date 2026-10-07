@@ -4177,6 +4177,20 @@ button.study-head__link:disabled:hover {
   margin-bottom: 16px;
 }
 
+.games-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+/* Gray, so the switch doesn't compete with the Add games button. */
+.games-page__actions .source-switch button[aria-pressed="true"] {
+  background: var(--text-dim);
+  border-color: var(--text-dim);
+  color: var(--panel-bg);
+}
+
 .games-page__header .page-title {
   margin: 0;
 }
