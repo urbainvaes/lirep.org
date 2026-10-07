@@ -220,17 +220,37 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
   function cardHtml(game: Game): string {
     const p = parsedGame(game);
     const headers = p?.headers ?? {};
-    const details = gameDetails(headers);
     const onLichess = openIn === "lichess" && p !== null;
     const href = onLichess ? lichessHref(p, study.side) : `/games.html?id=${study.id}&game=${game.id}`;
+    // One player above the board and one below, on their own side of it,
+    // each with their rating and score when the PGN has them.
+    const known = (v: string | undefined) => (v && !/^\?*$/.test(v) ? v : null);
+    const result = known(headers.Result);
+    const score = (color: "white" | "black") =>
+      result === "1/2-1/2" ? "½" : result === "1-0" ? (color === "white" ? "1" : "0") : result === "0-1" ? (color === "white" ? "0" : "1") : "";
+    const player = (color: "white" | "black") => {
+      const name = known(color === "white" ? headers.White : headers.Black) ?? "?";
+      const elo = known(color === "white" ? headers.WhiteElo : headers.BlackElo);
+      return `<span class="games-card__player">
+          <span class="games-card__name">${escapeHtml(name)}</span>
+          ${elo ? `<span class="games-card__elo">${escapeHtml(elo)}</span>` : ""}
+          <span class="games-card__score">${score(color)}</span>
+        </span>`;
+    };
+    const top = study.side === "white" ? "black" : "white";
+    const bottom = study.side;
     return `
-      <a class="games-card" href="${escapeHtml(href)}" data-game-id="${game.id}" draggable="false"
-         ${onLichess ? 'target="_blank" rel="noopener noreferrer"' : ""}
-         title="Open the game${onLichess ? " on Lichess" : ""} (drag to reorder, or Alt+←/→)">
-        <div class="games-card__board" data-board="${game.id}"></div>
-        <strong class="games-card__players">${escapeHtml(gameTitle(headers))}</strong>
-        <span class="games-card__details">${p ? escapeHtml(details) || "&nbsp;" : "Unreadable PGN"}</span>
-      </a>`;
+      <div class="games-card" data-game-id="${game.id}">
+        <a class="games-card__link" href="${escapeHtml(href)}" draggable="false"
+           ${onLichess ? 'target="_blank" rel="noopener noreferrer"' : ""}
+           title="${escapeHtml(gameTitle(headers))}: open${onLichess ? " on Lichess" : ""} (drag to reorder, or Alt+←/→)">
+          ${player(top)}
+          <div class="games-card__board" data-board="${game.id}"></div>
+          ${player(bottom)}
+          <span class="games-card__details">${p ? escapeHtml([known(headers.Event), known(headers.Date)?.slice(0, 4)].filter(Boolean).join(" · ")) || "&nbsp;" : "Unreadable PGN"}</span>
+        </a>
+        <button class="games-card__delete" type="button" data-delete-game="${game.id}" title="Delete this game" aria-label="Delete ${escapeHtml(gameTitle(headers))}">×</button>
+      </div>`;
   }
 
   // ---- Small boards: created when a card scrolls into view, final position
@@ -347,6 +367,20 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
       void saveLayout(next);
     });
     on("data-section-remove", (v) => void saveLayout(layout().filter((_, i) => i !== Number(v))));
+    on("data-delete-game", async (v) => {
+      const game = data.games.find((g) => g.id === Number(v));
+      if (!game) return;
+      const title = gameTitle(parsedGame(game)?.headers ?? {});
+      if (!window.confirm(`Delete ${title}? This cannot be undone.`)) return;
+      try {
+        await api(`/api/studies/${study.id}/games/${game.id}`, "DELETE");
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : "Could not delete the game.");
+        return;
+      }
+      data = { ...data, games: data.games.filter((g) => g.id !== game.id) };
+      render();
+    });
     document.getElementById("new-section-btn")?.addEventListener("click", () => {
       const name = window.prompt("Name of the new section")?.trim();
       if (!name) return;
@@ -372,7 +406,15 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     sortables = [
       Sortable.create(sectionsEl, { ...options, handle: "[data-grip-section]", draggable: ".games-section" }),
       ...[...sectionsEl.querySelectorAll<HTMLElement>(".games-grid")].map((grid) =>
-        Sortable.create(grid, { ...options, draggable: ".games-card", group: "games", emptyInsertThreshold: 40 }),
+        Sortable.create(grid, {
+          ...options,
+          draggable: ".games-card",
+          group: "games",
+          emptyInsertThreshold: 40,
+          // The delete button stays a button, not a drag handle.
+          filter: ".games-card__delete",
+          preventOnFilter: false,
+        }),
       ),
     ];
 
@@ -408,7 +450,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
         } else {
           return;
         }
-        void saveLayout(next).then(() => sectionsEl.querySelector<HTMLElement>(`[data-game-id="${id}"]`)?.focus());
+        void saveLayout(next).then(() => sectionsEl.querySelector<HTMLElement>(`[data-game-id="${id}"] a`)?.focus());
       }),
     );
   }

@@ -4352,49 +4352,101 @@ button.study-head__link:disabled:hover {
    keeps some height, so a card can be dropped in. */
 .games-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 14px;
   min-height: 12px;
 }
 
 .games-card {
-  display: grid;
-  gap: 4px;
-  padding: 10px;
+  position: relative;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  color: var(--text);
-  text-decoration: none;
-  cursor: pointer;
 }
 
 .games-card:hover,
-.games-card:focus-visible {
+.games-card:focus-within {
   border-color: var(--primary);
+}
+
+.games-card__link {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px 10px;
+  color: var(--text);
+  text-decoration: none;
 }
 
 .games-card__board {
   width: 100%;
   aspect-ratio: 1 / 1;
-  margin-bottom: 4px;
   pointer-events: none;
 }
 
-.games-card__players {
+/* A player's line: name (cut with … if it doesn't fit), rating, score. */
+.games-card__player {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+.games-card__name {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 0.92rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.games-card__elo {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.games-card__score {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-strong);
+  font-weight: 700;
 }
 
 .games-card__details {
   overflow: hidden;
   color: var(--text-dim);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Delete: in the corner, shown on hover (or when the card has focus). */
+.games-card__delete {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.games-card:hover .games-card__delete,
+.games-card:focus-within .games-card__delete {
+  opacity: 1;
+}
+
+.games-card__delete:hover {
+  border-color: var(--bad);
+  color: var(--bad);
 }
 
 /* The game view: the player's comment, under the moves. */
