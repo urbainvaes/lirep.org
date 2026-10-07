@@ -6,17 +6,25 @@
 # Set LIREP_LISTEN=0.0.0.0:8080 to accept connections from other machines.
 #
 # Usage: deploy/run-local.sh [state-dir]
-# Set LIREP_STATE_DIR or pass a state directory as the first argument.
+# Set LIREP_STATE_DIR, LIREP_DEPLOY_STATE_DIR, or pass a state directory.
 # Configuration is read from backend/.env if present (see .env.example);
 # set FRONTEND_URL / REDIRECT_URI to http://127.0.0.1:8080 and
 # /auth/callback on that origin.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
-state=${1:-${LIREP_STATE_DIR:-}}
+config="$root/deploy/deploy.env"
+if [ -r "$config" ]; then
+  . "$config"
+fi
+state=${1:-${LIREP_STATE_DIR:-${LIREP_DEPLOY_STATE_DIR:-}}}
 if [ -z "$state" ]; then
   echo "Set LIREP_STATE_DIR or pass a state directory as the first argument." >&2
   exit 2
 fi
+case "$state" in
+  /*) ;;
+  *) state="$HOME/$state" ;;
+esac
 mkdir -p "$state/logs" "$state/tmp"
 
 backend=$(guix build -L "$root/deploy/guix" lirep-backend)

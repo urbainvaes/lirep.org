@@ -4,7 +4,7 @@
 #   2. build the Guix packages there, so the restart is quick
 #   3. restart the app (and start the Explorer if it is not running) in tmux
 #
-# Set LIREP_DEPLOY_HOST, LIREP_DEPLOY_DIR and LIREP_DEPLOY_STATE_DIR before use.
+# Loads tracked deploy/deploy.env defaults; environment variables can override them.
 # Usage: deploy/deploy.sh [-n] [--no-restart] [--no-explorer]
 #   -n             show what would be copied, change nothing
 #   --no-restart   copy and build, but leave the running app alone
@@ -12,9 +12,14 @@
 #                  while its database is being replaced)
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
+config="$root/deploy/deploy.env"
+if [ -r "$config" ]; then
+  . "$config"
+fi
 host=${LIREP_DEPLOY_HOST:-}
 remote_dir=${LIREP_DEPLOY_DIR:-}
-state_dir=${LIREP_DEPLOY_STATE_DIR:-}
+state_dir=${LIREP_DEPLOY_STATE_DIR:-${LIREP_STATE_DIR:-}}
+host_override=no
 dry=""
 restart=yes
 explorer=yes
@@ -23,7 +28,16 @@ for arg in "$@"; do
     -n) dry="-n" ;;
     --no-restart) restart=no ;;
     --no-explorer) explorer=no ;;
-    *) echo "Unknown option: $arg" >&2; exit 2 ;;
+    --) host_override=yes ;;
+    *)
+      if [ "$host_override" = no ]; then
+        host=$arg
+        host_override=yes
+      else
+        echo "Unexpected argument: $arg" >&2
+        exit 2
+      fi
+      ;;
   esac
 done
 
@@ -61,6 +75,10 @@ ssh "$host" sh -s -- "$explorer" "$remote_dir" "$state_dir" <<'REMOTE'
   explorer=$1
   app_dir=$2
   state_dir=$3
+  case "$state_dir" in
+    /*) ;;
+    *) state_dir="$HOME/$state_dir" ;;
+  esac
   cd "$app_dir/deploy"
 
   # Stop the old app, then wait until it has really let go of its port (a

@@ -164,12 +164,13 @@ browser. More detail is in [explorer-cache.md](explorer-cache.md).
 
 The current deployment setup packages the backend and built frontend with
 Guix and serves them through nginx. To run that stack locally, use
-`deploy/run-local.sh` (default HTTP port `8080`; provide a state directory via
-`LIREP_STATE_DIR` or its first argument). See
+`deploy/run-local.sh` (default HTTP port `8080`; it reads the tracked
+`deploy/deploy.env` defaults or accepts a state directory argument). See
 [`deploy/manifest.scm`](deploy/manifest.scm) and
 [`deploy/guix/lirep/packages.scm`](deploy/guix/lirep/packages.scm) for the
 package definitions. `deploy/deploy.sh` reads the remote host and directories
-from runtime configuration rather than storing machine-specific values here.
+from the tracked `deploy/deploy.env` defaults (or environment variables); it
+syncs that file so the remote runner can read its state-directory setting too.
 The older virtualenv-based approach under `deploy/backup-venv-approach/` is
 retained for reference and is superseded by the Guix setup.
 
