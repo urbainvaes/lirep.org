@@ -300,6 +300,19 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
   }
 
   let sortables: Sortable[] = [];
+  // After a drop the card is usually under the pointer, and the browser
+  // turns the press and release into a click that would open the game:
+  // clicks right after a drag are ignored.
+  let justDragged = false;
+  sectionsEl.addEventListener(
+    "click",
+    (event) => {
+      if (!justDragged) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true,
+  );
 
   function layoutFromDom(): Layout {
     return [...sectionsEl.querySelectorAll<HTMLElement>(".games-section")].map((section) => ({
@@ -398,7 +411,11 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
       forceFallback: true,
       fallbackTolerance: 5,
       ghostClass: "games-ghost",
+      onStart: () => {
+        justDragged = true;
+      },
       onEnd: () => {
+        window.setTimeout(() => (justDragged = false), 50);
         const next = layoutFromDom();
         if (JSON.stringify(next) !== JSON.stringify(layout())) void saveLayout(next);
       },
