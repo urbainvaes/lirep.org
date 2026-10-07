@@ -649,7 +649,6 @@ function renderPage(
 
   const evalHtml = stats?.evalCp !== undefined
     ? `<div class="stat-detail__score">${formatEval(stats.evalCp)}</div>
-       <p class="stat-outcomes">In pawns, from ${sideName}'s point of view.</p>
        <p class="stat-card__meta">Calculated with ${stats.evalSettings ? `${explorerSummary(stats.evalSettings)} · ` : ""}${
          stats.evalDepth ? `Stockfish depth ${stats.evalDepth} · ` : ""
        }${formatDate(stats.evalCalculatedAt ?? "")}${
@@ -778,7 +777,7 @@ function renderPage(
           <h2>Expected evaluation</h2>
           <button id="eval-btn" class="btn btn-secondary btn-small" type="button" ${disabled}>Recalculate</button>
         </div>
-        <p class="stat-result__what">Stockfish's evaluation where your preparation ends, averaged over the opponent's replies as weighted by the Explorer.</p>
+        <p class="stat-result__what">Stockfish's evaluation where your preparation ends, averaged over the opponent's replies as weighted by the Explorer. It is measured in pawns, from ${sideName}'s point of view.</p>
         ${evalHtml}
         <div id="eval-stale"></div>
         <p class="stat-rank" id="eval-rank"></p>
