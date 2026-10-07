@@ -1,9 +1,27 @@
 import type { Api } from "@lichess-org/chessground/api";
-import type { Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
-import { applyBoardTheme, createBoard, toColor } from "./board";
-import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
 import {
+  boardColumnHtml,
+  describeStartPoint,
+  engineMovesView,
+  ENGINE_DEPTH_MAX,
+  ENGINE_DEPTH_MIN,
+  ENGINE_DEPTH_STEP,
+  getSavedEngineDepth,
+  getSavedTools,
+  missingPopularMoves,
+  moveShares,
+  QUALITY_BRUSHES,
+  saveEngineDepth,
+  saveTools,
+  sanToUci,
+  toolTabsHtml,
+  type Tool,
+} from "./analysisTools";
+import { applyBoardTheme, createBoard, toColor } from "./board";
+import { Engine, whiteGaugeShare, type EngineAnalysis } from "./engine";
+import {
+  explorerSummary,
   renderExplorer,
   renderExplorerError,
   renderExplorerLoading,
@@ -11,12 +29,14 @@ import {
 } from "./explorer";
 import { errorMessage, fetchExplorerData } from "./explorerClient";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
+import { materialBalance, materialHtml } from "./material";
 import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
 // A read-only viewer for a shared opening: browse its lines, nothing else.
-// Moves on the board are not accepted (no free play); the Explorer and
-// Stockfish are off until the visitor switches them on, and those switches are
-// local to this page. See /api/community/studies/{id}.
+// It is laid out like the study editor, with the same board column and tools
+// (whose on/off switches and Stockfish depth it shares with the editor), but
+// moves on the board are not accepted (no free play) and the Explorer uses
+// the author's settings. See /api/community/studies/{id}.
 
 interface SharedOpening {
   id: number;
@@ -30,78 +50,98 @@ interface SharedOpening {
   explorerSettings: ExplorerSettings;
 }
 
-// Legend dot colors matching the RANK_BRUSHES arrows (best green -> worst red).
-const RANK_LEGEND_COLORS = ["#15781B", "#6fae54", "#e68f00", "#b56a5a", "#882020"];
-
-function uciToSan(chess: Chess, uci: string): string {
-  const clone = new Chess(chess.fen());
-  const move = clone.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
-  return move ? move.san : uci;
-}
-
 function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): void {
   const { tree, side } = opening;
   const startNodeId = opening.startNodeId !== null && opening.startNodeId in tree.nodes ? opening.startNodeId : null;
+  const startPoint = describeStartPoint(tree, startNodeId);
+  const sideLabel = side === "white" ? "Playing White" : "Playing Black";
+  const byline =
+    opening.owner === null
+      ? `by an anonymous player`
+      : `by <a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">${escapeHtml(opening.owner)}</a>`;
 
+  main.classList.add("site-main--board");
   main.innerHTML = `
-    <p class="doc-intro">${opening.owner === null
-      ? `<a class="community-owner" href="/community.html">← Community</a> · by an anonymous player`
-      : `<a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">← ${escapeHtml(opening.owner)}</a>`}</p>
-    <div class="study-editor">
-      <div class="study-name-row">
-        <h1 class="opening-title">${escapeHtml(opening.name)}</h1>
-        <span class="study-color-badge">${side === "white" ? "Playing White" : "Playing Black"}</span>
-        <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board" aria-label="Flip board"></button>
-      </div>
+    <div class="study-editor study-editor--edit">
+      <header class="study-head">
+        <div class="study-head__title">
+          <span class="side-pawn side-pawn--${side} study-head__side" title="${sideLabel}" aria-label="${sideLabel}">${side === "white" ? "♙" : "♟"}</span>
+          <h1 class="study-title opening-title">${escapeHtml(opening.name)}</h1>
+          ${startPoint ? `<button id="study-start-badge" class="study-start-badge" type="button" title="Go to the starting point">${escapeHtml(startPoint)}</button>` : ""}
+          <span class="study-save-status">${byline}</span>
+        </div>
+        <div class="study-head__links" id="opening-footer"></div>
+      </header>
+
       <div class="study-grid">
-        <div class="study-card study-card--board">
-          <div id="board" class="study-board"></div>
-        </div>
+        ${boardColumnHtml()}
 
-        <div class="study-card study-card--moves">
-          <div id="tree-view" class="tree-view"></div>
-          <p id="opening-comment" class="opening-comment" hidden></p>
-          <div class="study-actions">
-            <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
-            <button id="start-btn" class="btn btn-secondary" type="button">Go to start</button>
-          </div>
-        </div>
+        <div class="study-side-col">
+          <div class="study-side-col__inner">
+            <div class="study-card study-card--moves">
+              <div class="study-actions">
+                <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
+                <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
+              </div>
+              <div id="keyboard-help" class="study-keyboard-help" role="region" aria-label="Keyboard shortcuts" tabindex="-1" hidden>
+                <p class="study-keyboard-help__title">Keyboard shortcuts</p>
+                <p class="study-keyboard-help__intro">Click a move to jump there. This opening is read-only: import it to change it.</p>
+                <ul>
+                  <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
+                  <li><kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
+                  <li><kbd>F</kbd> Flip the board</li>
+                  <li><kbd>?</kbd> Show / hide these shortcuts</li>
+                </ul>
+              </div>
+              <div id="tree-view" class="tree-view"></div>
+              <p id="opening-comment" class="opening-comment" hidden></p>
+            </div>
 
-        <div class="study-card study-card--explorer">
-          <div class="analysis-header">
-            <label class="explorer-toggle">
-              <input type="checkbox" id="explorer-enabled" aria-label="Opening Explorer" />
-              <span class="analysis-label" data-icon="" aria-hidden="true">Opening Explorer</span>
-            </label>
-          </div>
-          <div id="explorer-panel" class="explorer-panel" hidden></div>
-        </div>
+            <div class="study-card study-card--tools">
+              <div id="tool-explorer" class="tool-panel tool-panel--explorer">
+                <div class="explorer-settings-line">
+                  <span title="The author's Explorer settings">${escapeHtml(explorerSummary(opening.explorerSettings))}</span>
+                </div>
+                <div id="explorer-panel" class="explorer-panel"></div>
+              </div>
 
-        <div class="study-card study-card--engine">
-          <div class="analysis-header">
-            <label class="explorer-toggle">
-              <input type="checkbox" id="engine-enabled" aria-label="Stockfish" />
-              <span class="analysis-label" data-icon="" aria-hidden="true">Stockfish</span>
-            </label>
-            <span id="engine-status" class="engine-eval"></span>
+              ${toolTabsHtml()}
+            </div>
           </div>
-          <div id="engine-panel" class="engine-panel" hidden></div>
         </div>
       </div>
-      <div class="opening-footer" id="opening-footer"></div>
     </div>
   `;
 
   const boardEl = document.getElementById("board") as HTMLElement;
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
   const commentEl = document.getElementById("opening-comment") as HTMLElement;
-  const explorerEnabledEl = document.getElementById("explorer-enabled") as HTMLInputElement;
   const explorerPanelEl = document.getElementById("explorer-panel") as HTMLElement;
-  const engineEnabledEl = document.getElementById("engine-enabled") as HTMLInputElement;
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
+  const engineDepthEl = document.getElementById("engine-depth") as HTMLElement;
+  const depthDownBtn = document.getElementById("depth-down") as HTMLButtonElement;
+  const depthUpBtn = document.getElementById("depth-up") as HTMLButtonElement;
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
   const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
+  const keyboardHelpButton = document.getElementById("keyboard-help-btn") as HTMLButtonElement;
+  const keyboardHelpPanel = document.getElementById("keyboard-help") as HTMLElement;
+  const gaugeEl = document.getElementById("eval-gauge") as HTMLElement;
+  const gaugeBlackEl = document.getElementById("eval-gauge-black") as HTMLElement;
+  const materialTopEl = document.getElementById("material-top") as HTMLElement;
+  const materialBottomEl = document.getElementById("material-bottom") as HTMLElement;
+  const navStartBtn = document.getElementById("nav-start") as HTMLButtonElement;
+  const navBackBtn = document.getElementById("nav-back") as HTMLButtonElement;
+  const navForwardBtn = document.getElementById("nav-forward") as HTMLButtonElement;
+  const navEndBtn = document.getElementById("nav-end") as HTMLButtonElement;
+  const tabButtons = {
+    explorer: document.getElementById("tab-explorer") as HTMLButtonElement,
+    engine: document.getElementById("tab-engine") as HTMLButtonElement,
+  };
+  const tabPanels = {
+    explorer: document.getElementById("tool-explorer") as HTMLElement,
+    engine: document.getElementById("tool-engine") as HTMLElement,
+  };
 
   let currentId = tree.rootId;
   let board: Api;
@@ -109,6 +149,8 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
   let explorerRequestId = 0;
   let engine: Engine | null = null;
   let engineAnalysisId = 0;
+  let engineDepth = getSavedEngineDepth();
+  const shownTools: Set<Tool> = getSavedTools();
   // Which child was last followed from each node, so the arrow keys continue
   // along the variation being viewed, as in the editor.
   const lastChild: Record<number, number> = {};
@@ -119,12 +161,12 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
     if (childId !== undefined) goTo(childId);
   }
 
+  function explorerData(fen: string) {
+    return fetchExplorerData(fen, opening.explorerSettings, side, { priority: "interactive" });
+  }
+
   async function updateExplorer(fen: string): Promise<void> {
-    if (!explorerEnabledEl.checked) {
-      explorerPanelEl.hidden = true;
-      return;
-    }
-    explorerPanelEl.hidden = false;
+    if (!shownTools.has("explorer")) return;
     if (!signedIn) {
       explorerPanelEl.innerHTML = `<p class="explorer-empty"><a href="/auth/login">Sign in</a> to use the Opening Explorer.</p>`;
       return;
@@ -132,59 +174,101 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
     const requestId = ++explorerRequestId;
     renderExplorerLoading(explorerPanelEl);
     try {
-      const data = await fetchExplorerData(fen, opening.explorerSettings, side, { priority: "interactive" });
+      const data = await explorerData(fen);
       if (requestId !== explorerRequestId) return;
-      renderExplorer(explorerPanelEl, data, followSan);
+      const chess = positionAt(tree, currentId);
+      renderExplorer(explorerPanelEl, data, followSan, {
+        inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
+        yourTurn: (chess.turn() === "w") === (side === "white"),
+      });
     } catch (err) {
       if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl, errorMessage(err));
     }
   }
 
+  // Lichess's evaluation gauge, beside the board while Stockfish is on:
+  // White's share fills from White's side of the board, so it flips with it.
+  function setGauge(whiteShare: number): void {
+    gaugeBlackEl.style.height = `${(1 - whiteShare) * 100}%`;
+    gaugeEl.setAttribute("aria-label", `Evaluation: White ${Math.round(whiteShare * 100)}%`);
+  }
+
+  function renderMaterial(): void {
+    const balance = materialBalance(positionAt(tree, currentId));
+    const bottom = boardOrientation === "white" ? "w" : "b";
+    const top = bottom === "w" ? "b" : "w";
+    materialTopEl.innerHTML = materialHtml(balance[top]);
+    materialBottomEl.innerHTML = materialHtml(balance[bottom]);
+  }
+
+  function syncOrientation(): void {
+    gaugeEl.classList.toggle("eval-gauge--flipped", boardOrientation === "black");
+    renderMaterial();
+  }
+
+  // Stockfish's top lines for the last position analysed, reused when only
+  // the Explorer is turned on or off.
+  let topLines: { fen: string; depth: number; analysis: EngineAnalysis } | null = null;
+
   async function updateEngine(chess: Chess): Promise<void> {
     const analysisId = ++engineAnalysisId;
-    if (!engineEnabledEl.checked) return;
+    if (!shownTools.has("engine")) return;
+    const stale = () => analysisId !== engineAnalysisId || !shownTools.has("engine");
 
     if (chess.isGameOver()) {
       board.set({ drawable: { autoShapes: [] } });
+      setGauge(chess.isCheckmate() ? (chess.turn() === "w" ? 0 : 1) : 0.5);
       engineStatusEl.textContent = "Game over";
-      enginePanelEl.hidden = true;
+      enginePanelEl.innerHTML = "";
       return;
     }
 
     if (!engine) engine = new Engine();
-    engineStatusEl.textContent = "Thinking…";
-    const analysis: EngineAnalysis = await engine.analyze(chess.fen());
-    if (analysisId !== engineAnalysisId || !engineEnabledEl.checked) return;
-    const sideToMoveIsWhite = chess.turn() === "w";
+    const fen = chess.fen();
+    const explorerRequest =
+      shownTools.has("explorer") && signedIn ? explorerData(fen).catch(() => null) : Promise.resolve(null);
 
-    board.set({
-      drawable: {
-        autoShapes: analysis.lines.map((line, i) => {
-          const { orig, dest } = uciMoveToKeys(line.move);
-          return { orig: orig as Key, dest: dest as Key, brush: RANK_BRUSHES[i] ?? "red" };
-        }),
-      },
-    });
+    const depth = engineDepth;
+    let analysis = topLines?.fen === fen && topLines.depth === depth ? topLines.analysis : null;
+    if (!analysis) {
+      engineStatusEl.textContent = `depth ${depth}…`;
+      analysis = await engine.analyze(fen, depth);
+      if (stale()) return;
+      topLines = { fen, depth, analysis };
+    }
+    setGauge(whiteGaugeShare(analysis.lines[0], chess.turn() === "w"));
 
-    engineStatusEl.textContent = `depth ${analysis.depth}`;
-    enginePanelEl.hidden = analysis.lines.length === 0;
-    enginePanelEl.innerHTML = analysis.lines
-      .map((line, i) => {
-        const san = uciToSan(chess, line.move);
-        const score = formatScore(line, sideToMoveIsWhite);
-        const color = RANK_LEGEND_COLORS[i] ?? "#888";
-        return `
-          <button class="engine-line" type="button" data-san="${escapeHtml(san)}">
-            <span class="engine-line__dot" style="background:${color}"></span>
-            <span class="engine-line__san">${escapeHtml(san)}</span>
-            <span class="engine-line__score">${escapeHtml(score)}</span>
-          </button>
-        `;
-      })
-      .join("");
+    const explorer = await explorerRequest;
+    if (stale()) return;
+    const shares = moveShares(chess, explorer);
+    const lines = [...analysis.lines];
+    const extra = missingPopularMoves(lines, shares);
+    if (extra.length) {
+      engineStatusEl.textContent = `depth ${depth}…`;
+      engineStatusEl.title = "Evaluating popular Explorer moves";
+      const more = await engine.analyze(fen, depth, extra);
+      if (stale()) return;
+      lines.push(...more.lines.filter((l) => !lines.some((known) => known.move === l.move)));
+    }
 
-    enginePanelEl.querySelectorAll<HTMLButtonElement>("[data-san]").forEach((btn) => {
-      btn.addEventListener("click", () => followSan(btn.dataset.san as string));
+    const { shapes, chipsHtml } = engineMovesView(chess, lines, shares, "Evaluation of");
+    board.set({ drawable: { autoShapes: shapes } });
+    engineStatusEl.textContent = `depth ${depth}`;
+    engineStatusEl.title = "Stockfish's search depth, in this browser";
+    enginePanelEl.innerHTML = chipsHtml;
+
+    // Only the opening's own moves can be followed from a chip.
+    const inTree = new Set(tree.nodes[currentId].children.map((id) => sanToUci(chess, tree.nodes[id].san as string)));
+    enginePanelEl.querySelectorAll<HTMLButtonElement>("[data-move]").forEach((btn) => {
+      const uci = btn.dataset.move as string;
+      if (!inTree.has(uci)) {
+        btn.disabled = true;
+        return;
+      }
+      btn.addEventListener("click", () => {
+        const childId = tree.nodes[currentId].children.find((id) => sanToUci(chess, tree.nodes[id].san as string) === uci);
+        if (childId !== undefined) goTo(childId);
+      });
     });
   }
 
@@ -232,7 +316,10 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
       // Read-only: nothing on the board can be moved.
       movable: { color: undefined, dests: new Map() },
     });
+    renderMaterial();
     renderTreeView();
+    navBackBtn.disabled = navStartBtn.disabled = currentId === tree.rootId;
+    navForwardBtn.disabled = navEndBtn.disabled = tree.nodes[currentId].children.length === 0;
     void updateExplorer(chess.fen());
     void updateEngine(chess);
   }
@@ -264,33 +351,121 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
   function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     board.set({ orientation: boardOrientation });
+    syncOrientation();
     flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   }
 
-  board = createBoard(boardEl, () => {}, boardOrientation);
-  flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
-  goToStart();
+  function applyToolsUI(): void {
+    for (const name of ["explorer", "engine"] as const) {
+      tabButtons[name].setAttribute("aria-pressed", String(shownTools.has(name)));
+      tabPanels[name].hidden = !shownTools.has(name);
+    }
+    gaugeEl.hidden = !shownTools.has("engine");
+    engineDepthEl.hidden = !shownTools.has("engine");
+    const toolsCard = document.querySelector(".study-card--tools");
+    toolsCard?.classList.toggle("study-card--tools-both", shownTools.size === 2);
+    toolsCard?.classList.toggle("study-card--tools-explorer", shownTools.has("explorer"));
+    toolsCard?.classList.toggle("study-card--tools-none", shownTools.size === 0);
+  }
 
-  flipBoardBtn.addEventListener("click", flipBoard);
-  document.getElementById("start-btn")?.addEventListener("click", goToStart);
-  explorerEnabledEl.addEventListener("change", () => void updateExplorer(positionAt(tree, currentId).fen()));
-  engineEnabledEl.addEventListener("change", () => {
+  function toggleTool(tool: Tool): void {
+    if (shownTools.has(tool)) shownTools.delete(tool);
+    else shownTools.add(tool);
+    saveTools(shownTools);
+    applyToolsUI();
     const chess = positionAt(tree, currentId);
-    if (engineEnabledEl.checked) {
-      void updateEngine(chess);
-    } else {
+    if (tool === "engine" && !shownTools.has("engine")) {
+      // Stockfish stops when turned off: it is the expensive one.
       engineAnalysisId++;
       board.set({ drawable: { autoShapes: [] } });
       engineStatusEl.textContent = "";
-      enginePanelEl.hidden = true;
+      enginePanelEl.innerHTML = "";
+      setGauge(0.5);
+      engine?.terminate();
+      engine = null;
+      return;
+    }
+    if (tool === "explorer" && !shownTools.has("explorer")) {
+      explorerRequestId++; // drop a response still on its way
+      explorerPanelEl.innerHTML = "";
+    }
+    void updateExplorer(chess.fen());
+    // Stockfish's arrow widths follow the Explorer's frequencies.
+    void updateEngine(chess);
+  }
+
+  function setEngineDepth(depth: number): void {
+    engineDepth = Math.min(ENGINE_DEPTH_MAX, Math.max(ENGINE_DEPTH_MIN, depth));
+    depthDownBtn.disabled = engineDepth <= ENGINE_DEPTH_MIN;
+    depthUpBtn.disabled = engineDepth >= ENGINE_DEPTH_MAX;
+    depthDownBtn.title = `Depth ${Math.max(ENGINE_DEPTH_MIN, engineDepth - ENGINE_DEPTH_STEP)}`;
+    depthUpBtn.title = `Depth ${Math.min(ENGINE_DEPTH_MAX, engineDepth + ENGINE_DEPTH_STEP)}`;
+    saveEngineDepth(engineDepth);
+  }
+
+  function closeKeyboardHelp(restoreFocus = false): void {
+    keyboardHelpPanel.hidden = true;
+    keyboardHelpButton.setAttribute("aria-expanded", "false");
+    keyboardHelpButton.setAttribute("aria-label", "Show keyboard shortcuts");
+    if (restoreFocus) keyboardHelpButton.focus();
+  }
+
+  function toggleKeyboardHelp(): void {
+    if (!keyboardHelpPanel.hidden) {
+      closeKeyboardHelp(true);
+      return;
+    }
+    keyboardHelpPanel.hidden = false;
+    keyboardHelpButton.setAttribute("aria-expanded", "true");
+    keyboardHelpButton.setAttribute("aria-label", "Hide keyboard shortcuts");
+    keyboardHelpPanel.focus();
+  }
+
+  board = createBoard(boardEl, () => {}, boardOrientation);
+  board.set({ drawable: { brushes: { ...board.state.drawable.brushes, ...QUALITY_BRUSHES } } });
+  flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
+  setEngineDepth(engineDepth);
+  syncOrientation();
+  applyToolsUI();
+  goToStart();
+
+  flipBoardBtn.addEventListener("click", flipBoard);
+  navStartBtn.addEventListener("click", goToStart);
+  navBackBtn.addEventListener("click", stepBack);
+  navForwardBtn.addEventListener("click", stepForward);
+  navEndBtn.addEventListener("click", goToLineEnd);
+  document.getElementById("study-start-badge")?.addEventListener("click", goToStart);
+  tabButtons.explorer.addEventListener("click", () => toggleTool("explorer"));
+  tabButtons.engine.addEventListener("click", () => toggleTool("engine"));
+  depthDownBtn.addEventListener("click", () => {
+    setEngineDepth(engineDepth - ENGINE_DEPTH_STEP);
+    void updateEngine(positionAt(tree, currentId));
+  });
+  depthUpBtn.addEventListener("click", () => {
+    setEngineDepth(engineDepth + ENGINE_DEPTH_STEP);
+    void updateEngine(positionAt(tree, currentId));
+  });
+  keyboardHelpButton.addEventListener("click", toggleKeyboardHelp);
+  document.addEventListener("click", (event) => {
+    if (
+      !keyboardHelpPanel.hidden &&
+      event.target instanceof Node &&
+      !keyboardHelpPanel.contains(event.target) &&
+      event.target !== keyboardHelpButton
+    ) {
+      closeKeyboardHelp();
     }
   });
 
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "Escape" && !keyboardHelpPanel.hidden) {
+      e.preventDefault();
+      closeKeyboardHelp(true);
+      return;
+    }
     const target = e.target as HTMLElement;
-    const fromEngineToggle = target === engineEnabledEl && e.key.startsWith("Arrow");
-    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) && !fromEngineToggle) return;
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
     switch (e.key) {
       case "ArrowLeft":
         e.preventDefault();
@@ -313,19 +488,23 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
         e.preventDefault();
         flipBoard();
         break;
+      case "?":
+        e.preventDefault();
+        toggleKeyboardHelp();
+        break;
     }
   });
 
-  // Import (a private copy in your own studies), at the bottom of the page.
+  // Import (a private copy in your own studies), where the editor has its links.
   const footer = document.getElementById("opening-footer") as HTMLElement;
   if (opening.mine) {
-    footer.innerHTML = `<a class="btn btn-secondary" href="/study.html?id=${opening.id}">Edit this opening</a>`;
+    footer.innerHTML = `<a class="study-head__link" href="/study.html?id=${opening.id}">Edit this opening</a>`;
   } else if (!signedIn) {
-    footer.innerHTML = `<a class="btn btn-secondary" href="/auth/login">Sign in to import</a>`;
+    footer.innerHTML = `<a class="study-head__link" href="/auth/login">Sign in to import</a>`;
   } else {
     footer.innerHTML = `
-      <button id="import-btn" class="btn btn-primary" type="button">Import to my studies</button>
-      <span id="import-message" class="opening-import-message" role="status" aria-live="polite"></span>`;
+      <span id="import-message" class="opening-import-message" role="status" aria-live="polite"></span>
+      <button id="import-btn" class="study-head__link" type="button">Import to my studies</button>`;
     const importBtn = document.getElementById("import-btn") as HTMLButtonElement;
     const message = document.getElementById("import-message") as HTMLElement;
     importBtn.addEventListener("click", async () => {

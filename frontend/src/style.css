@@ -1478,9 +1478,25 @@ body {
   text-decoration: none;
 }
 
+button.study-head__link {
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.study-head__link:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .study-head__link:hover {
   background: var(--primary);
   color: #fff;
+}
+
+button.study-head__link:disabled:hover {
+  background: none;
+  color: var(--primary);
 }
 
 .study-menu > summary.btn {
@@ -1745,6 +1761,16 @@ body {
 
 .engine-chip:hover {
   border-color: var(--primary);
+}
+
+/* In the read-only viewer, only the opening's own moves can be followed. */
+.engine-chip:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.engine-chip:disabled:hover {
+  border-color: var(--border);
 }
 
 .engine-chip__dot {
@@ -3336,11 +3362,9 @@ body {
   padding-top: 24px;
 }
 
-/* Read-only opening viewer (opening.html) */
+/* Read-only opening viewer (opening.html), laid out like the editor */
 .opening-title {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: 1.5rem;
+  cursor: default;
 }
 
 .opening-link {
@@ -3360,13 +3384,6 @@ body {
   background: var(--card-nested-bg);
   border-radius: 0 4px 4px 0;
   white-space: pre-wrap;
-}
-
-.opening-footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
 }
 
 .opening-import-message {
