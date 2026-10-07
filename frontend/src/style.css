@@ -2594,6 +2594,16 @@ button.study-head__link:disabled:hover {
   color: var(--text-strong);
 }
 
+.doc-code {
+  overflow-x: auto;
+  padding: 12px 14px;
+  background: var(--card-nested-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .doc-callout,
 .doc-main .callout {
   padding: 12px 14px;
@@ -4114,4 +4124,26 @@ button.study-head__link:disabled:hover {
   .top-players {
     grid-template-columns: 1fr;
   }
+}
+
+/* Home: importing a study file, under the studies. */
+.study-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 24px;
+}
+
+.study-import__btn {
+  cursor: pointer;
+}
+
+.study-import__status {
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.study-import__status--error {
+  color: var(--bad);
 }

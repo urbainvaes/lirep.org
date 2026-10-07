@@ -62,6 +62,7 @@
           <li>The home page lists the current account's studies, one card per study, grouped by side and followed by a New study card. Each card has Edit, Practice and Stats buttons, which open the study page, a practice session and the study's Stats page, and a delete bin.</li>
           <li>Each card shows the study name, up to the first six SAN moves of its main line, and the main-line move count. Append “+ variations” if the tree contains more nodes than the main line. An empty repertoire says “No moves yet.”</li>
           <li>New study opens a blank study page.</li>
+          <li>Below the studies, Import a study from a file creates a study from a <a href="#study-files">study file</a> and opens it. A file that can't be read is refused with a message saying what is wrong and where; nothing is created.</li>
           <li>If the account has no studies, still show New study; the list need not block on a special empty state.</li>
         </ul>
       </section>
@@ -70,6 +71,36 @@
         <h2>Study data model</h2>
         <p>Persist <code>id</code>, <code>name</code>, <code>side</code>, <code>tree</code>, <code>explorerSettings</code>, optional <code>startNodeId</code>, and calculation data. The tree is a node map: each node has an ID, SAN move (null at the root), parent ID, and ordered child IDs. Keep a root ID and next ID. Child order matters: the first child is the main line; later children are variations.</p>
         <p>The side is chosen as Playing White or Playing Black only when creating a study. Show a selector for a new study and a read-only badge for an existing one. The server must ignore attempts to change the side during an update.</p>
+      </section>
+
+      <section id="study-files">
+        <h2>Study files</h2>
+        <p>A study can be saved to a file (Export to file, in the editor's ⋯ menu) and created again from one (Import a study from a file, on the home page). Export and import use the same format, so an exported file imports back to the same study. The file is JSON, named <code>&lt;study name&gt;.lirep.json</code>, one study per file:</p>
+        <pre class="doc-code">{
+  "format": "lirep-study",
+  "version": 1,
+  "name": "Sicilian Defense: Kveinis Variation",
+  "side": "black",
+  "start": ["e4", "c5", "Nf3", "e6", "d4", "cxd4", "Nxd4", "Qb6"],
+  "explorerSettings": { "source": "lichess", "database": "lichess", "minRating": 2000, "player": null, "speeds": ["blitz"] },
+  "moves": [
+    { "san": "e4" }, { "san": "c5" }, { "san": "Nf3" }, { "san": "e6" },
+    { "san": "d4" }, { "san": "cxd4" }, { "san": "Nxd4" }, { "san": "Qb6" },
+    { "san": "Nc3" }, { "san": "Bc5" },
+    { "san": "Na4", "variations": [
+      [{ "san": "Be3" }, { "san": "Nc6" }, { "san": "Nxc6", "comment": "The main alternative" }]
+    ] },
+    { "san": "Qa5+" }, { "san": "c3" }
+  ]
+}</pre>
+        <ul>
+          <li><code>format</code> and <code>version</code> (required): always <code>"lirep-study"</code> and <code>1</code>. A later, incompatible format would get a new version number; files of an unknown version are refused.</li>
+          <li><code>name</code> (required): the study's name. <code>side</code> (required): <code>"white"</code> or <code>"black"</code>, the side the repertoire is for.</li>
+          <li><code>moves</code> (required): the main line, a list of moves from the initial position. Each move has <code>san</code>, the move in standard algebraic notation; an optional <code>comment</code>; and optional <code>variations</code>, a list of lines (each a list of moves) played <em>instead of</em> that move, from the same position, in the order they appear in the editor. Variations can themselves contain variations. This is how PGN writes variations, in parentheses after the move they replace.</li>
+          <li><code>start</code> (optional): the <a href="#starting-point">starting point</a>, as the list of moves leading to it from the initial position. Leave it out for none.</li>
+          <li><code>explorerSettings</code> (optional): the Opening Explorer settings the study's stats are calculated with (<code>source</code>, <code>database</code>, <code>minRating</code>, <code>player</code>, <code>speeds</code>, as in the editor). Missing fields take their defaults.</li>
+        </ul>
+        <p>Import checks every move: it must be legal in its position, appear only once among the alternatives in a position, and, as in the editor, a position where the studied side moves has only one prepared move. Moves written in another valid way (<code>Ng1f3</code>) are stored in standard form (<code>Nf3</code>). The study's stats, practice history and sharing are not in the file: an imported study is a new study, shared like any other new study, with its stats to be calculated.</p>
       </section>
 
       <section>
@@ -88,11 +119,11 @@
           <li>The <strong>Go to start</strong> navigation button selects the study's starting point, or the true root when no custom starting point is set. <strong>Delete this move</strong> deletes the selected node and its entire descendant subtree, then selects its parent. Disable deletion at the root.</li>
           <li>Left/Right arrow steps backward/forward along the currently followed branch. Up jumps to the study's starting point; Down follows the selected branch to its end. Click the <code>?</code> button or press <code>?</code> to toggle the shortcut list. Enter in a comment saves and leaves the field; Shift+Enter inserts a newline. Do not intercept navigation keys while an input, select, or textarea has focus, or when a modifier key is held.</li>
           <li>Auto-save the whole tree, side, Explorer settings, and starting point with <code>POST /api/studies</code> / <code>PUT /api/studies/{id}</code> after a short debounce. A new study is created after it has a non-empty name. Show saving/saved/error status in the header, preserve local edits on failure, and retry when the user edits again or reconnects. Links wait for pending edits to save before leaving; browser navigation warns while edits remain unsaved. There are no Cancel or Save buttons.</li>
-          <li>For saved studies, the header's “⋯” menu holds the Share with the community checkbox and a Delete study button. Require confirmation before <code>DELETE /api/studies/{id}</code>, then return to the home page. Deletion is owner-scoped and removes that study's practice state.</li>
+          <li>For saved studies, the header's “⋯” menu holds the Share with the community checkbox, Export to file (see <a href="#study-files">Study files</a>) and a Delete study button. Require confirmation before <code>DELETE /api/studies/{id}</code>, then return to the home page. Deletion is owner-scoped and removes that study's practice state.</li>
         </ul>
       </section>
 
-      <section>
+      <section id="starting-point">
         <h2>Starting point</h2>
         <p>The starting point changes where Stats calculations begin, not the tree or move numbering. Default is the actual root (<code>startNodeId: null</code>). When a non-root node is selected, the action sets that node as the starting point; selecting the active starting node changes the action to Clear starting point. Clearing restores the root default.</p>
         <p>Visually color the designated move muted blue and show a badge by the study name with its actual move notation. Do not renumber the move tree. Auto-save this toggle like other study edits. If deleting a subtree removes the chosen node, clear the starting point. Backend calculations must also fall back to the true root if a stored ID no longer exists.</p>

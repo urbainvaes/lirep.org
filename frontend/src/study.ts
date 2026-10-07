@@ -36,6 +36,7 @@ import {
 } from "./explorer";
 import { errorMessage, fetchExplorerData } from "./explorerClient";
 import { materialBalance, materialHtml } from "./material";
+import { downloadStudyFile } from "./studyFile";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
 
@@ -187,6 +188,7 @@ function renderEditor(
                 Share with the community
               </label>
               <p class="study-menu__note">Shared studies appear on the Community page, and other people can import a copy.</p>
+              <button id="export-study-btn" class="btn btn-secondary" type="button" title="Download this study as a Lirep study file, to import later">Export to file</button>
               <button id="delete-study-btn" class="btn btn-danger" type="button">Delete study</button>
             </div>
           </details>
@@ -904,6 +906,10 @@ function renderEditor(
   });
 
   deleteStudyBtn.addEventListener("click", () => void deleteStudy());
+  document.getElementById("export-study-btn")!.addEventListener("click", () => {
+    downloadStudyFile({ name: savedName, side: currentSide(), tree, startNodeId, explorerSettings: settings });
+    studyMenuEl.open = false;
+  });
   sharedInput.addEventListener("change", async () => {
     if (studyId === null) return;
     const wanted = sharedInput.checked;
