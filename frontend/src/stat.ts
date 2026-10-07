@@ -666,7 +666,7 @@ function renderPage(
     ? "Stockfish runs in this browser; evaluated positions are saved on this device and reused."
     : "Browser storage is unavailable; evaluations last only until this tab closes.";
   const lastRunNote = lastEvalRun
-    ? ` Last run: ${lastEvalRun.required} end-of-prep positions, ${lastEvalRun.computed} newly evaluated.`
+    ? `Last run: ${lastEvalRun.required} end-of-prep positions, ${lastEvalRun.computed} newly evaluated.`
     : "";
 
   main.innerHTML = `
@@ -780,12 +780,12 @@ function renderPage(
           <h2>Expected evaluation</h2>
           <button id="eval-btn" class="btn btn-secondary btn-small" type="button" ${disabled}>Recalculate</button>
         </div>
-        <p class="stat-result__what">Stockfish's evaluation where your preparation ends, averaged over the opponent's replies as weighted by the Explorer. It is measured in pawns, from ${sideName}'s point of view.</p>
+        <p class="stat-result__what">Stockfish's evaluation where your preparation ends, averaged over the opponent's replies as weighted by the Explorer. It is measured in pawns, from ${sideName}'s point of view. ${cacheNote}</p>
         ${evalHtml}
         <div id="eval-stale"></div>
         <p class="stat-rank" id="eval-rank"></p>
         ${progressHtml("eval")}
-        <p class="stat-card__meta">${cacheNote}${lastRunNote}</p>
+        ${lastRunNote ? `<p class="stat-card__meta">${lastRunNote}</p>` : ""}
       </section>
 
       <section class="stat-knowledge">
