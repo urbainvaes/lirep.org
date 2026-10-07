@@ -52,3 +52,7 @@ DEFAULT_EXPLORER_SOURCE = "lirep" if LOCAL_LICHESS_EXPLORER_URL else "lichess"
 # People already registered can always sign in; once the limit is reached,
 # new sign-ins are turned away. 0 means no limit.
 MAX_USERS = int(os.getenv("MAX_USERS", "100"))
+
+# Lichess usernames (comma-separated) who may delete any forum post. Kept in
+# the environment, not the code, so the admins aren't published.
+FORUM_ADMINS = {name.strip().lower() for name in os.getenv("FORUM_ADMINS", "").split(",") if name.strip()}

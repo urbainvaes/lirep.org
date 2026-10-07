@@ -138,6 +138,33 @@ def init_db() -> None:
         # queries Lichess itself and caches them (see explorer-cache.md).
         conn.execute("DROP TABLE IF EXISTS explorer_cache")
 
+        # The forum: topics, each with its posts (the first post opens the
+        # topic). Authors are Lichess usernames, always shown.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS forum_topics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                author TEXT NOT NULL,
+                category TEXT NOT NULL,
+                title TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_post_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS forum_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic_id INTEGER NOT NULL,
+                author TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS forum_posts_topic ON forum_posts (topic_id, id)")
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS rating_cache (
@@ -541,3 +568,127 @@ def upsert_practice_state(
             """,
             (owner, study_id, node_id, streak, tau_days, last_seen_at),
         )
+
+
+def list_forum_topics(category: str | None = None) -> list[dict[str, Any]]:
+    """Topics, most recently active first, with their reply count and the
+    author of the last post."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT t.id, t.author, t.category, t.title, t.created_at, t.last_post_at,
+                   (SELECT COUNT(*) - 1 FROM forum_posts p WHERE p.topic_id = t.id) AS replies,
+                   (SELECT p.author FROM forum_posts p WHERE p.topic_id = t.id ORDER BY p.id DESC LIMIT 1) AS last_author
+            FROM forum_topics t
+            WHERE ? IS NULL OR t.category = ?
+            ORDER BY t.last_post_at DESC, t.id DESC
+            """,
+            (category, category),
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "author": row["author"],
+            "category": row["category"],
+            "title": row["title"],
+            "createdAt": row["created_at"],
+            "lastPostAt": row["last_post_at"],
+            "replies": max(0, row["replies"]),
+            "lastAuthor": row["last_author"],
+        }
+        for row in rows
+    ]
+
+
+def get_forum_topic(topic_id: int) -> dict[str, Any] | None:
+    """A topic with all its posts, oldest first; None if it doesn't exist."""
+    with _connect() as conn:
+        topic = conn.execute(
+            "SELECT id, author, category, title, created_at FROM forum_topics WHERE id = ?", (topic_id,)
+        ).fetchone()
+        if topic is None:
+            return None
+        posts = conn.execute(
+            "SELECT id, author, body, created_at FROM forum_posts WHERE topic_id = ? ORDER BY id", (topic_id,)
+        ).fetchall()
+    return {
+        "id": topic["id"],
+        "author": topic["author"],
+        "category": topic["category"],
+        "title": topic["title"],
+        "createdAt": topic["created_at"],
+        "posts": [
+            {"id": p["id"], "author": p["author"], "body": p["body"], "createdAt": p["created_at"]} for p in posts
+        ],
+    }
+
+
+def create_forum_topic(author: str, category: str, title: str, body: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO forum_topics (author, category, title) VALUES (?, ?, ?)", (author, category, title)
+        )
+        topic_id = cur.lastrowid
+        conn.execute("INSERT INTO forum_posts (topic_id, author, body) VALUES (?, ?, ?)", (topic_id, author, body))
+    assert topic_id is not None
+    return topic_id
+
+
+def add_forum_post(topic_id: int, author: str, body: str) -> int | None:
+    """None if the topic doesn't exist."""
+    with _connect() as conn:
+        cur = conn.execute("UPDATE forum_topics SET last_post_at = datetime('now') WHERE id = ?", (topic_id,))
+        if cur.rowcount == 0:
+            return None
+        cur = conn.execute(
+            "INSERT INTO forum_posts (topic_id, author, body) VALUES (?, ?, ?)", (topic_id, author, body)
+        )
+    return cur.lastrowid
+
+
+def get_forum_post(post_id: int) -> dict[str, Any] | None:
+    """A post's author and topic, and whether it opens the topic."""
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT p.id, p.topic_id, p.author,
+                   p.id = (SELECT MIN(q.id) FROM forum_posts q WHERE q.topic_id = p.topic_id) AS first
+            FROM forum_posts p WHERE p.id = ?
+            """,
+            (post_id,),
+        ).fetchone()
+    return {"id": row["id"], "topicId": row["topic_id"], "author": row["author"], "first": bool(row["first"])} if row else None
+
+
+def delete_forum_post(post_id: int) -> None:
+    """Deletes a reply; deleting a topic's first post deletes the topic."""
+    post = get_forum_post(post_id)
+    if post is None:
+        return
+    with _connect() as conn:
+        if post["first"]:
+            conn.execute("DELETE FROM forum_posts WHERE topic_id = ?", (post["topicId"],))
+            conn.execute("DELETE FROM forum_topics WHERE id = ?", (post["topicId"],))
+        else:
+            conn.execute("DELETE FROM forum_posts WHERE id = ?", (post_id,))
+            # The topic's activity is its latest remaining post.
+            conn.execute(
+                """
+                UPDATE forum_topics SET last_post_at =
+                    (SELECT MAX(created_at) FROM forum_posts WHERE topic_id = ?)
+                WHERE id = ?
+                """,
+                (post["topicId"], post["topicId"]),
+            )
+
+
+def count_recent_forum_posts(author: str, minutes: int) -> int:
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM forum_posts
+            WHERE author = ? COLLATE NOCASE AND created_at >= datetime('now', ?)
+            """,
+            (author, f"-{minutes} minutes"),
+        ).fetchone()
+    return int(row["n"])

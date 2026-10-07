@@ -10,8 +10,8 @@
           t === "light" || t === "dark" ? t : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       } catch (e) {}
     </script>
-    <meta name="description" content="Everyone who has joined lirep.org during the beta." />
-    <title>Player · lirep.org</title>
+    <meta name="description" content="Bug reports, suggestions and questions about lirep.org." />
+    <title>Forum · lirep.org</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -30,8 +30,8 @@
         </a>
         <nav class="site-nav">
           <a href="/practice.html">Practice</a>
-          <a href="/community.html" aria-current="page">Community</a>
-          <a href="/forum.html">Forum</a>
+          <a href="/community.html">Community</a>
+          <a href="/forum.html" aria-current="page">Forum</a>
           <a href="/doc/index.html">Doc</a>
           <a href="/about.html">About</a>
         </nav>
@@ -41,9 +41,9 @@
       </div>
     </header>
 
-    <main class="site-main" id="player-main">
+    <main class="site-main" id="forum-main">
       <div class="empty-state"><p>Loading…</p></div>
     </main>
-    <script type="module" src="/src/player.ts"></script>
+    <script type="module" src="/src/forum.ts"></script>
   </body>
 </html>
