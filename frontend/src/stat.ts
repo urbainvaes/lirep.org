@@ -586,7 +586,10 @@ async function leaderboardStatus(study: Study): Promise<{ score: string; evaluat
   const status = (entries: LeaderboardEntry[], settings: CalculationSettings | undefined, depth?: number | null): string => {
     const where = settings?.source === "lirep" ? `${link} (2016 sample)` : link;
     const rank = entries.find((e) => e.id === study.id)?.rank;
-    if (rank) return `Ranked #${rank} for ${sideName} on the ${where}.`;
+    if (rank) {
+      const medal = ["gold", "silver", "bronze"][rank - 1] ?? "other";
+      return `<span class="stat-rank__badge stat-rank__badge--${medal}">#${rank}</span> for ${sideName} on the ${where}`;
+    }
     if (settings?.database === "player") return `Not ranked: calculated from one player's games.`;
     if (depth !== undefined && !depth) return `Not ranked: Stockfish depth unknown. Recalculate to rank it.`;
     if (depth !== undefined && depth! < 12) return `Not ranked: depth ${depth}. Recalculate at Balanced (12) or more.`;

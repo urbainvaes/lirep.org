@@ -954,6 +954,37 @@ body {
   display: none;
 }
 
+/* A ranked result stands out: its place as a medal-coloured badge. */
+.stat-rank:has(.stat-rank__badge) {
+  margin: 4px 0 12px;
+  color: var(--text-strong);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.stat-rank__badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.stat-rank__badge--gold {
+  background: #b8860b;
+}
+
+.stat-rank__badge--silver {
+  background: #7d8790;
+}
+
+.stat-rank__badge--bronze {
+  background: #a0612b;
+}
+
 .stat-knowledge {
   display: flex;
   align-items: baseline;
