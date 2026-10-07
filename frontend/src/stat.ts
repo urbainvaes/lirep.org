@@ -764,13 +764,19 @@ function renderPage(
         <div id="score-stale"></div>
         <p class="stat-rank" id="score-rank"></p>
         ${progressHtml("score")}
-        <h3 class="stat-result__subtitle">Coverage by ${opponent}'s move number</h3>
-        <p class="tree-hint">Share of games still following your lines after each ${opponent} reply.${startPoint ? ` Move numbers start from ${escapeHtml(startPoint)}.` : ""}</p>
+      </section>
+
+      <section class="stat-result">
+        <div class="stat-result__head">
+          <h2>Coverage by ${opponent}'s move number</h2>
+        </div>
+        <p class="stat-result__what">Share of games still following your lines after each ${opponent} reply.${startPoint ? ` Move numbers start from ${escapeHtml(startPoint)}.` : ""}</p>
+        <div id="coverage-stale"></div>
         <div class="coverage-chart-wrap">
           ${
             displayedCoverage.length
               ? `<canvas id="coverage-chart"></canvas>`
-              : `<p class="empty-state">No coverage data yet — recalculate to generate it.</p>`
+              : `<p class="empty-state">No coverage data yet — recalculate the expected score to generate it.</p>`
           }
         </div>
       </section>
@@ -883,6 +889,7 @@ function renderPage(
     const scoreReasons = scoreStaleness(study, current);
     const evalReasons = evalStaleness(study, current, depth);
     (document.getElementById("score-stale") as HTMLElement).innerHTML = staleHtml(scoreReasons);
+    (document.getElementById("coverage-stale") as HTMLElement).innerHTML = staleHtml(scoreReasons);
     (document.getElementById("eval-stale") as HTMLElement).innerHTML = staleHtml(evalReasons);
     const missing = [stats?.winProbability, stats?.evalCp].filter((v) => v === undefined).length;
     const outdated = (scoreReasons.length ? 1 : 0) + (evalReasons.length ? 1 : 0);

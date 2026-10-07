@@ -65,11 +65,12 @@
 
       <section>
         <h2>Study detail screen</h2>
-        <p>Open at <code>stat.html?id={studyId}</code>. From top to bottom: the header, the calculation settings, the expected score with its coverage chart, the expected evaluation, and practice knowledge.</p>
+        <p>Open at <code>stat.html?id={studyId}</code>. From top to bottom: the header, the calculation settings, the expected score, its coverage chart, the expected evaluation, and practice knowledge.</p>
         <ul>
           <li><strong>Header</strong>: the tier badge (click it for the legend), study name, Playing White/Black badge, the custom starting point if one is set, and links to edit the study and to practice it. The tier is by expected score: gold at 60%+, silver at 55%+, bronze at 50%+, below breakeven under 50%.</li>
           <li><strong>Calculation settings</strong>: one panel holding every input of both calculations. Collapsed, it shows a one-line summary (e.g. “Lichess · 2000+ · blitz, rapid · Stockfish depth 16”) and an Edit button. Expanded, it shows the Opening Explorer settings, which weight the opponent's replies for both results, and the Stockfish depth (Quick 8, Balanced 12, Thorough 16), used for the expected evaluation only. Below it, <strong>Recalculate</strong> runs both calculations with the settings shown, one after the other, and a line says whether the results are up to date.</li>
-          <li><strong>Expected score</strong>: the score as a percentage (a win = 1, a draw = 0.5, a loss = 0, from the studied side's point of view), the win/draw/loss split, the settings, position count and time it was calculated with, and the coverage chart.</li>
+          <li><strong>Expected score</strong>: the score as a percentage (a win = 1, a draw = 0.5, a loss = 0, from the studied side's point of view), the win/draw/loss split, the settings, position count and time it was calculated with.</li>
+          <li><strong>Coverage</strong>: a card of its own under the expected score, whose calculation produces it; it is out of date whenever the expected score is.</li>
           <li><strong>Expected evaluation</strong>: a weighted Stockfish score in pawns from the studied side's point of view, with two decimals and a sign, or a forced-mate label for capped mate values; the settings, depth and time it was calculated with. If end positions lacked an engine evaluation, they contribute 0.00 and the card says how many. Older server-calculated summaries are marked as legacy until recalculated.</li>
           <li><strong>Practice knowledge</strong>: average recall across positions, or a note when there is no practice data, with a link to practice.</li>
         </ul>

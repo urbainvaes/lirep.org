@@ -915,12 +915,6 @@ body {
   margin-top: 0;
 }
 
-.stat-result__subtitle {
-  margin: 22px 0 4px;
-  color: var(--text-strong);
-  font-size: 0.98rem;
-}
-
 .stat-result .stat-card__meta {
   margin: 0 0 8px;
 }
