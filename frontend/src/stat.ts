@@ -683,7 +683,8 @@ function renderPage(
       <p class="stat-page__sub">
         ${startPoint ? `Calculated from ${escapeHtml(startPoint)} onward · ` : ""}
         <a href="/study.html?id=${study.id}">Edit the study</a> ·
-        <a href="/practice-session.html?id=${study.id}">Practice</a>
+        <a href="/practice-session.html?id=${study.id}">Practice</a> ·
+        <a href="/games.html?id=${study.id}">Games</a>
       </p>
       <div class="piece-legend" id="piece-legend" hidden>
         <p class="piece-legend__title">Score tiers, by expected score</p>

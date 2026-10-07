@@ -567,6 +567,18 @@ body {
   font-size: 1.05rem;
 }
 
+/* Only when the study has games: a link to its Games page. */
+.study-card__games {
+  align-self: flex-start;
+  color: var(--primary);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.study-card__games:hover {
+  text-decoration: underline;
+}
+
 .study-card__actions {
   display: grid;
   grid-template-columns: auto auto auto 1fr;
@@ -4146,4 +4158,375 @@ button.study-head__link:disabled:hover {
 
 .study-import__status--error {
   color: var(--bad);
+}
+
+/* A study's Games page (games.html): the list of games by section on the
+   left, the selected game on the right; stacked on narrow screens. */
+.games-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.games-page__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.games-page__header .page-title {
+  margin: 0;
+}
+
+.games-page__sub {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.games-page__sub a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.games-page__sub a:hover {
+  text-decoration: underline;
+}
+
+.games-add {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.games-add[hidden],
+.games-page [hidden] {
+  display: none;
+}
+
+.games-add textarea,
+.games-add input,
+.games-add select,
+.games-view select,
+.games-comment-editor textarea {
+  padding: 8px 10px;
+  background: var(--card-nested-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+}
+
+.games-add textarea {
+  font-family: "Courier New", monospace;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+.games-add__row,
+.games-view__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.games-add__row label,
+.games-view__actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.games-status {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.games-status--error,
+.games-error {
+  color: var(--bad);
+}
+
+.games-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.games-list,
+.games-view {
+  padding: 14px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.games-list:empty,
+.games-view:empty {
+  display: none;
+}
+
+.games-section + .games-section {
+  margin-top: 16px;
+}
+
+.games-section__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.games-section__head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1rem;
+}
+
+.games-section__count {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.games-section__empty {
+  margin: 0 0 4px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.games-tools {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.games-tools button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.games-tools button:hover:not(:disabled) {
+  border-color: var(--border);
+  color: var(--text-strong);
+}
+
+.games-tools button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* The grip a game or section is dragged by (SortableJS). */
+.games-grip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: grab;
+  opacity: 0.5;
+}
+
+.games-row:hover .games-grip,
+.games-section__head:hover .games-grip,
+.games-grip:focus-visible {
+  opacity: 1;
+}
+
+/* Where the dragged game or section will land. */
+.games-ghost {
+  background: var(--card-nested-bg);
+  border-radius: 6px;
+  outline: 1px dashed var(--primary);
+  opacity: 0.6;
+}
+
+.games-section__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* An empty section's list keeps some height, so a game can be dropped in. */
+.games-section__list:empty {
+  min-height: 8px;
+}
+
+a.games-lichess {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.games-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+}
+
+.games-row--selected {
+  background: var(--card-nested-bg);
+}
+
+.games-row__main {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.games-row__main strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.games-row__main span {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.games-row__main:hover strong {
+  color: var(--primary-hover);
+}
+
+#new-section-btn {
+  margin-top: 14px;
+}
+
+.games-view {
+  display: grid;
+  gap: 12px;
+}
+
+.games-view__head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.15rem;
+}
+
+/* The board with its buttons, and the moves beside it (below it when the
+   column is narrow). */
+.games-play {
+  display: grid;
+  grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.games-play__board {
+  display: grid;
+  gap: 8px;
+}
+
+.games-moves {
+  align-self: stretch;
+  max-height: 452px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: var(--card-nested-bg);
+  border-radius: 6px;
+  line-height: 1.9;
+}
+
+.games-move__number {
+  margin-right: 2px;
+  color: var(--text-dim);
+  font-family: "Courier New", monospace;
+  font-size: 0.85rem;
+}
+
+.games-move {
+  padding: 1px 4px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-strong);
+  font-family: "Courier New", monospace;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.games-move:hover {
+  background: var(--panel-bg);
+}
+
+.games-move--current {
+  background: var(--primary);
+  color: #fff;
+}
+
+.games-move--current:hover {
+  background: var(--primary-hover);
+}
+
+.games-comment {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.games-comment-editor {
+  display: grid;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.games-comment-editor textarea {
+  resize: vertical;
+}
+
+.games-view__actions .btn-danger {
+  margin-left: auto;
+}
+
+@media (max-width: 1100px) {
+  .games-play {
+    grid-template-columns: minmax(0, 400px);
+  }
+
+  .games-moves {
+    max-height: 220px;
+  }
+}
+
+@media (max-width: 860px) {
+  .games-layout {
+    grid-template-columns: 1fr;
+  }
 }

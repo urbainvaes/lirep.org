@@ -60,6 +60,7 @@
         <h2>Home page</h2>
         <ul>
           <li>The home page lists the current account's studies, one card per study, grouped by side and followed by a New study card. Each card has Edit, Practice and Stats buttons, which open the study page, a practice session and the study's Stats page, and a delete bin.</li>
+          <li>A study with games shows a link to its <a href="#games">Games page</a> (“12 games”) under its moves; studies without games don't.</li>
           <li>Each card shows the study name, up to the first six SAN moves of its main line, and the main-line move count. Append “+ variations” if the tree contains more nodes than the main line. An empty repertoire says “No moves yet.”</li>
           <li>New study opens a blank study page.</li>
           <li>Below the studies, Import a study from a file creates a study from a <a href="#study-files">study file</a> and opens it. A file that can't be read is refused with a message saying what is wrong and where; nothing is created.</li>
@@ -99,8 +100,13 @@
           <li><code>moves</code> (required): the main line, a list of moves from the initial position. Each move has <code>san</code>, the move in standard algebraic notation; an optional <code>comment</code>; and optional <code>variations</code>, a list of lines (each a list of moves) played <em>instead of</em> that move, from the same position, in the order they appear in the editor. Variations can themselves contain variations. This is how PGN writes variations, in parentheses after the move they replace.</li>
           <li><code>start</code> (optional): the <a href="#starting-point">starting point</a>, as the list of moves leading to it from the initial position. Leave it out for none.</li>
           <li><code>explorerSettings</code> (optional): the Opening Explorer settings the study's stats are calculated with (<code>source</code>, <code>database</code>, <code>minRating</code>, <code>player</code>, <code>speeds</code>, as in the editor). Missing fields take their defaults.</li>
+          <li><code>games</code> (optional): the study's <a href="#games">games</a>, in the order of its Games page. Each has <code>section</code> (its section's name, 1 to 60 characters), <code>pgn</code> (the game as PGN text, headers included) and an optional <code>comment</code>. Sections are created in the order their first game appears; empty sections are not in the file. For example:
+            <pre class="doc-code">"games": [
+  { "section": "Master games", "pgn": "[White \"Carlsen, M.\"]\n[Black \"Anand, V.\"]\n[Result \"1-0\"]\n\n1. e4 c5 2. Nf3 d6 1-0", "comment": "Model game" },
+  { "section": "My games", "pgn": "1. e4 c5 2. Nc3 *" }
+]</pre></li>
         </ul>
-        <p>Import checks every move: it must be legal in its position, appear only once among the alternatives in a position, and, as in the editor, a position where the studied side moves has only one prepared move. Moves written in another valid way (<code>Ng1f3</code>) are stored in standard form (<code>Nf3</code>). The study's stats, practice history and sharing are not in the file: an imported study is a new study, shared like any other new study, with its stats to be calculated.</p>
+        <p>Import checks every game the way the Games page does (its PGN must be readable, its moves legal), and every move of the study: it must be legal in its position, appear only once among the alternatives in a position, and, as in the editor, a position where the studied side moves has only one prepared move. Moves written in another valid way (<code>Ng1f3</code>) are stored in standard form (<code>Nf3</code>). The study's stats, practice history and sharing are not in the file: an imported study is a new study, shared like any other new study, with its stats to be calculated.</p>
       </section>
 
       <section>
@@ -121,6 +127,18 @@
           <li>Auto-save the whole tree, side, Explorer settings, and starting point with <code>POST /api/studies</code> / <code>PUT /api/studies/{id}</code> after a short debounce. A new study is created after it has a non-empty name. Show saving/saved/error status in the header, preserve local edits on failure, and retry when the user edits again or reconnects. Links wait for pending edits to save before leaving; browser navigation warns while edits remain unsaved. There are no Cancel or Save buttons.</li>
           <li>For saved studies, the header's “⋯” menu holds the Share with the community checkbox, Export to file (see <a href="#study-files">Study files</a>) and a Delete study button. Require confirmation before <code>DELETE /api/studies/{id}</code>, then return to the home page. Deletion is owner-scoped and removes that study's practice state.</li>
         </ul>
+      </section>
+
+      <section id="games">
+        <h2>Games page</h2>
+        <p>Each study has a Games page (<code>games.html?id={studyId}</code>), linked from the editor's header, the Stats page and, when the study has games, its home card. It holds games related to the opening (master games, historical games, your own) in sections you name and order. Games are private to the study's owner and deleted with the study.</p>
+        <ul>
+          <li><strong>Adding games:</strong> Add games opens a text field for PGN: one game or several, as exported by most databases. Choose an existing section or name a new one. Games that can't be read (an illegal move, for example) are reported by their number and skipped; the others are added at the end of the section.</li>
+          <li><strong>The list:</strong> games by section, each shown as White – Black with its result, event and year from the PGN headers. Drag a game by its grip (⠿) to reorder it or move it to another section, empty ones included; drag a section by its grip to reorder the sections. From the keyboard, ↑ and ↓ on a focused grip do the same (a game at the edge of its section moves into the next one). ✎ renames a section; × removes an empty section; New section adds one.</li>
+          <li><strong>The selected game:</strong> a board to replay it (the buttons, a click on a move, or the arrow keys; <code>f</code> flips the board), with a button opening Lichess's analysis board at the move shown, its moves with the PGN's own comments shown in italics, and your comment on the game, saved as you type. Its section can be changed there, and the game deleted. Variations inside a game's PGN are not shown.</li>
+          <li><strong>Limits:</strong> up to 500 games and 50 sections per study, 100,000 characters per game and 10,000 per comment.</li>
+        </ul>
+        <p>The games are stored as their PGN text, unchanged, with their section, place and comment (<code>GET</code>/<code>POST /api/studies/{id}/games</code>, <code>PUT /api/studies/{id}/games-layout</code> for the order of sections and games, <code>PUT …/games/{gameId}/comment</code>, <code>DELETE …/games/{gameId}</code>). They are included in <a href="#study-files">study files</a>.</p>
       </section>
 
       <section id="starting-point">

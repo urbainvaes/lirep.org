@@ -1,7 +1,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from . import store
 from .config import DEFAULT_EXPLORER_SOURCE
@@ -201,3 +201,91 @@ def set_shared(study_id: int, payload: SharedIn, request: Request) -> dict:
     if not study:
         raise HTTPException(status_code=404, detail="not found")
     return study
+
+
+# The study's Games page: games (PGN as given) in sections the player
+# orders. The PGN is read in the browser; here only sizes are checked.
+MAX_GAMES_PER_STUDY = 500
+MAX_PGN_LENGTH = 100_000
+MAX_COMMENT_LENGTH = 10_000
+MAX_SECTION_NAME = 60
+MAX_SECTIONS = 50
+
+
+class GameIn(BaseModel):
+    pgn: str = Field(min_length=1, max_length=MAX_PGN_LENGTH)
+    comment: str = Field(default="", max_length=MAX_COMMENT_LENGTH)
+
+
+class GamesIn(BaseModel):
+    section: str = Field(min_length=1, max_length=MAX_SECTION_NAME)
+    games: list[GameIn] = Field(min_length=1)
+
+
+class CommentIn(BaseModel):
+    comment: str = Field(max_length=MAX_COMMENT_LENGTH)
+
+
+class SectionIn(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_SECTION_NAME)
+    gameIds: list[int]
+
+
+class LayoutIn(BaseModel):
+    sections: list[SectionIn] = Field(max_length=MAX_SECTIONS)
+
+
+def _require_study(request: Request, study_id: int) -> None:
+    if not store.get_study(_require_owner(request), study_id):
+        raise HTTPException(status_code=404, detail="not found")
+
+
+@router.get("/api/studies/{study_id}/games")
+def list_games(study_id: int, request: Request) -> dict:
+    _require_study(request, study_id)
+    return store.get_study_games(study_id)
+
+
+@router.post("/api/studies/{study_id}/games")
+def add_games(study_id: int, payload: GamesIn, request: Request) -> dict:
+    _require_study(request, study_id)
+    section = payload.section.strip()
+    if not section:
+        raise HTTPException(status_code=422, detail="the section needs a name")
+    if store.count_study_games(study_id) + len(payload.games) > MAX_GAMES_PER_STUDY:
+        raise HTTPException(status_code=422, detail=f"a study can have at most {MAX_GAMES_PER_STUDY} games")
+    sections = store.get_study_games(study_id)["sections"]
+    if section not in sections and len(sections) >= MAX_SECTIONS:
+        raise HTTPException(status_code=422, detail=f"a study can have at most {MAX_SECTIONS} sections")
+    ids = store.add_study_games(study_id, section, [g.model_dump() for g in payload.games])
+    return {"ids": ids}
+
+
+@router.put("/api/studies/{study_id}/games/{game_id}/comment")
+def set_game_comment(study_id: int, game_id: int, payload: CommentIn, request: Request) -> dict:
+    _require_study(request, study_id)
+    if not store.set_study_game_comment(study_id, game_id, payload.comment):
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True}
+
+
+@router.delete("/api/studies/{study_id}/games/{game_id}")
+def delete_game(study_id: int, game_id: int, request: Request) -> dict:
+    _require_study(request, study_id)
+    if not store.delete_study_game(study_id, game_id):
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True}
+
+
+@router.put("/api/studies/{study_id}/games-layout")
+def set_games_layout(study_id: int, payload: LayoutIn, request: Request) -> dict:
+    """Sections in order with their games in order: reordering, renaming,
+    adding or removing sections, and moving games, all in one call."""
+    _require_study(request, study_id)
+    names = [s.name.strip() for s in payload.sections]
+    if any(not n for n in names) or len(set(names)) != len(names):
+        raise HTTPException(status_code=422, detail="section names must be distinct and not empty")
+    layout = [{"name": n, "gameIds": s.gameIds} for n, s in zip(names, payload.sections)]
+    if not store.set_study_game_layout(study_id, layout):
+        raise HTTPException(status_code=409, detail="the games changed; reload the page")
+    return store.get_study_games(study_id)

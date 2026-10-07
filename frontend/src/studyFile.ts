@@ -1,15 +1,24 @@
 import { Chess } from "chess.js";
 
 import type { ExplorerSettings } from "./explorer";
+import { parseGame } from "./pgnGames";
 import { createEmptyTree, sanPathTo, type StudyTree, type TreeNode } from "./tree";
 
 // Lirep's study file (".lirep.json"): what Export downloads and Import
 // reads, one study per file, documented in doc/studies.html#study-files.
 // The tree is written as lines, like PGN: a line is a list of moves, and a
-// move's "variations" are the alternative lines played instead of it.
+// move's "variations" are the alternative lines played instead of it. The
+// study's games (its Games page) are listed in page order, each with its
+// section.
 
 export const STUDY_FILE_FORMAT = "lirep-study";
 export const STUDY_FILE_VERSION = 1;
+
+export interface FileGame {
+  section: string;
+  pgn: string;
+  comment?: string;
+}
 
 interface FileMove {
   san: string;
@@ -25,6 +34,7 @@ export interface StudyFile {
   start?: string[];
   explorerSettings?: Partial<ExplorerSettings>;
   moves: FileMove[];
+  games?: FileGame[];
 }
 
 /** What a study needs to be created from a file (POST /api/studies). */
@@ -34,6 +44,7 @@ export interface ImportedStudy {
   tree: StudyTree;
   startNodeId: number | null;
   explorerSettings?: Partial<ExplorerSettings>;
+  games: FileGame[];
 }
 
 export interface ExportableStudy {
@@ -42,6 +53,7 @@ export interface ExportableStudy {
   tree: StudyTree;
   startNodeId: number | null;
   explorerSettings: ExplorerSettings;
+  games?: FileGame[];
 }
 
 export function studyToFile(study: ExportableStudy): StudyFile {
@@ -73,6 +85,9 @@ export function studyToFile(study: ExportableStudy): StudyFile {
     ...(start.length ? { start } : {}),
     explorerSettings,
     moves: first === undefined ? [] : line(first),
+    ...(study.games?.length
+      ? { games: study.games.map((g) => ({ section: g.section, pgn: g.pgn, ...(g.comment ? { comment: g.comment } : {}) })) }
+      : {}),
   };
 }
 
@@ -175,11 +190,32 @@ export function studyFromFile(text: string): ImportedStudy {
     startNodeId = id === tree.rootId ? null : id;
   }
 
+  const games: FileGame[] = [];
+  if (file.games !== undefined) {
+    if (!Array.isArray(file.games)) throw new Error('"games" must be a list of games.');
+    file.games.forEach((raw, i) => {
+      const game = raw as Partial<FileGame>;
+      const where = `Game ${i + 1}`;
+      if (typeof game !== "object" || game === null || typeof game.pgn !== "string") throw new Error(`${where}: it needs a "pgn".`);
+      if (typeof game.section !== "string" || !game.section.trim() || game.section.trim().length > 60) {
+        throw new Error(`${where}: "section" must be a name of 1 to 60 characters.`);
+      }
+      if (game.comment !== undefined && typeof game.comment !== "string") throw new Error(`${where}: a comment must be text.`);
+      try {
+        parseGame(game.pgn);
+      } catch (err) {
+        throw new Error(`${where}: ${err instanceof Error ? err.message : "unreadable PGN"}`);
+      }
+      games.push({ section: game.section.trim(), pgn: game.pgn, ...(game.comment ? { comment: game.comment } : {}) });
+    });
+  }
+
   return {
     name: file.name.trim(),
     side,
     tree,
     startNodeId,
+    games,
     ...(file.explorerSettings && typeof file.explorerSettings === "object" ? { explorerSettings: file.explorerSettings } : {}),
   };
 }

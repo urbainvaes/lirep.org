@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/sortablejs": "^1.15.9",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   },
@@ -16,6 +17,7 @@
     "@lichess-org/chessground": "^10.2.0",
     "chart.js": "^4.5.1",
     "chess.js": "^1.4.0",
-    "katex": "^0.18.9"
+    "katex": "^0.18.9",
+    "sortablejs": "^1.15.7"
   }
 }

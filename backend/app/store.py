@@ -104,6 +104,10 @@ def init_db() -> None:
         # default existed keep their stored values.)
         if "shared" not in columns:
             conn.execute("ALTER TABLE studies ADD COLUMN shared INTEGER NOT NULL DEFAULT 1")
+        # The study's game sections, in order: a JSON list of names (see
+        # study_games), so a section keeps its place even while empty.
+        if "game_sections" not in columns:
+            conn.execute("ALTER TABLE studies ADD COLUMN game_sections TEXT")
 
         # Registration order: users.id is the user number, starting at 1. Lichess
         # usernames are case-insensitive. Accounts that existed before this table
@@ -137,6 +141,23 @@ def init_db() -> None:
         # Lichess Explorer responses used to be cached here; the browser now
         # queries Lichess itself and caches them (see explorer-cache.md).
         conn.execute("DROP TABLE IF EXISTS explorer_cache")
+
+        # Games attached to a study (its Games page): the PGN as given, a
+        # comment, and the game's section and place within it.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS study_games (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                study_id INTEGER NOT NULL,
+                section TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                pgn TEXT NOT NULL,
+                comment TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS study_games_study ON study_games (study_id)")
 
         # The forum: topics, each with its posts (the first post opens the
         # topic). Authors are Lichess usernames, always shown.
@@ -399,7 +420,17 @@ def list_studies(owner: str) -> list[dict[str, Any]]:
             f"SELECT {_COLUMNS} FROM studies WHERE owner = ? ORDER BY updated_at DESC",
             (owner,),
         ).fetchall()
-    return [_row_to_study(row) for row in rows]
+        counts = dict(
+            conn.execute(
+                """
+                SELECT g.study_id, COUNT(*) FROM study_games g JOIN studies s ON s.id = g.study_id
+                WHERE s.owner = ? GROUP BY g.study_id
+                """,
+                (owner,),
+            ).fetchall()
+        )
+    # The home page's cards show how many games a study has.
+    return [{**_row_to_study(row), "gameCount": counts.get(row["id"], 0)} for row in rows]
 
 
 def get_study(owner: str, study_id: int) -> dict[str, Any] | None:
@@ -417,6 +448,7 @@ def delete_study(owner: str, study_id: int) -> bool:
         if cur.rowcount == 0:
             return False
         conn.execute("DELETE FROM practice_state WHERE owner = ? AND study_id = ?", (owner, study_id))
+        conn.execute("DELETE FROM study_games WHERE study_id = ?", (study_id,))
     return True
 
 
@@ -692,3 +724,93 @@ def count_recent_forum_posts(author: str, minutes: int) -> int:
             (author, f"-{minutes} minutes"),
         ).fetchone()
     return int(row["n"])
+
+
+# Games attached to a study. The caller checks that the study is the
+# player's own; these only take its id.
+
+
+def _game_sections(conn: sqlite3.Connection, study_id: int) -> list[str]:
+    row = conn.execute("SELECT game_sections FROM studies WHERE id = ?", (study_id,)).fetchone()
+    return json.loads(row["game_sections"]) if row and row["game_sections"] else []
+
+
+def get_study_games(study_id: int) -> dict[str, Any]:
+    """The study's sections in order, and its games in section order then
+    their place within the section."""
+    with _connect() as conn:
+        sections = _game_sections(conn, study_id)
+        rows = conn.execute(
+            "SELECT id, section, position, pgn, comment FROM study_games WHERE study_id = ?", (study_id,)
+        ).fetchall()
+    order = {name: i for i, name in enumerate(sections)}
+    games = sorted(rows, key=lambda r: (order.get(r["section"], len(order)), r["position"], r["id"]))
+    # A game whose section is missing from the list (shouldn't happen) still shows.
+    sections += [name for name in dict.fromkeys(r["section"] for r in games) if name not in order]
+    return {
+        "sections": sections,
+        "games": [{"id": r["id"], "section": r["section"], "pgn": r["pgn"], "comment": r["comment"]} for r in games],
+    }
+
+
+def count_study_games(study_id: int) -> int:
+    with _connect() as conn:
+        return int(conn.execute("SELECT COUNT(*) FROM study_games WHERE study_id = ?", (study_id,)).fetchone()[0])
+
+
+def add_study_games(study_id: int, section: str, games: list[dict[str, str]]) -> list[int]:
+    """Appends games ({"pgn", "comment"}) to the end of a section, which is
+    created at the end of the list if new."""
+    with _connect() as conn:
+        sections = _game_sections(conn, study_id)
+        if section not in sections:
+            sections.append(section)
+            conn.execute("UPDATE studies SET game_sections = ? WHERE id = ?", (json.dumps(sections), study_id))
+        position = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) FROM study_games WHERE study_id = ? AND section = ?", (study_id, section)
+        ).fetchone()[0]
+        ids = []
+        for game in games:
+            position += 1
+            cur = conn.execute(
+                "INSERT INTO study_games (study_id, section, position, pgn, comment) VALUES (?, ?, ?, ?, ?)",
+                (study_id, section, position, game["pgn"], game.get("comment", "")),
+            )
+            ids.append(cur.lastrowid)
+    return ids
+
+
+def set_study_game_comment(study_id: int, game_id: int, comment: str) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE study_games SET comment = ? WHERE id = ? AND study_id = ?", (comment, game_id, study_id)
+        )
+    return cur.rowcount > 0
+
+
+def delete_study_game(study_id: int, game_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM study_games WHERE id = ? AND study_id = ?", (game_id, study_id))
+    return cur.rowcount > 0
+
+
+def set_study_game_layout(study_id: int, layout: list[dict[str, Any]]) -> bool:
+    """Sets the sections, in order, and each one's games, in order:
+    [{"name", "gameIds"}]. This is how sections are reordered, renamed,
+    added or removed, and games reordered or moved between sections. Every
+    game of the study must appear exactly once; False otherwise."""
+    with _connect() as conn:
+        existing = {r[0] for r in conn.execute("SELECT id FROM study_games WHERE study_id = ?", (study_id,))}
+        listed = [game_id for section in layout for game_id in section["gameIds"]]
+        if sorted(listed) != sorted(existing) or len(set(listed)) != len(listed):
+            return False
+        for section in layout:
+            for position, game_id in enumerate(section["gameIds"]):
+                conn.execute(
+                    "UPDATE study_games SET section = ?, position = ? WHERE id = ?", (section["name"], position, game_id)
+                )
+        conn.execute(
+            "UPDATE studies SET game_sections = ? WHERE id = ?",
+            (json.dumps([section["name"] for section in layout]), study_id),
+        )
+    return True

@@ -7,10 +7,12 @@ export interface MeResponse {
   title?: string | null;
 }
 
+/** Safe in element content and in quoted attribute values: serializing
+ * text escapes &, < and >, but not quotes, so those are escaped here. */
 export function escapeHtml(value: string): string {
   const div = document.createElement("div");
   div.textContent = value;
-  return div.innerHTML;
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 export async function fetchMe(): Promise<MeResponse> {

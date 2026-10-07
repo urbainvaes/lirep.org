@@ -147,7 +147,7 @@ statistics, and spaced-repetition practice.")
              (copy-recursively "node_modules" #$output)))))
    #:options
    `(#:hash-algo sha256
-     #:hash ,(base32 "1m0vccnas4nq5rzh207k9fm5x73p9y6nyn9mssljh9rwfd3hn2l2")
+     #:hash ,(base32 "10wx5hglns6dv8mz6qq46cchw7h6dm2cqf2pvfrxi7pqg5hcrklf")
      #:recursive? #t)))
 
 (define-public lirep-frontend

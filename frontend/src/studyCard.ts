@@ -8,6 +8,7 @@ export interface StudyCardData {
   side: "white" | "black";
   startNodeId: number | null;
   stats?: { winProbability?: number } | null;
+  gameCount?: number;
 }
 
 export function renderStudyGroups(
@@ -88,6 +89,11 @@ export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
     <article class="study-card study-card--summary">
       ${renderStudyCardContent(study)}
+      ${
+        study.gameCount
+          ? `<a class="study-card__games" href="/games.html?id=${study.id}">${study.gameCount} game${study.gameCount === 1 ? "" : "s"}</a>`
+          : ""
+      }
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
         <a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>

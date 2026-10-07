@@ -180,6 +180,7 @@ function renderEditor(
         <div class="study-head__links" id="study-links" ${existing ? "" : "hidden"}>
           <a class="study-head__link" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>Stats</a>
           <a class="study-head__link" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>Practice</a>
+          <a class="study-head__link" id="study-games-link" href="/games.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>Games</a>
           <details class="study-menu" id="study-menu">
             <summary class="btn btn-secondary" aria-label="More study options">⋯</summary>
             <div class="study-menu__panel">
@@ -449,6 +450,7 @@ function renderEditor(
         if (document.activeElement !== nameInput) showTitle();
         (document.getElementById("study-stats-link") as HTMLAnchorElement).href = `/stat.html?id=${saved.id}`;
         (document.getElementById("study-practice-link") as HTMLAnchorElement).href = `/practice-session.html?id=${saved.id}`;
+        (document.getElementById("study-games-link") as HTMLAnchorElement).href = `/games.html?id=${saved.id}`;
         sharedInput.checked = saved.shared ?? true;
       }
       if (!deleting) {
@@ -906,9 +908,18 @@ function renderEditor(
   });
 
   deleteStudyBtn.addEventListener("click", () => void deleteStudy());
-  document.getElementById("export-study-btn")!.addEventListener("click", () => {
-    downloadStudyFile({ name: savedName, side: currentSide(), tree, startNodeId, explorerSettings: settings });
+  document.getElementById("export-study-btn")!.addEventListener("click", async () => {
     studyMenuEl.open = false;
+    let games: { section: string; pgn: string; comment: string }[] = [];
+    try {
+      const res = await fetch(`/api/studies/${studyId}/games`, { credentials: "same-origin" });
+      if (!res.ok) throw new Error(String(res.status));
+      games = (await res.json()).games;
+    } catch {
+      setSaveStatus("Could not export: the study's games could not be loaded.", true);
+      return;
+    }
+    downloadStudyFile({ name: savedName, side: currentSide(), tree, startNodeId, explorerSettings: settings, games });
   });
   sharedInput.addEventListener("change", async () => {
     if (studyId === null) return;

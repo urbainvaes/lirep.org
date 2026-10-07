@@ -108,7 +108,7 @@ function bindStudyImport(root: HTMLElement): void {
     status.classList.remove("study-import__status--error");
     status.textContent = "Importing…";
     try {
-      const study = studyFromFile(await file.text());
+      const { games, ...study } = studyFromFile(await file.text());
       const res = await fetch("/api/studies", {
         method: "POST",
         credentials: "same-origin",
@@ -121,6 +121,18 @@ function bindStudyImport(root: HTMLElement): void {
         throw new Error(typeof detail === "string" ? `The server refused this study: ${detail}.` : "The server refused this study.");
       }
       const created = await res.json();
+      // The games, section by section in the file's order (a section is
+      // created where its first game appears).
+      const sections = [...new Set(games.map((g) => g.section))];
+      for (const section of sections) {
+        const gamesRes = await fetch(`/api/studies/${created.id}/games`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ section, games: games.filter((g) => g.section === section).map(({ pgn, comment }) => ({ pgn, comment: comment ?? "" })) }),
+        });
+        if (!gamesRes.ok) throw new Error(`The study was created, but its games in "${section}" could not be added.`);
+      }
       window.location.href = `/study.html?id=${created.id}`;
     } catch (err) {
       status.classList.add("study-import__status--error");
