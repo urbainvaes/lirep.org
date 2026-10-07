@@ -28,7 +28,26 @@ def _count_moves_and_lines(tree: dict) -> tuple[int, int]:
     return moves, lines
 
 
-def _entry(owner: str, study: dict, me: str | None, ranked_source: Source = "lichess", any_source: bool = False) -> dict:
+def _is_mine(owner: str, me: str | None) -> bool:
+    return me is not None and owner.lower() == me.lower()
+
+
+def _owner_fields(owner: str, me: str | None, anonymous: set[str]) -> dict:
+    """Who a shared study belongs to, as others may see it: an anonymous
+    player's name is only shown to themselves."""
+    is_anonymous = owner.lower() in anonymous
+    mine = _is_mine(owner, me)
+    return {"owner": owner if mine or not is_anonymous else None, "anonymous": is_anonymous, "mine": mine}
+
+
+def _entry(
+    owner: str,
+    study: dict,
+    me: str | None,
+    ranked_source: Source = "lichess",
+    any_source: bool = False,
+    anonymous: set[str] = frozenset(),
+) -> dict:
     """A leaderboard row. Only win probabilities calculated with
     `ranked_source`'s Explorer get a score and a rank; the rest are listed
     with the reason they are not ranked. Each scored row carries the
@@ -54,8 +73,7 @@ def _entry(owner: str, study: dict, me: str | None, ranked_source: Source = "lic
         "id": study["id"],
         "name": study["name"],
         "side": study["side"],
-        "owner": owner,
-        "mine": me is not None and owner.lower() == me.lower(),
+        **_owner_fields(owner, me, anonymous),
         "winProbability": probability,
         "reason": reason,
         "source": source,
@@ -88,17 +106,22 @@ def summary() -> dict:
 
 @router.get("/api/community/players")
 def players() -> dict:
-    """Everyone registered, numbered in registration order."""
-    return {"maxUsers": MAX_USERS, "players": store.list_users()}
+    """Everyone registered, numbered in registration order. Anonymous players
+    are counted, but without their name."""
+    players = [
+        {**player, "username": None} if player["anonymous"] else player for player in store.list_users()
+    ]
+    return {"maxUsers": MAX_USERS, "players": players}
 
 
 @router.get("/api/community/players/{username}")
 def player(username: str, request: Request) -> dict:
     """A public profile: when they joined and the studies they chose to share."""
     user = store.get_user(username)
-    if user is None:
-        raise HTTPException(status_code=404, detail="not found")
     me = request.session.get("username")
+    # An anonymous player's profile would tie their name to their studies.
+    if user is None or (user["anonymous"] and not _is_mine(user["username"], me)):
+        raise HTTPException(status_code=404, detail="not found")
     studies = [
         _entry(owner, study, me, any_source=True)
         for owner, study in store.list_shared_studies()
@@ -124,8 +147,7 @@ def shared_study(study_id: int, request: Request) -> dict:
         "id": study["id"],
         "name": study["name"],
         "side": study["side"],
-        "owner": owner,
-        "mine": me is not None and owner.lower() == me.lower(),
+        **_owner_fields(owner, me, store.anonymous_usernames()),
         "tree": study["tree"],
         "startNodeId": study["startNodeId"],
         "explorerSettings": study["explorerSettings"],
@@ -138,7 +160,8 @@ def openings(request: Request, source: Source = "lichess") -> list[dict]:
     studies with a comparable score appear: win probabilities calculated with
     `source`'s Explorer. Everything else is left out. Ranks are per side."""
     me = request.session.get("username")
-    entries = [_entry(owner, study, me, source) for owner, study in store.list_shared_studies()]
+    anonymous = store.anonymous_usernames()
+    entries = [_entry(owner, study, me, source, anonymous=anonymous) for owner, study in store.list_shared_studies()]
     shown: list[dict] = []
     for side in ("white", "black"):
         ranked = sorted(
@@ -152,7 +175,9 @@ def openings(request: Request, source: Source = "lichess") -> list[dict]:
     return shown
 
 
-def _eval_entry(owner: str, study: dict, me: str | None, ranked_source: Source) -> dict | None:
+def _eval_entry(
+    owner: str, study: dict, me: str | None, ranked_source: Source, anonymous: set[str] = frozenset()
+) -> dict | None:
     """A row of the expected-evaluation leaderboard, or None when the study's
     expected evaluation is not comparable: not calculated, a legacy server
     calculation (depth unknown), Stockfish below MIN_LEADERBOARD_EVAL_DEPTH,
@@ -170,8 +195,7 @@ def _eval_entry(owner: str, study: dict, me: str | None, ranked_source: Source) 
         "id": study["id"],
         "name": study["name"],
         "side": study["side"],
-        "owner": owner,
-        "mine": me is not None and owner.lower() == me.lower(),
+        **_owner_fields(owner, me, anonymous),
         "evalCp": eval_cp,
         "depth": depth,
         "source": settings["source"],
@@ -191,9 +215,10 @@ def openings_by_eval(request: Request, source: Source = "lichess") -> list[dict]
     of prep instead of expected score. Only evaluations with Stockfish at depth
     MIN_LEADERBOARD_EVAL_DEPTH ("Balanced") or more are ranked."""
     me = request.session.get("username")
+    anonymous = store.anonymous_usernames()
     entries = [
         e for owner, study in store.list_shared_studies()
-        if (e := _eval_entry(owner, study, me, source)) is not None
+        if (e := _eval_entry(owner, study, me, source, anonymous)) is not None
     ]
     shown: list[dict] = []
     for side in ("white", "black"):
@@ -213,7 +238,7 @@ def import_study(study_id: int, request: Request) -> dict:
     if not found:
         raise HTTPException(status_code=404, detail="not found")
     owner, study = found
-    if owner.lower() == me.lower():
+    if _is_mine(owner, me):
         raise HTTPException(status_code=400, detail="this is already your study")
     # A private copy (not shared, so it does not appear a second time on the
     # leaderboard): tree, side, starting point and Explorer settings. The

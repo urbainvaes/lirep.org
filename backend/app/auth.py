@@ -7,9 +7,10 @@ from urllib.parse import quote, urlencode
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, MAX_USERS, REDIRECT_URI
-from .store import register_user, register_user_limited, touch_user
+from .store import get_user, register_user, register_user_limited, set_user_anonymous, touch_user
 
 logger = logging.getLogger(__name__)
 
@@ -243,13 +244,32 @@ async def profile(request: Request) -> dict:
         if speed in perfs
     }
 
+    user_number = register_user(data["username"])
+    user = get_user(data["username"])
     return {
         "username": data["username"],
         "title": data.get("title"),
-        "userNumber": register_user(data["username"]),
+        "userNumber": user_number,
         "maxUsers": MAX_USERS,
+        "anonymous": bool(user and user["anonymous"]),
         "ratings": ratings,
     }
+
+
+class AnonymousIn(BaseModel):
+    anonymous: bool
+
+
+@router.put("/api/profile/anonymous")
+def set_anonymous(payload: AnonymousIn, request: Request) -> dict:
+    """Anonymous players' shared studies stay on the leaderboards and can be
+    browsed, but their name is hidden and their public profile is not shown."""
+    username = request.session.get("username")
+    if not username or not request.session.get("access_token"):
+        raise HTTPException(status_code=401, detail="not authenticated")
+    if not set_user_anonymous(username, payload.anonymous):
+        raise HTTPException(status_code=404, detail="not found")
+    return {"anonymous": payload.anonymous}
 
 
 DEFAULT_BOARD_THEME = {"theme": "brown", "pieceSet": "cburnett"}

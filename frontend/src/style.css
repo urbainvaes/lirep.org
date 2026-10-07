@@ -3032,6 +3032,15 @@ body {
   text-decoration: none;
 }
 
+.community-anonymous {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.profile-anonymous {
+  margin: 0 12px 0 0;
+}
+
 .community-owner:hover {
   color: var(--primary-hover);
   text-decoration: underline;

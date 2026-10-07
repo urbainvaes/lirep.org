@@ -12,6 +12,7 @@ interface ProfileResponse {
   title?: string | null;
   userNumber: number;
   maxUsers: number;
+  anonymous: boolean;
   ratings: Partial<Record<"bullet" | "blitz" | "rapid" | "classical", RatingInfo>>;
 }
 
@@ -135,7 +136,47 @@ function renderProfile(
         ? `<div class="profile-study-list">${studyRows}</div>`
         : `<div class="empty-state profile-empty"><p>No repertoires yet. Start with a line you want to remember.</p><a class="btn btn-primary" href="/study.html">Create your first study</a></div>`}
     </section>
+
+    <section class="profile-section">
+      <div class="profile-section__heading">
+        <div>
+          <h2>Privacy</h2>
+          <p class="profile-subtitle">Your shared studies stay on the Community page and can still be browsed and imported;
+            only your name is hidden. Your public profile is hidden too.</p>
+        </div>
+      </div>
+      <label class="study-share profile-anonymous">
+        <input type="checkbox" id="profile-anonymous" ${profile.anonymous ? "checked" : ""} />
+        Appear as anonymous in the community
+      </label>
+      <span id="profile-anonymous-status" class="profile-subtitle" role="status"></span>
+    </section>
   `;
+}
+
+function bindAnonymousToggle(): void {
+  const input = document.getElementById("profile-anonymous") as HTMLInputElement | null;
+  const status = document.getElementById("profile-anonymous-status");
+  if (!input || !status) return;
+  input.addEventListener("change", async () => {
+    const wanted = input.checked;
+    input.disabled = true;
+    try {
+      const res = await fetch("/api/profile/anonymous", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ anonymous: wanted }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      status.textContent = wanted ? "You now appear as anonymous." : "Your name is shown again.";
+    } catch {
+      input.checked = !wanted;
+      status.textContent = "Could not change this setting. Please try again.";
+    } finally {
+      input.disabled = false;
+    }
+  });
 }
 
 async function init(): Promise<void> {
@@ -164,6 +205,7 @@ async function init(): Promise<void> {
     const studies: ProfileStudy[] = studiesRes?.ok ? await studiesRes.json() : [];
     const practice: Record<string, PracticeSummary> = practiceRes?.ok ? await practiceRes.json() : {};
     renderProfile(main, profile, studies, practice);
+    bindAnonymousToggle();
   } catch {
     renderSignedOut(main);
   }

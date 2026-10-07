@@ -19,7 +19,8 @@ interface Opening {
   id: number;
   name: string;
   side: "white" | "black";
-  owner: string;
+  owner: string | null;
+  anonymous: boolean;
   mine: boolean;
   winProbability: number | null;
   reason: string | null;
@@ -38,7 +39,8 @@ interface EvalOpening {
   id: number;
   name: string;
   side: "white" | "black";
-  owner: string;
+  owner: string | null;
+  anonymous: boolean;
   mine: boolean;
   evalCp: number;
   depth: number;
@@ -120,7 +122,7 @@ interface Leaderboard<T> {
   empty: (side: string) => string;
 }
 
-type LeaderboardRow = Pick<Opening, "id" | "mine" | "name" | "side" | "moves" | "lines" | "owner"> & {
+type LeaderboardRow = Pick<Opening, "id" | "mine" | "name" | "side" | "moves" | "lines" | "owner" | "anonymous"> & {
   rank: number | null;
 };
 
@@ -148,12 +150,19 @@ const BY_EXPECTED_EVALUATION: Leaderboard<EvalOpening> = {
   empty: (side) => `No ranked openings for ${side} yet.`,
 };
 
+// An anonymous player's name is only sent to themselves.
+function ownerHtml(opening: LeaderboardRow): string {
+  if (opening.owner === null) return `<span class="community-anonymous">Anonymous</span>`;
+  const link = `<a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">${escapeHtml(opening.owner)}</a>`;
+  return opening.anonymous ? `${link} <span class="community-anonymous">(anonymous)</span>` : link;
+}
+
 function renderRow<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T, signedIn: boolean): string {
   return `
     <tr>
       <td class="community-rank">${opening.rank ?? "–"}</td>
       ${openingCellHtml(opening)}
-      <td><a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">${escapeHtml(opening.owner)}</a></td>
+      <td>${ownerHtml(opening)}</td>
       <td class="community-score">${board.value(opening)}</td>
       <td class="community-settings">${board.settings(opening)}</td>
       <td class="community-action">${actionHtml(opening, signedIn)}</td>

@@ -2,7 +2,7 @@ import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 
 interface Player {
   number: number;
-  username: string;
+  username: string | null;
   joined: string;
   sharedStudies: number;
 }
@@ -27,7 +27,9 @@ function render(main: HTMLElement, data: PlayersResponse): void {
       (player) => `
       <tr>
         <td class="community-rank">${player.number}</td>
-        <td><a class="community-owner" href="/player.html?u=${encodeURIComponent(player.username)}">${escapeHtml(player.username)}</a></td>
+        <td>${player.username === null
+          ? `<span class="community-anonymous">Anonymous</span>`
+          : `<a class="community-owner" href="/player.html?u=${encodeURIComponent(player.username)}">${escapeHtml(player.username)}</a>`}</td>
         <td>${player.sharedStudies}</td>
         <td class="community-settings">${escapeHtml(formatJoined(player.joined))}</td>
       </tr>`,

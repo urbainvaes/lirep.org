@@ -22,7 +22,8 @@ interface SharedOpening {
   id: number;
   name: string;
   side: "white" | "black";
-  owner: string;
+  owner: string | null;
+  anonymous: boolean;
   mine: boolean;
   tree: StudyTree;
   startNodeId: number | null;
@@ -43,7 +44,9 @@ function render(main: HTMLElement, opening: SharedOpening, signedIn: boolean): v
   const startNodeId = opening.startNodeId !== null && opening.startNodeId in tree.nodes ? opening.startNodeId : null;
 
   main.innerHTML = `
-    <p class="doc-intro"><a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">← ${escapeHtml(opening.owner)}</a></p>
+    <p class="doc-intro">${opening.owner === null
+      ? `<a class="community-owner" href="/community.html">← Community</a> · by an anonymous player`
+      : `<a class="community-owner" href="/player.html?u=${encodeURIComponent(opening.owner)}">← ${escapeHtml(opening.owner)}</a>`}</p>
     <div class="study-editor">
       <div class="study-name-row">
         <h1 class="opening-title">${escapeHtml(opening.name)}</h1>

@@ -120,6 +120,10 @@ def init_db() -> None:
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
         if "last_seen_at" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN last_seen_at TEXT")
+        # Anonymous players keep sharing their studies, but their name is not
+        # shown next to them (see community.py).
+        if "anonymous" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN anonymous INTEGER NOT NULL DEFAULT 0")
         conn.execute(
             """
             INSERT OR IGNORE INTO users (username, created_at)
@@ -268,14 +272,20 @@ def list_users() -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT u.id, u.username, u.created_at,
+            SELECT u.id, u.username, u.created_at, u.anonymous,
                    (SELECT COUNT(*) FROM studies s
                      WHERE s.owner = u.username COLLATE NOCASE AND s.shared = 1) AS shared
             FROM users u ORDER BY u.id
             """
         ).fetchall()
     return [
-        {"number": row["id"], "username": row["username"], "joined": row["created_at"], "sharedStudies": row["shared"]}
+        {
+            "number": row["id"],
+            "username": row["username"],
+            "joined": row["created_at"],
+            "sharedStudies": row["shared"],
+            "anonymous": bool(row["anonymous"]),
+        }
         for row in rows
     ]
 
@@ -284,9 +294,32 @@ def get_user(username: str) -> dict[str, Any] | None:
     """A registered user (matched case-insensitively), or None."""
     with _connect() as conn:
         row = conn.execute(
-            "SELECT id, username, created_at FROM users WHERE username = ? COLLATE NOCASE", (username,)
+            "SELECT id, username, created_at, anonymous FROM users WHERE username = ? COLLATE NOCASE", (username,)
         ).fetchone()
-    return {"number": row["id"], "username": row["username"], "joined": row["created_at"]} if row else None
+    if row is None:
+        return None
+    return {
+        "number": row["id"],
+        "username": row["username"],
+        "joined": row["created_at"],
+        "anonymous": bool(row["anonymous"]),
+    }
+
+
+def set_user_anonymous(username: str, anonymous: bool) -> bool:
+    """False if the user is not registered."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE users SET anonymous = ? WHERE username = ? COLLATE NOCASE", (1 if anonymous else 0, username)
+        )
+    return cur.rowcount > 0
+
+
+def anonymous_usernames() -> set[str]:
+    """The lowercased usernames of the players who chose to be anonymous."""
+    with _connect() as conn:
+        rows = conn.execute("SELECT username FROM users WHERE anonymous = 1").fetchall()
+    return {row["username"].lower() for row in rows}
 
 
 def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] | None:
