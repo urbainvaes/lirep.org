@@ -72,28 +72,34 @@ function deleteButtonHtml(study: StudyCardData): string {
       </button>`;
 }
 
-function renderStudyCardContent(study: StudyCardData): string {
+function renderStudyCardContent(study: StudyCardData, headerExtra = ""): string {
   const score = study.stats?.winProbability;
   const scoreLabel = score === undefined ? "—" : `${(score * 100).toFixed(1)}%`;
 
   return `
     <div class="study-card__header">
       <h3>${escapeHtml(study.name)}</h3>
+      ${headerExtra}
     </div>
     <div class="study-card__score"><span title="Win % + half of the draw % (a win counts 1, a draw 0.5), from real games in the Explorer, if you always play your prepared moves.">Expected score</span><strong>${scoreLabel}</strong></div>
     <div class="study-card__line">${openingMovesHtml(study)}</div>
   `;
 }
 
+// Only when the study has games: a badge by the name (the Games page's book
+// icon and the count), linking to the Games page.
+function gamesBadgeHtml(study: StudyCardData): string {
+  if (!study.gameCount) return "";
+  const label = `${study.gameCount} game${study.gameCount === 1 ? "" : "s"}`;
+  return `<a class="study-card__games" href="/games.html?id=${study.id}" title="${label}: open the Games page" aria-label="${label}">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>${study.gameCount}
+    </a>`;
+}
+
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
     <article class="study-card study-card--summary">
-      ${renderStudyCardContent(study)}
-      ${
-        study.gameCount
-          ? `<a class="study-card__games" href="/games.html?id=${study.id}">${study.gameCount} game${study.gameCount === 1 ? "" : "s"}</a>`
-          : ""
-      }
+      ${renderStudyCardContent(study, gamesBadgeHtml(study))}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
         <a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>

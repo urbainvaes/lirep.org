@@ -567,16 +567,26 @@ body {
   font-size: 1.05rem;
 }
 
-/* Only when the study has games: a link to its Games page. */
+/* Only when the study has games: a badge by the name, linking to its Games
+   page. */
 .study-card__games {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
   align-self: flex-start;
-  color: var(--primary);
-  font-size: 0.85rem;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
   text-decoration: none;
 }
 
 .study-card__games:hover {
-  text-decoration: underline;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .study-card__actions {
