@@ -217,6 +217,61 @@ const SAMPLE_TITLE =
   `This site's own Explorer: ${LIREP_DATASET} (about 10.7 million rated games), a much smaller and older ` +
   "sample than Lichess's Explorer, so its scores are ranked separately.";
 
+interface TopPlayer {
+  username: string | null; // null: an anonymous player
+  title: string | null;
+  rating: number;
+  roundedDown: boolean; // anonymous players' ratings: "2100+"
+}
+
+type TopPlayers = Record<"bullet" | "blitz" | "rapid", TopPlayer[]>;
+
+// Glyphs from lichess.org's icon font, as on the profile page.
+const TOP_SPEEDS = [
+  { key: "bullet", label: "Bullet", icon: "\ue032" },
+  { key: "blitz", label: "Blitz", icon: "\ue008" },
+  { key: "rapid", label: "Rapid", icon: "\ue002" },
+] as const;
+
+function renderTopPlayers(top: TopPlayers): string {
+  return TOP_SPEEDS.map(({ key, label, icon }) => {
+    const rows = top[key]
+      .map(
+        (p, i) => `
+        <li class="top-players__row">
+          <span class="top-players__rank">${i + 1}</span>
+          ${
+            p.username === null
+              ? `<span class="top-players__name">${
+                  p.title ? `<span class="top-players__title">${escapeHtml(p.title)}</span> ` : ""
+                }<span class="community-anonymous">Anonymous</span></span>`
+              : `<a class="community-owner top-players__name" href="/player.html?u=${encodeURIComponent(p.username)}">${
+                  p.title ? `<span class="top-players__title">${escapeHtml(p.title)}</span> ` : ""
+                }${escapeHtml(p.username)}</a>`
+          }
+          <span class="top-players__rating"${p.roundedDown ? ` title="Rounded down to the hundred"` : ""}>${p.rating}${p.roundedDown ? "+" : ""}</span>
+        </li>`,
+      )
+      .join("");
+    return `
+      <div class="top-players__column">
+        <h3 class="top-players__speed"><span data-icon="${icon}" aria-hidden="true"></span>${label}</h3>
+        ${rows ? `<ol class="top-players__list">${rows}</ol>` : `<p class="community-note">No rated players yet.</p>`}
+      </div>`;
+  }).join("");
+}
+
+// Loaded after the rest of the page: the ratings come from Lichess.
+async function loadTopPlayers(container: HTMLElement): Promise<void> {
+  try {
+    const res = await fetch("/api/community/top-players", { credentials: "same-origin" });
+    if (!res.ok) throw new Error(String(res.status));
+    container.innerHTML = renderTopPlayers(await res.json());
+  } catch {
+    container.innerHTML = `<p class="community-note">Could not load the ratings from Lichess. Please try again later.</p>`;
+  }
+}
+
 function render(
   main: HTMLElement,
   summary: Summary,
@@ -255,7 +310,18 @@ function render(
         ${renderLeaderboard(BY_EXPECTED_EVALUATION, evalOpenings, signedIn)}
       </div>
     </section>
+
+    <section class="profile-section">
+      <div class="profile-section__heading">
+        <div>
+          <h2>Strongest players</h2>
+          <p class="profile-subtitle">Players on lirep.org with the highest Lichess ratings, updated hourly. Anonymous players' ratings are rounded down to the hundred.</p>
+        </div>
+      </div>
+      <div class="top-players" id="top-players"><p class="community-note">Loading…</p></div>
+    </section>
   `;
+  void loadTopPlayers(main.querySelector<HTMLElement>("#top-players")!);
 
   const message = main.querySelector<HTMLElement>("#community-message")!;
   const tables = main.querySelector<HTMLElement>(`#${BY_EXPECTED_SCORE.id}`)!;

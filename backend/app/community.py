@@ -1,12 +1,15 @@
 """Community page: public numbers and a leaderboard of the studies their owners
 chose to share, plus importing one into your own account."""
 
+import asyncio
+import time
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from . import store
-from .config import MAX_USERS
+from .config import HTTP_TIMEOUT, MAX_USERS
 
 router = APIRouter()
 
@@ -131,6 +134,67 @@ def player(username: str, request: Request) -> dict:
     # score last, in the order they were created.
     studies.sort(key=lambda e: (e["winProbability"] is None, -(e["winProbability"] or 0), e["id"]))
     return {"maxUsers": MAX_USERS, **user, "studies": studies}
+
+
+# The strongest players: registered players' current Lichess ratings,
+# fetched in one request (Lichess accepts up to 300 names) and kept for an
+# hour, so the page doesn't call Lichess on every visit.
+LICHESS_USERS_URL = "https://lichess.org/api/users"
+TOP_PLAYERS_SPEEDS = ("bullet", "blitz", "rapid")
+TOP_PLAYERS_SIZE = 10
+TOP_PLAYERS_TTL_SECONDS = 60 * 60
+_top_players: dict | None = None
+_top_players_at = 0.0
+_top_players_lock = asyncio.Lock()
+
+
+async def _fetch_lichess_users(usernames: list[str]) -> list[dict]:
+    found: list[dict] = []
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        for start in range(0, len(usernames), 300):
+            resp = await client.post(LICHESS_USERS_URL, content=",".join(usernames[start : start + 300]))
+            resp.raise_for_status()
+            found.extend(resp.json())
+    return found
+
+
+@router.get("/api/community/top-players")
+async def top_players() -> dict:
+    """Per speed, the registered players with the highest Lichess ratings.
+    Anonymous players are listed without their name and with their rating
+    rounded down to the hundred (an exact rating could identify them); they
+    are also ranked by that rounded rating, so their place in the list
+    doesn't narrow it down. Provisional ratings, closed accounts and accounts
+    Lichess flagged for breaking its terms are left out."""
+    global _top_players, _top_players_at
+    async with _top_players_lock:
+        if _top_players is None or time.monotonic() - _top_players_at > TOP_PLAYERS_TTL_SECONDS:
+            anonymous = store.anonymous_usernames()
+            usernames = [u["username"] for u in store.list_users()]
+            try:
+                users = await _fetch_lichess_users(usernames) if usernames else []
+            except (httpx.HTTPError, ValueError):
+                if _top_players is not None:
+                    return _top_players  # stale is better than nothing
+                raise HTTPException(status_code=502, detail="Lichess is unavailable")
+            board: dict[str, list[dict]] = {}
+            for speed in TOP_PLAYERS_SPEEDS:
+                rated = []
+                for u in users:
+                    perf = u.get("perfs", {}).get(speed)
+                    if u.get("disabled") or u.get("tosViolation") or not perf or not perf.get("games") or perf.get("prov"):
+                        continue
+                    if u["username"].lower() in anonymous:
+                        rounded = perf["rating"] // 100 * 100
+                        rated.append({"username": None, "title": u.get("title"), "rating": rounded, "roundedDown": True})
+                    else:
+                        rated.append({"username": u["username"], "title": u.get("title"), "rating": perf["rating"], "roundedDown": False})
+                # Named players first among equal ratings, so an anonymous
+                # 2100+ sits below a named 2100.
+                rated.sort(key=lambda r: (r["rating"], not r["roundedDown"]), reverse=True)
+                board[speed] = rated[:TOP_PLAYERS_SIZE]
+            _top_players, _top_players_at = board, time.monotonic()
+    return _top_players
 
 
 @router.get("/api/community/studies/{study_id}")
