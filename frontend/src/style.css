@@ -2693,6 +2693,12 @@ button.study-head__link:disabled:hover {
   gap: 12px;
 }
 
+/* Buttons set their own display, which would otherwise override the
+   hidden attribute (Show answer was always visible). */
+.practice-session [hidden] {
+  display: none !important;
+}
+
 .practice-show-answer {
   align-self: flex-start;
 }
@@ -3584,28 +3590,145 @@ button.study-head__link:disabled:hover {
   font-size: 0.85rem;
 }
 
+/* Screenshots (frontend/public/screenshots), one per theme. */
+.landing__shot {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+
+.landing__zoom {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: zoom-in;
+}
+
+.landing__zoom:hover .landing__shot,
+.landing__zoom:focus-visible .landing__shot {
+  border-color: var(--primary);
+}
+
+/* The zoomed screenshot, as large as fits in the window. */
+.landing__lightbox {
+  max-width: 100vw;
+  max-height: 100vh;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 24px;
+  overflow: auto;
+  background: transparent;
+  border: none;
+  cursor: zoom-out;
+}
+
+.landing__lightbox::backdrop {
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.landing__lightbox img {
+  display: block;
+  width: auto;
+  max-width: min(100%, 1400px);
+  height: auto;
+  max-height: calc(100vh - 48px);
+  margin: auto;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* On a phone, fitting the screen would not enlarge anything: show the
+   image wider than the screen instead, to pan around. */
+@media (max-width: 760px) {
+  .landing__lightbox img {
+    width: 900px;
+    max-width: none;
+    max-height: none;
+  }
+}
+
+.landing__lightbox-close {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.landing__shot--dark,
+:root[data-theme="dark"] .landing__shot--light {
+  display: none;
+}
+
+:root[data-theme="dark"] .landing__shot--dark {
+  display: block;
+}
+
+.landing__hero-shot {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.landing__hero-shot figcaption {
+  margin-top: 10px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Text beside its screenshot, alternating sides; stacked on narrow screens. */
 .landing__features {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  gap: 48px;
+  max-width: 1040px;
+  margin: 0 auto;
 }
 
 .landing__feature {
-  padding: 20px;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: center;
+  gap: 32px;
+}
+
+.landing__feature:nth-child(even) .landing__feature-text {
+  order: 2;
 }
 
 .landing__feature h2 {
   margin: 0 0 8px;
   color: var(--text-strong);
-  font-size: 1.05rem;
+  font-size: 1.3rem;
 }
 
 .landing__feature p {
   margin: 0;
-  line-height: 1.5;
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 760px) {
+  .landing__feature {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .landing__feature:nth-child(even) .landing__feature-text {
+    order: 0;
+  }
 }
 
 /* "Lirep" as an Explorer source: orange, linking to what its data is. */
