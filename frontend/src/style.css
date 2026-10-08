@@ -3651,7 +3651,8 @@ button.study-head__link:disabled:hover {
   color: var(--bad-soft);
 }
 
-.tool-table .price.has-more {
+.tool-table .price.has-more,
+.tool-table .tool-runs.has-more {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
