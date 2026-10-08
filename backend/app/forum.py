@@ -1,6 +1,7 @@
 """The forum: bug reports, suggestions and other topics. Anyone can read;
 signed-in players post under their Lichess username (there is no anonymous
-posting, even for players who are anonymous on the leaderboards)."""
+posting, even for players who are anonymous on the leaderboards), or under
+their pen name if they have one (see USER_ALIASES)."""
 
 from typing import Literal
 
@@ -64,13 +65,20 @@ def _profiles(usernames: list[str]) -> dict[str, bool]:
     return {name: name.lower() not in anonymous for name in usernames}
 
 
+def _shown(username: str, aliases: dict[str, str]) -> str:
+    return aliases.get(username.lower(), username)
+
+
 @router.get("/api/forum/topics")
 def topics(category: Category | None = None) -> list[dict]:
     found = store.list_forum_topics(category)
     profiles = _profiles([t["author"] for t in found] + [t["lastAuthor"] for t in found])
+    aliases = store.user_aliases()
     for t in found:
         t["authorProfile"] = profiles[t["author"]]
         t["lastAuthorProfile"] = profiles[t["lastAuthor"]]
+        t["author"] = _shown(t["author"], aliases)
+        t["lastAuthor"] = _shown(t["lastAuthor"], aliases)
     return found
 
 
@@ -82,9 +90,12 @@ def topic(topic_id: int, request: Request) -> dict:
     me = _viewer(request)
     admin = _is_admin(me)
     profiles = _profiles([post["author"] for post in found["posts"]])
+    aliases = store.user_aliases()
     for post in found["posts"]:
         post["canDelete"] = admin or (me is not None and post["author"].lower() == me.lower())
         post["authorProfile"] = profiles[post["author"]]
+        post["author"] = _shown(post["author"], aliases)
+    found["author"] = _shown(found["author"], aliases)
     return found
 
 

@@ -56,3 +56,13 @@ MAX_USERS = int(os.getenv("MAX_USERS", "100"))
 # Lichess usernames (comma-separated) who may delete any forum post. Kept in
 # the environment, not the code, so the admins aren't published.
 FORUM_ADMINS = {name.strip().lower() for name in os.getenv("FORUM_ADMINS", "").split(",") if name.strip()}
+
+# Pen names shown instead of some players' Lichess usernames, by user number,
+# e.g. "1:Lirep,2:Lirep tester". Kept in the environment, not the code, so the
+# usernames behind them aren't published. A pen name with a space can't be a
+# Lichess username, so no one can sign up under it.
+USER_ALIASES = {
+    int(number): alias.strip()
+    for number, _, alias in (entry.partition(":") for entry in os.getenv("USER_ALIASES", "").split(","))
+    if number.strip().isdigit() and alias.strip()
+}

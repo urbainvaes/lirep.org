@@ -3,7 +3,7 @@ chose to share, plus importing one into your own account."""
 
 import asyncio
 import time
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -35,12 +35,47 @@ def _is_mine(owner: str, me: str | None) -> bool:
     return me is not None and owner.lower() == me.lower()
 
 
-def _owner_fields(owner: str, me: str | None, anonymous: set[str]) -> dict:
+class _Names(NamedTuple):
+    """The Lichess usernames others may not see (lowercased): anonymous
+    players, shown without a name, and players with a pen name (see
+    USER_ALIASES), shown under it."""
+
+    anonymous: frozenset[str] = frozenset()
+    aliases: dict[str, str] = {}
+
+    def public(self, username: str) -> str | None:
+        """How others see `username`: None for an anonymous player."""
+        if username.lower() in self.anonymous:
+            return None
+        return self.aliases.get(username.lower(), username)
+
+
+def _names() -> _Names:
+    return _Names(frozenset(store.anonymous_usernames()), store.user_aliases())
+
+
+def _owner_fields(owner: str, me: str | None, names: _Names) -> dict:
     """Who a shared study belongs to, as others may see it: an anonymous
-    player's name is only shown to themselves."""
-    is_anonymous = owner.lower() in anonymous
+    player's name, or the username behind a pen name, is only shown to
+    themselves."""
     mine = _is_mine(owner, me)
-    return {"owner": owner if mine or not is_anonymous else None, "anonymous": is_anonymous, "mine": mine}
+    return {
+        "owner": owner if mine else names.public(owner),
+        "anonymous": owner.lower() in names.anonymous,
+        "mine": mine,
+    }
+
+
+def _public_settings(settings: dict, owner: str, me: str | None, names: _Names) -> dict:
+    """Explorer settings as others may see them. A study built on the games
+    of a player whose name is hidden would give that name away, so others
+    browse it with the Lichess database instead."""
+    player = settings.get("player")
+    if settings.get("database") != "player" or not player or _is_mine(owner, me):
+        return settings
+    if player.lower() not in names.anonymous and player.lower() not in names.aliases:
+        return settings
+    return {**settings, "database": "lichess", "player": None}
 
 
 def _entry(
@@ -49,7 +84,7 @@ def _entry(
     me: str | None,
     ranked_source: Source = "lichess",
     any_source: bool = False,
-    anonymous: set[str] = frozenset(),
+    names: _Names = _Names(),
 ) -> dict:
     """A leaderboard row. Only win probabilities calculated with
     `ranked_source`'s Explorer get a score and a rank; the rest are listed
@@ -76,7 +111,7 @@ def _entry(
         "id": study["id"],
         "name": study["name"],
         "side": study["side"],
-        **_owner_fields(owner, me, anonymous),
+        **_owner_fields(owner, me, names),
         "winProbability": probability,
         "reason": reason,
         "source": source,
@@ -110,30 +145,46 @@ def summary() -> dict:
 @router.get("/api/community/players")
 def players() -> dict:
     """Everyone registered, numbered in registration order. Anonymous players
-    are counted, but without their name."""
-    players = [
-        {**player, "username": None} if player["anonymous"] else player for player in store.list_users()
-    ]
+    are counted, but without their name; players with a pen name are listed
+    under it."""
+    names = _names()
+    players = [{**player, "username": names.public(player["username"])} for player in store.list_users()]
     return {"maxUsers": MAX_USERS, "players": players}
 
 
 @router.get("/api/community/players/{username}")
 def player(username: str, request: Request) -> dict:
     """A public profile: when they joined and the studies they chose to share."""
-    user = store.get_user(username)
     me = request.session.get("username")
+    names = _names()
+    # A pen name leads to the profile; the username behind it doesn't, except
+    # for its owner, so it can't be confirmed by guessing.
+    by_alias = {alias.lower(): name for name, alias in names.aliases.items()}
+    user = store.get_user(by_alias.get(username.lower(), username))
+    if user is None:
+        raise HTTPException(status_code=404, detail="not found")
+    mine = _is_mine(user["username"], me)
+    aliased = user["username"].lower() in names.aliases
+    if not mine and aliased and username.lower() not in by_alias:
+        raise HTTPException(status_code=404, detail="not found")
     # An anonymous player's profile would tie their name to their studies.
-    if user is None or (user["anonymous"] and not _is_mine(user["username"], me)):
+    if user["anonymous"] and not mine:
         raise HTTPException(status_code=404, detail="not found")
     studies = [
-        _entry(owner, study, me, any_source=True)
+        _entry(owner, study, me, any_source=True, names=names)
         for owner, study in store.list_shared_studies()
         if owner.lower() == user["username"].lower()
     ]
     # Best win probability first (however it was calculated); studies without a
     # score last, in the order they were created.
     studies.sort(key=lambda e: (e["winProbability"] is None, -(e["winProbability"] or 0), e["id"]))
-    return {"maxUsers": MAX_USERS, **user, "studies": studies}
+    return {
+        "maxUsers": MAX_USERS,
+        **user,
+        "username": names.aliases[user["username"].lower()] if aliased else user["username"],
+        "aliased": aliased,
+        "studies": studies,
+    }
 
 
 # The strongest players: registered players' current Lichess ratings,
@@ -164,12 +215,13 @@ async def top_players() -> dict:
     Anonymous players are listed without their name and with their rating
     rounded down to the hundred (an exact rating could identify them); they
     are also ranked by that rounded rating, so their place in the list
-    doesn't narrow it down. Provisional ratings, closed accounts and accounts
+    doesn't narrow it down. Players with a pen name are listed under it, the
+    same way: rounded rating and no title. Provisional ratings, closed accounts and accounts
     Lichess flagged for breaking its terms are left out."""
     global _top_players, _top_players_at
     async with _top_players_lock:
         if _top_players is None or time.monotonic() - _top_players_at > TOP_PLAYERS_TTL_SECONDS:
-            anonymous = store.anonymous_usernames()
+            names = _names()
             usernames = [u["username"] for u in store.list_users()]
             try:
                 users = await _fetch_lichess_users(usernames) if usernames else []
@@ -184,9 +236,13 @@ async def top_players() -> dict:
                     perf = u.get("perfs", {}).get(speed)
                     if u.get("disabled") or u.get("tosViolation") or not perf or not perf.get("games") or perf.get("prov"):
                         continue
-                    if u["username"].lower() in anonymous:
+                    if u["username"].lower() in names.anonymous:
                         rounded = perf["rating"] // 100 * 100
                         rated.append({"username": None, "title": u.get("title"), "rating": rounded, "roundedDown": True})
+                    elif u["username"].lower() in names.aliases:
+                        rounded = perf["rating"] // 100 * 100
+                        alias = names.aliases[u["username"].lower()]
+                        rated.append({"username": alias, "title": None, "rating": rounded, "roundedDown": True})
                     else:
                         rated.append({"username": u["username"], "title": u.get("title"), "rating": perf["rating"], "roundedDown": False})
                 # Named players first among equal ratings, so an anonymous
@@ -207,14 +263,15 @@ def shared_study(study_id: int, request: Request) -> dict:
         raise HTTPException(status_code=404, detail="not found")
     owner, study = found
     me = request.session.get("username")
+    names = _names()
     return {
         "id": study["id"],
         "name": study["name"],
         "side": study["side"],
-        **_owner_fields(owner, me, store.anonymous_usernames()),
+        **_owner_fields(owner, me, names),
         "tree": study["tree"],
         "startNodeId": study["startNodeId"],
-        "explorerSettings": study["explorerSettings"],
+        "explorerSettings": _public_settings(study["explorerSettings"], owner, me, names),
     }
 
 
@@ -224,8 +281,8 @@ def openings(request: Request, source: Source = "lichess") -> list[dict]:
     studies with a comparable score appear: win probabilities calculated with
     `source`'s Explorer. Everything else is left out. Ranks are per side."""
     me = request.session.get("username")
-    anonymous = store.anonymous_usernames()
-    entries = [_entry(owner, study, me, source, anonymous=anonymous) for owner, study in store.list_shared_studies()]
+    names = _names()
+    entries = [_entry(owner, study, me, source, names=names) for owner, study in store.list_shared_studies()]
     shown: list[dict] = []
     for side in ("white", "black"):
         ranked = sorted(
@@ -240,7 +297,7 @@ def openings(request: Request, source: Source = "lichess") -> list[dict]:
 
 
 def _eval_entry(
-    owner: str, study: dict, me: str | None, ranked_source: Source, anonymous: set[str] = frozenset()
+    owner: str, study: dict, me: str | None, ranked_source: Source, names: _Names = _Names()
 ) -> dict | None:
     """A row of the expected-evaluation leaderboard, or None when the study's
     expected evaluation is not comparable: not calculated, a legacy server
@@ -259,7 +316,7 @@ def _eval_entry(
         "id": study["id"],
         "name": study["name"],
         "side": study["side"],
-        **_owner_fields(owner, me, anonymous),
+        **_owner_fields(owner, me, names),
         "evalCp": eval_cp,
         "depth": depth,
         "source": settings["source"],
@@ -279,10 +336,10 @@ def openings_by_eval(request: Request, source: Source = "lichess") -> list[dict]
     of prep instead of expected score. Only evaluations with Stockfish at depth
     MIN_LEADERBOARD_EVAL_DEPTH ("Balanced") or more are ranked."""
     me = request.session.get("username")
-    anonymous = store.anonymous_usernames()
+    names = _names()
     entries = [
         e for owner, study in store.list_shared_studies()
-        if (e := _eval_entry(owner, study, me, source, anonymous)) is not None
+        if (e := _eval_entry(owner, study, me, source, names)) is not None
     ]
     shown: list[dict] = []
     for side in ("white", "black"):
@@ -311,7 +368,7 @@ def import_study(study_id: int, request: Request) -> dict:
         me,
         study["name"],
         study["tree"],
-        study["explorerSettings"],
+        _public_settings(study["explorerSettings"], owner, me, _names()),
         study["side"],
         study["startNodeId"],
         shared=False,

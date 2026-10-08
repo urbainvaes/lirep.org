@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
-from .config import DEFAULT_EXPLORER_SOURCE
+from .config import DEFAULT_EXPLORER_SOURCE, USER_ALIASES
 
 # LIREP_DB_PATH lets a deployment keep the database outside the source tree.
 DB_PATH = Path(os.getenv("LIREP_DB_PATH") or Path(__file__).resolve().parent.parent / "lirep.db")
@@ -368,6 +368,18 @@ def anonymous_usernames() -> set[str]:
     with _connect() as conn:
         rows = conn.execute("SELECT username FROM users WHERE anonymous = 1").fetchall()
     return {row["username"].lower() for row in rows}
+
+
+def user_aliases() -> dict[str, str]:
+    """The pen names of the players in USER_ALIASES, by lowercased username."""
+    if not USER_ALIASES:
+        return {}
+    numbers = list(USER_ALIASES)
+    with _connect() as conn:
+        rows = conn.execute(
+            f"SELECT id, username FROM users WHERE id IN ({','.join('?' * len(numbers))})", numbers
+        ).fetchall()
+    return {row["username"].lower(): USER_ALIASES[row["id"]] for row in rows}
 
 
 def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] | None:
@@ -816,3 +828,4 @@ def set_study_game_layout(study_id: int, layout: list[dict[str, Any]]) -> bool:
             (json.dumps([section["name"] for section in layout if section["name"]]), study_id),
         )
     return True
+

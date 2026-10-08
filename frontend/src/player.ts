@@ -14,7 +14,8 @@ interface SharedStudy {
 interface PlayerResponse {
   maxUsers: number;
   number: number;
-  username: string;
+  username: string; // a pen name when `aliased`
+  aliased: boolean;
   joined: string;
   studies: SharedStudy[];
 }
@@ -45,7 +46,7 @@ function render(main: HTMLElement, data: PlayerResponse): void {
     <p class="doc-intro"><a class="community-owner" href="/players.html">← Players</a></p>
     <div class="profile-header">
       <h1>${escapeHtml(data.username)}
-        <a class="lichess-link" href="https://lichess.org/@/${encodeURIComponent(data.username)}" target="_blank" rel="noopener noreferrer" title="Lichess profile" aria-label="Lichess profile of ${escapeHtml(data.username)}"><span class="lichess-link__icon" aria-hidden="true"></span></a>
+        ${data.aliased ? "" : `<a class="lichess-link" href="https://lichess.org/@/${encodeURIComponent(data.username)}" target="_blank" rel="noopener noreferrer" title="Lichess profile" aria-label="Lichess profile of ${escapeHtml(data.username)}"><span class="lichess-link__icon" aria-hidden="true"></span></a>`}
       </h1>
       <p class="profile-subtitle">Lirep user #${data.number}${limit} · joined ${escapeHtml(formatJoined(data.joined))}</p>
     </div>
