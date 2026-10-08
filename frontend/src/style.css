@@ -9,6 +9,20 @@
   src: url("/fonts/lichess.woff2") format("woff2");
 }
 
+/* On phones, two quick taps on a button (stepping through moves, say) would
+   zoom the page: "manipulation" turns double-tap zoom off on what can be
+   tapped, while pinch zoom still works. */
+button,
+a,
+summary,
+label,
+select,
+input,
+[role="button"],
+[data-node-id] {
+  touch-action: manipulation;
+}
+
 [data-icon]:before {
   font-family: "lichess";
   content: attr(data-icon);
