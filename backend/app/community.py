@@ -55,12 +55,12 @@ def _names() -> _Names:
 
 
 def _owner_fields(owner: str, me: str | None, names: _Names) -> dict:
-    """Who a shared study belongs to, as others may see it: an anonymous
-    player's name, or the username behind a pen name, is only shown to
-    themselves."""
+    """Who a shared study belongs to: an anonymous player's name is only
+    shown to themselves; a pen name is shown to everyone, its owner too."""
     mine = _is_mine(owner, me)
+    public = names.public(owner)
     return {
-        "owner": owner if mine else names.public(owner),
+        "owner": owner if mine and public is None else public,
         "anonymous": owner.lower() in names.anonymous,
         "mine": mine,
     }

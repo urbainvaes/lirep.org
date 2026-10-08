@@ -10,7 +10,15 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, MAX_USERS, REDIRECT_URI
-from .store import delete_account, get_user, register_user, register_user_limited, set_user_anonymous, touch_user
+from .store import (
+    delete_account,
+    get_user,
+    register_user,
+    register_user_limited,
+    set_user_anonymous,
+    touch_user,
+    user_aliases,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +251,15 @@ async def me(request: Request) -> dict:
         return {"authenticated": False}
     # Every page asks /api/me on load, which makes it a cheap "was seen" signal.
     touch_user(username)
-    return {"authenticated": True, "username": username, "title": request.session.get("title")}
+    # The header shows the pen name, if any; `username` stays the Lichess one,
+    # which the Explorer's "player" database needs.
+    display_name = user_aliases().get(username.lower(), username)
+    return {
+        "authenticated": True,
+        "username": username,
+        "displayName": display_name,
+        "title": request.session.get("title"),
+    }
 
 
 RATED_SPEEDS = ("bullet", "blitz", "rapid", "classical")
