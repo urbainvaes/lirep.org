@@ -22,3 +22,6 @@ backend/*.db-shm
 .DS_Store
 Thumbs.db
 *.swp
+
+# Notes and drafts, kept locally
+ideas/
