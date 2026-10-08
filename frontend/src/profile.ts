@@ -151,7 +151,51 @@ function renderProfile(
       </label>
       <span id="profile-anonymous-status" class="profile-subtitle" role="status"></span>
     </section>
+
+    <section class="profile-section profile-delete">
+      <div class="profile-section__heading">
+        <div>
+          <h2>Delete account</h2>
+          <p class="profile-subtitle">Deletes your studies, their games and your practice history, and signs you out.
+            Your forum posts are deleted too; a topic you started that others replied to stays for their replies,
+            without your name. This cannot be undone. Export any study you want to keep first.</p>
+        </div>
+      </div>
+      <button id="delete-account-btn" class="btn btn-danger" type="button">Delete account</button>
+      <span id="delete-account-status" class="profile-subtitle" role="status"></span>
+    </section>
   `;
+}
+
+function bindDeleteAccount(username: string): void {
+  const button = document.getElementById("delete-account-btn") as HTMLButtonElement | null;
+  const status = document.getElementById("delete-account-status");
+  if (!button || !status) return;
+  button.addEventListener("click", async () => {
+    const typed = window.prompt(
+      `This permanently deletes your Lirep account and all your studies.\n\nType your username (${username}) to confirm:`,
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== username.toLowerCase()) {
+      status.textContent = "The username didn't match; nothing was deleted.";
+      return;
+    }
+    button.disabled = true;
+    status.textContent = "Deleting…";
+    try {
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: typed }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      window.location.href = "/";
+    } catch {
+      button.disabled = false;
+      status.textContent = "Could not delete the account. Please try again.";
+    }
+  });
 }
 
 function bindAnonymousToggle(): void {
@@ -206,6 +250,7 @@ async function init(): Promise<void> {
     const practice: Record<string, PracticeSummary> = practiceRes?.ok ? await practiceRes.json() : {};
     renderProfile(main, profile, studies, practice);
     bindAnonymousToggle();
+    bindDeleteAccount(profile.username);
   } catch {
     renderSignedOut(main);
   }

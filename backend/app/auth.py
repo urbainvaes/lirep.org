@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, MAX_USERS, REDIRECT_URI
-from .store import get_user, register_user, register_user_limited, set_user_anonymous, touch_user
+from .store import delete_account, get_user, register_user, register_user_limited, set_user_anonymous, touch_user
 
 logger = logging.getLogger(__name__)
 
@@ -175,19 +175,47 @@ async def callback(
     return RedirectResponse(FRONTEND_URL)
 
 
+async def _revoke_lichess_token(token: str) -> None:
+    """Best effort: Lirep's access to the Lichess account ends either way
+    when the session is cleared."""
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            resp = await client.delete(TOKEN_URL, headers={"Authorization": f"Bearer {token}"})
+        if resp.is_error:
+            logger.warning("Lichess token revocation failed: HTTP %s", resp.status_code)
+    except httpx.HTTPError as exc:
+        logger.warning("Could not revoke Lichess token: %s", type(exc).__name__)
+
+
 @router.get("/auth/logout")
 async def logout(request: Request) -> RedirectResponse:
     token = request.session.pop("access_token", None)
     request.session.clear()
     if token:
-        try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-                resp = await client.delete(TOKEN_URL, headers={"Authorization": f"Bearer {token}"})
-            if resp.is_error:
-                logger.warning("Lichess token revocation failed: HTTP %s", resp.status_code)
-        except httpx.HTTPError as exc:
-            logger.warning("Could not revoke Lichess token during logout: %s", type(exc).__name__)
+        await _revoke_lichess_token(token)
     return RedirectResponse(FRONTEND_URL)
+
+
+class DeleteAccountIn(BaseModel):
+    # The username, typed again: deleting can't happen by accident.
+    confirm: str
+
+
+@router.delete("/api/account")
+async def delete_my_account(payload: DeleteAccountIn, request: Request) -> dict:
+    """Deletes the signed-in player's account and everything that is theirs
+    (see store.delete_account), then signs them out and revokes Lirep's
+    Lichess token."""
+    username = request.session.get("username")
+    token = request.session.get("access_token")
+    if not username or not token:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    if payload.confirm.strip().lower() != username.lower():
+        raise HTTPException(status_code=422, detail="The username doesn't match.")
+    delete_account(username)
+    request.session.clear()
+    await _revoke_lichess_token(token)
+    return {"deleted": True}
 
 
 @router.get("/api/lichess-token")

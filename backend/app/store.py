@@ -829,3 +829,44 @@ def set_study_game_layout(study_id: int, layout: list[dict[str, Any]]) -> bool:
         )
     return True
 
+
+DELETED_AUTHOR = "[deleted]"
+
+
+def delete_account(username: str) -> None:
+    """Deletes a player and everything that is theirs: studies (with their
+    games and practice history), cached rating, and forum posts. A topic they
+    started that others replied to is kept for those replies, with its author
+    and opening post replaced; without replies it is deleted."""
+    with _connect() as conn:
+        study_ids = [r[0] for r in conn.execute("SELECT id FROM studies WHERE owner = ? COLLATE NOCASE", (username,))]
+        conn.executemany("DELETE FROM study_games WHERE study_id = ?", [(i,) for i in study_ids])
+        conn.execute("DELETE FROM practice_state WHERE owner = ? COLLATE NOCASE", (username,))
+        conn.execute("DELETE FROM studies WHERE owner = ? COLLATE NOCASE", (username,))
+        conn.execute("DELETE FROM rating_cache WHERE username = ? COLLATE NOCASE", (username,))
+
+        for (topic_id,) in conn.execute(
+            "SELECT id FROM forum_topics WHERE author = ? COLLATE NOCASE", (username,)
+        ).fetchall():
+            others = conn.execute(
+                "SELECT COUNT(*) FROM forum_posts WHERE topic_id = ? AND author != ? COLLATE NOCASE", (topic_id, username)
+            ).fetchone()[0]
+            if others:
+                first = conn.execute("SELECT MIN(id) FROM forum_posts WHERE topic_id = ?", (topic_id,)).fetchone()[0]
+                conn.execute(
+                    "UPDATE forum_posts SET author = ?, body = ? WHERE id = ?",
+                    (DELETED_AUTHOR, "This post was deleted with its author's account.", first),
+                )
+                conn.execute("UPDATE forum_topics SET author = ? WHERE id = ?", (DELETED_AUTHOR, topic_id))
+            else:
+                conn.execute("DELETE FROM forum_posts WHERE topic_id = ?", (topic_id,))
+                conn.execute("DELETE FROM forum_topics WHERE id = ?", (topic_id,))
+        conn.execute("DELETE FROM forum_posts WHERE author = ? COLLATE NOCASE", (username,))
+        # A topic's last activity follows its remaining posts.
+        conn.execute(
+            """
+            UPDATE forum_topics SET last_post_at =
+                (SELECT MAX(created_at) FROM forum_posts WHERE topic_id = forum_topics.id)
+            """
+        )
+        conn.execute("DELETE FROM users WHERE username = ? COLLATE NOCASE", (username,))

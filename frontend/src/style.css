@@ -2526,6 +2526,14 @@ button.study-head__link:disabled:hover {
   color: var(--bad);
 }
 
+.profile-delete {
+  margin-top: 40px;
+}
+
+.profile-delete .btn-danger {
+  margin-right: 12px;
+}
+
 .btn-danger {
   background: #7e2424;
   color: #fff;

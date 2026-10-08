@@ -60,9 +60,10 @@ def _require_poster(request: Request) -> str:
 
 def _profiles(usernames: list[str]) -> dict[str, bool]:
     """Which authors have a public profile to link to: everyone but the
-    players who chose to be anonymous (whose profiles are hidden)."""
+    players who chose to be anonymous (whose profiles are hidden) and
+    deleted accounts."""
     anonymous = store.anonymous_usernames()
-    return {name: name.lower() not in anonymous for name in usernames}
+    return {name: name != store.DELETED_AUTHOR and name.lower() not in anonymous for name in usernames}
 
 
 def _shown(username: str, aliases: dict[str, str]) -> str:
