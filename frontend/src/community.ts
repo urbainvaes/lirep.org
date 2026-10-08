@@ -214,7 +214,7 @@ function renderLeaderboard<T extends LeaderboardRow>(board: Leaderboard<T>, open
 // The leaderboards rank one Explorer's scores at a time, since the two
 // aren't comparable: Lichess's (the default) or the local 2016 sample's.
 const SAMPLE_TITLE =
-  `This site's own Explorer: ${LIREP_DATASET} (about 10.7 million rated games), a much smaller and older ` +
+  `This site's own Explorer: ${LIREP_DATASET} (about 16.7 million rated games), a much smaller and older ` +
   "sample than Lichess's Explorer, so its scores are ranked separately.";
 
 interface TopPlayer {

@@ -15,7 +15,7 @@ router = APIRouter()
 
 LEADERBOARD_SIZE = 10
 # The leaderboards rank one Explorer's scores at a time: Lichess's, or the
-# local Lirep Explorer's (a two-month 2016 sample). Scores from the two are
+# local Lirep Explorer's (a three-month 2016 sample). Scores from the two are
 # not comparable, so they are never ranked together.
 Source = Literal["lichess", "lirep"]
 # The "Balanced" Stockfish depth on a study's Stats page; shallower expected

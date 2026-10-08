@@ -1,8 +1,8 @@
 # Local Lichess Opening Explorer
 
-This directory holds a local Lichess opening-explorer instance and the
-February and March 2016 archives of rated standard games (about 10.7 million
-games, the March archive alone 5,801,234) used to seed it. At about 2 GB
+This directory holds a local Lichess opening-explorer instance, seeded with
+the February, March and April 2016 archives of rated standard games (about
+16.7 million games: 5,015,361, 5,801,234 and 5,922,667). At about 3 GB
 compressed in total, these older months are intended as a test dataset, not a
 substitute for Lichess's full historical Explorer. Other months can be added
 with `download-month.sh YYYY-MM` and `import-month.sh YYYY-MM`; expect roughly
@@ -14,8 +14,10 @@ later; its license and attribution are preserved in `upstream/`.
 The local importer skips an invalid game and continues its batch, rather than
 discarding subsequent valid games in that batch.
 
-The PGN archive and generated database are local data and are ignored by Git.
-The archive is about 1.04 GB compressed. Upstream documents an imported
+The PGN archives and generated database are local data and are ignored by Git.
+An archive is only needed while it is imported and can be deleted afterwards;
+the database holds everything the Explorer serves. A 2016 archive is about
+1 GB compressed. Upstream documents an imported
 database below roughly three times the compressed PGN size.
 
 ## Launching (already built and imported)

@@ -146,7 +146,7 @@ correctly. Do not use the development defaults as production secrets.
 
 The optional local source is the upstream Lichess Opening Explorer, packaged
 and run from the `explorer/` directory. The checked-in data covers rated
-standard games from February and March 2016; it is a small test archive, not a
+standard games from February to April 2016; it is a small test archive, not a
 replacement for Lichess's full Explorer. To run an already-built local
 instance, follow [`explorer/README.md`](explorer/README.md), then set
 `LOCAL_LICHESS_EXPLORER_URL=http://127.0.0.1:9002` in `backend/.env` and

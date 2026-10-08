@@ -3,7 +3,7 @@ import { escapeHtml } from "./layout";
 /** What the Lirep (local) Explorer contains: Lichess's own public game
  * database (CC0), but only these months. Shown wherever Lirep is named so it
  * is clear the games come from Lichess. */
-export const LIREP_DATASET = "Lichess games, Feb–Mar 2016";
+export const LIREP_DATASET = "Lichess games, Feb–Apr 2016";
 
 export type ExplorerSpeed = "bullet" | "blitz" | "rapid" | "classical";
 
