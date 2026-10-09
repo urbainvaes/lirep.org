@@ -4524,3 +4524,188 @@ button.study-head__link:disabled:hover {
 #new-section-btn {
   margin-top: 20px;
 }
+
+/* doc/expected-score.html: a wide page with diagrams (inline SVG, drawn
+   with the theme's colours). */
+.xs-page {
+  max-width: 1200px;
+}
+
+.xs-page > section {
+  margin-bottom: 36px;
+}
+
+.xs-figure {
+  margin: 18px 0 22px;
+  padding: 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.xs-figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.xs-figure figcaption {
+  margin-top: 10px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.xs-figure text {
+  fill: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  dominant-baseline: middle;
+}
+
+.xs-own text,
+.xs-opp text,
+.xs-value text,
+.xs-weight,
+.xs-caption,
+.xs-bar-label {
+  text-anchor: middle;
+}
+
+.xs-own rect {
+  fill: color-mix(in srgb, var(--primary) 16%, var(--panel-bg));
+  stroke: var(--primary);
+  stroke-width: 1.5;
+}
+
+.xs-own text {
+  font-weight: 700;
+}
+
+.xs-opp rect {
+  fill: var(--card-nested-bg);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.xs-out rect {
+  stroke-dasharray: 5 4;
+  stroke: var(--text-dim);
+}
+
+.xs-ignored rect {
+  stroke-dasharray: 5 4;
+  stroke: var(--text-dim);
+  opacity: 0.6;
+}
+
+.xs-figure .xs-ignored text {
+  fill: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.xs-value rect {
+  fill: color-mix(in srgb, var(--good) 16%, var(--panel-bg));
+  stroke: var(--good);
+}
+
+.xs-value--reply rect {
+  fill: color-mix(in srgb, var(--good) 9%, var(--panel-bg));
+  stroke-dasharray: 5 4;
+}
+
+.xs-edge {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1.6;
+}
+
+.xs-edge--hint {
+  stroke-dasharray: 4 5;
+}
+
+.xs-arrowhead {
+  fill: var(--text-dim);
+}
+
+.xs-figure .xs-weight {
+  fill: var(--primary);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.xs-figure .xs-caption {
+  fill: var(--text-dim);
+  font-size: 13px;
+}
+
+.xs-figure .xs-caption.xs-left,
+.xs-figure .xs-legend {
+  text-anchor: start;
+}
+
+.xs-figure .xs-legend {
+  fill: var(--text-dim);
+  font-size: 14px;
+}
+
+.xs-figure .xs-equals {
+  font-size: 34px;
+  text-anchor: middle;
+  fill: var(--text-dim);
+}
+
+.xs-table__frame {
+  fill: var(--card-nested-bg);
+  stroke: var(--border);
+}
+
+.xs-figure .xs-table__title {
+  font-weight: 700;
+}
+
+.xs-figure .xs-table__head {
+  fill: var(--text-dim);
+  font-size: 13px;
+}
+
+.xs-table__mark {
+  fill: color-mix(in srgb, var(--primary) 14%, transparent);
+  stroke: var(--primary);
+}
+
+.xs-figure .xs-table__note {
+  fill: var(--good);
+  font-weight: 700;
+}
+
+.xs-bar-track {
+  fill: var(--card-nested-bg);
+}
+
+.xs-bar {
+  fill: var(--primary);
+}
+
+.xs-figure .xs-bar-label {
+  font-weight: 700;
+}
+
+.xs-figure .xs-bar-label.xs-after {
+  text-anchor: start;
+}
+
+.xs-formula {
+  padding: 12px 16px;
+  background: var(--card-nested-bg);
+  border-left: 3px solid var(--good);
+  border-radius: 0 6px 6px 0;
+  font-size: 1.02rem;
+}
+
+.xs-table-wrap {
+  overflow-x: auto;
+}
+
+.xs-cases td:first-child {
+  width: 45%;
+}

@@ -35,6 +35,7 @@ export default defineConfig({
         "doc/index": resolve(__dirname, "doc/index.html"),
         "doc/studies": resolve(__dirname, "doc/studies.html"),
         "doc/stats": resolve(__dirname, "doc/stats.html"),
+        "doc/expected-score": resolve(__dirname, "doc/expected-score.html"),
         "doc/practice": resolve(__dirname, "doc/practice.html"),
         "doc/practice-design": resolve(__dirname, "doc/practice-design.html"),
       },

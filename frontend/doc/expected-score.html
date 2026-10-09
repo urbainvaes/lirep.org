@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        document.documentElement.dataset.theme =
+          t === "light" || t === "dark" ? t : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      } catch (e) {}
+    </script>
+    <meta name="description" content="How Lirep calculates a study's expected score and coverage, with diagrams and a worked example." />
+    <title>Expected score · lirep.org</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#e4e1dd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#2e2a24" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="Lirep" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-title" href="/">
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
+          <span class="site-name">lirep<span class="tld">.org</span></span>
+        </a>
+        <nav class="site-nav">
+          <a href="/practice.html">Practice</a>
+          <a href="/community.html">Community</a>
+          <a href="/forum.html">Forum</a>
+          <a href="/doc/index.html">Doc</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <div class="site-auth" id="auth-area">
+          <a class="btn btn-primary" href="/auth/login">Sign in</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="site-main doc-main xs-page">
+      <h1 class="page-title">How the expected score is calculated</h1>
+      <p class="doc-intro">
+        A study's expected score is the score you would get, on average, if you always played your prepared moves
+        and your opponents chose their moves like the players in the Opening Explorer. This page describes the
+        calculation exactly, with a worked example. The numbers in the example are made up, so that the
+        arithmetic is easy to follow.
+      </p>
+
+      <section>
+        <h2>The idea</h2>
+        <p>
+          Your study is a tree of moves. On your side, it has one prepared move per position; on your
+          opponent's side, it can have several moves, the replies you've prepared for. The calculation walks
+          this tree from the study's starting point, with three rules:
+        </p>
+        <ol>
+          <li><strong>You always play your prepared move.</strong></li>
+          <li>
+            <strong>Your opponent replies as players do in the Explorer.</strong> In each position, each move
+            the Explorer lists gets a weight: its number of games, divided by the total of the listed moves.
+          </li>
+          <li>
+            <strong>Where your preparation ends, the line counts with the results of its last move</strong>, as
+            the Explorer lists them in the position before that move: its share of wins, draws and losses, scored
+            as a win 1, a draw ½ and a loss 0, from your side.
+          </li>
+        </ol>
+        <p>
+          The expected score is then the weighted average of the values where the lines end: the
+          probability of reaching the end of each line, times its value, summed over all lines.
+        </p>
+      </section>
+
+      <section>
+        <h2>A worked example</h2>
+        <p>
+          A study for White in the Caro-Kann Fantasy, starting after 3.f3. Black's replies in the Explorer:
+          3...dxe4 in 50% of the games, 3...e6 in 30%, 3...g6 in 20% (made-up numbers, as all numbers below).
+        </p>
+        <figure class="xs-figure">
+          <svg viewBox="0 0 1000 420" role="img" aria-labelledby="xs-tree-title">
+            <title id="xs-tree-title">The example study as a tree, with the opponent's reply weights and the value of each line's end</title>
+            <defs>
+              <marker id="xs-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="xs-arrowhead" />
+              </marker>
+            </defs>
+
+            <!-- edges -->
+            <path class="xs-edge" d="M120,210 C170,210 170,70 220,70" marker-end="url(#xs-arrow)" />
+            <path class="xs-edge" d="M120,210 L220,210" marker-end="url(#xs-arrow)" />
+            <path class="xs-edge" d="M120,210 C170,210 170,350 220,350" marker-end="url(#xs-arrow)" />
+            <path class="xs-edge" d="M330,70 L420,70" marker-end="url(#xs-arrow)" />
+            <path class="xs-edge" d="M330,210 L420,210" marker-end="url(#xs-arrow)" />
+            <path class="xs-edge" d="M510,210 C555,210 555,160 600,160" marker-end="url(#xs-arrow)" />
+            <path class="xs-edge" d="M510,210 C555,210 555,270 600,270" marker-end="url(#xs-arrow)" />
+            <path class="xs-edge" d="M715,160 L780,160" marker-end="url(#xs-arrow)" />
+
+            <!-- weights -->
+            <text class="xs-weight" x="150" y="118">50%</text>
+            <text class="xs-weight" x="172" y="198">30%</text>
+            <text class="xs-weight" x="150" y="306">20%</text>
+            <text class="xs-weight" x="532" y="168">60%</text>
+            <text class="xs-weight" x="532" y="265">40%</text>
+
+            <!-- nodes: yours -->
+            <g class="xs-own"><rect x="30" y="190" width="90" height="40" rx="8" /><text x="75" y="215">3.f3</text></g>
+            <text class="xs-caption" x="75" y="250">start</text>
+            <g class="xs-own"><rect x="420" y="50" width="90" height="40" rx="8" /><text x="465" y="75">4.fxe4</text></g>
+            <g class="xs-own"><rect x="420" y="190" width="90" height="40" rx="8" /><text x="465" y="215">4.Nc3</text></g>
+            <g class="xs-own"><rect x="780" y="140" width="90" height="40" rx="8" /><text x="825" y="165">5.a3</text></g>
+
+            <!-- nodes: the opponent's -->
+            <g class="xs-opp"><rect x="220" y="50" width="110" height="40" rx="8" /><text x="275" y="75">3...dxe4</text></g>
+            <g class="xs-opp"><rect x="220" y="190" width="110" height="40" rx="8" /><text x="275" y="215">3...e6</text></g>
+            <g class="xs-opp xs-out"><rect x="220" y="330" width="110" height="40" rx="8" /><text x="275" y="355">3...g6</text></g>
+            <g class="xs-opp"><rect x="600" y="140" width="115" height="40" rx="8" /><text x="657" y="165">4...Bb4</text></g>
+            <g class="xs-opp xs-out"><rect x="600" y="250" width="115" height="40" rx="8" /><text x="657" y="275">4...dxe4</text></g>
+
+            <!-- values where lines end -->
+            <g class="xs-value"><rect x="525" y="52" width="250" height="36" rx="18" /><text x="650" y="75">4.fxe4's own results: 58%</text></g>
+            <g class="xs-value"><rect x="885" y="142" width="105" height="36" rx="18" /><text x="937" y="165">5.a3: 55%</text></g>
+            <g class="xs-value xs-value--reply"><rect x="730" y="252" width="200" height="36" rx="18" /><text x="830" y="275">4...dxe4's own: 48%</text></g>
+            <g class="xs-value xs-value--reply"><rect x="345" y="332" width="200" height="36" rx="18" /><text x="445" y="355">3...g6's own: 51%</text></g>
+
+            <!-- legend -->
+            <g class="xs-own"><rect x="610" y="335" width="22" height="16" rx="4" /></g>
+            <text class="xs-legend" x="640" y="348">your move</text>
+            <g class="xs-opp"><rect x="740" y="335" width="22" height="16" rx="4" /></g>
+            <text class="xs-legend" x="770" y="348">opponent's move</text>
+            <g class="xs-opp xs-out"><rect x="610" y="365" width="22" height="16" rx="4" /></g>
+            <text class="xs-legend" x="640" y="378">not answered: the line ends with it</text>
+          </svg>
+          <figcaption>
+            Your moves in blue, your opponent's in grey, the opponent's weights on the arrows, and the value of each
+            line's end in green: the results of the line's last move.
+          </figcaption>
+        </figure>
+        <p>From the ends of the lines back to the start:</p>
+        <ul>
+          <li><strong>3...dxe4 4.fxe4:</strong> your preparation stops with 4.fxe4, so this line is worth 4.fxe4's own results in the position after 3...dxe4: <strong>58%</strong>.</li>
+          <li><strong>3...e6 4.Nc3:</strong> Black's replies are weighted again. 4...Bb4 is answered by 5.a3, where your preparation stops: <strong>55%</strong>, 5.a3's own results. 4...dxe4 isn't answered, so its own results count: <strong>48%</strong>. This branch is worth 60% × 55% + 40% × 48% = <strong>52.2%</strong>.</li>
+          <li><strong>3...g6</strong> isn't answered: its own results, <strong>51%</strong>.</li>
+        </ul>
+        <p class="xs-formula">
+          Expected score = 50% × 58% + 30% × 52.2% + 20% × 51% = 29 + 15.66 + 10.2 = <strong>54.86%</strong>
+        </p>
+      </section>
+
+      <section>
+        <h2>Where a line ends</h2>
+        <p>
+          A line ends with its <strong>last answered move</strong>. Usually that's one of your moves, after which
+          you haven't prepared anything. An opponent move in your study that you haven't prepared an answer to
+          isn't an answered move, and is ignored, as if it weren't in the study.
+        </p>
+        <p>
+          Say a line ends with 5.b3 e4, and you're White: 5...e4 has no prepared answer, so the line ends with
+          5.b3. Its value is <strong>5.b3's own results</strong>: the games in which 5.b3 was played in the
+          position before it. The Explorer shows them on 5.b3's row when you look at the position after
+          Black's 4th move. It isn't an average over Black's replies after 5.b3.
+        </p>
+        <figure class="xs-figure">
+          <svg viewBox="0 0 1000 250" role="img" aria-labelledby="xs-end-title">
+            <title id="xs-end-title">A line ending with 5.b3: the unanswered 5...e4 is ignored, and 5.b3's row in the Explorer gives the line's value</title>
+            <defs>
+              <marker id="xs-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="xs-arrowhead" />
+              </marker>
+            </defs>
+            <path class="xs-edge" d="M140,60 L200,60" marker-end="url(#xs-arrow2)" />
+            <path class="xs-edge" d="M300,60 L360,60" marker-end="url(#xs-arrow2)" />
+            <g class="xs-opp"><rect x="30" y="40" width="110" height="40" rx="8" /><text x="85" y="65">4...Nf6</text></g>
+            <g class="xs-own"><rect x="200" y="40" width="100" height="40" rx="8" /><text x="250" y="65">5.b3</text></g>
+            <g class="xs-opp xs-ignored"><rect x="360" y="40" width="100" height="40" rx="8" /><text x="410" y="65">5...e4</text></g>
+            <text class="xs-caption" x="410" y="100">no answer: ignored</text>
+            <text class="xs-caption" x="250" y="100">the line ends here</text>
+
+            <!-- the explorer, in the position before 5.b3 -->
+            <g class="xs-table">
+              <rect class="xs-table__frame" x="520" y="20" width="450" height="210" rx="10" />
+              <text class="xs-table__title" x="540" y="48">Opening Explorer, after 4...Nf6</text>
+              <text class="xs-table__head" x="540" y="78">Move</text>
+              <text class="xs-table__head" x="640" y="78">Games</text>
+              <text class="xs-table__head" x="740" y="78">White / draws / Black</text>
+              <text x="540" y="108">Nf3</text><text x="640" y="108">2,410</text><text x="740" y="108">49% / 7% / 44%</text>
+              <rect class="xs-table__mark" x="530" y="118" width="430" height="30" rx="6" />
+              <text x="540" y="138"><tspan font-weight="700">b3</tspan></text><text x="640" y="138">812</text><text x="740" y="138">50% / 8% / 42%</text>
+              <text x="540" y="168">Nc3</text><text x="640" y="168">655</text><text x="740" y="168">47% / 6% / 47%</text>
+              <text class="xs-table__note" x="540" y="208">5.b3's value: 50% + 8% ÷ 2 = 54%</text>
+            </g>
+            <path class="xs-edge xs-edge--hint" d="M300,72 C400,150 450,133 528,133" marker-end="url(#xs-arrow2)" />
+          </svg>
+          <figcaption>
+            The value of a line ending with your move comes from that move's row in the Explorer, in the position
+            before it.
+          </figcaption>
+        </figure>
+        <p>Every case, in one table:</p>
+        <div class="xs-table-wrap">
+          <table class="community-table xs-cases">
+            <thead><tr><th>Where</th><th>What counts</th></tr></thead>
+            <tbody>
+              <tr><td>The line ends with your move (no opponent reply after it is answered)</td><td>That move's own results, as listed in the position before it.</td></tr>
+              <tr><td>An opponent reply that isn't in your study</td><td>That reply's own results; the line ends there.</td></tr>
+              <tr><td>An opponent reply in your study, without a prepared answer</td><td>Ignored: the same as a reply that isn't in your study.</td></tr>
+              <tr><td>A move that ends the game (mate, stalemate, bare kings)</td><td>The exact result: a win 1, a draw ½, a loss 0. It needs no answer.</td></tr>
+              <tr><td>Your last move is too rare for the Explorer to list it</td><td>The results of the replies to it, weighted as usual.</td></tr>
+              <tr><td>A position with no games in the Explorer</td><td>½, a neutral score.</td></tr>
+              <tr><td>The starting point itself, with nothing prepared</td><td>The starting position's own results.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Why the move's own results</h2>
+        <p>
+          The Explorer works by position, not by move order. The list of replies in a position counts every game
+          that reached it, by any move order, and then played that reply. So when a line's value is the results
+          of its last move, the weights and the values come from <strong>the same games</strong>, and two useful
+          properties follow:
+        </p>
+        <ul>
+          <li>
+            <strong>Preparing nothing changes nothing.</strong> Without any preparation, a position's expected
+            score is exactly its own score in the Explorer: the weighted average of its replies' results is the
+            position's result.
+          </li>
+          <li>
+            <strong>Only your preparation moves the score.</strong> Writing down a move of your opponent's without
+            preparing an answer doesn't change the expected score.
+          </li>
+        </ul>
+        <figure class="xs-figure">
+          <svg viewBox="0 0 1000 170" role="img" aria-labelledby="xs-same-title">
+            <title id="xs-same-title">Two studies with the same expected score: one with an unanswered 5...e4, one without it</title>
+            <defs>
+              <marker id="xs-arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="xs-arrowhead" />
+              </marker>
+            </defs>
+            <text class="xs-legend" x="30" y="30">With 5...e4 in the study, unanswered</text>
+            <path class="xs-edge" d="M150,75 L200,75" marker-end="url(#xs-arrow3)" />
+            <path class="xs-edge" d="M300,75 L350,75" marker-end="url(#xs-arrow3)" />
+            <g class="xs-opp"><rect x="40" y="55" width="110" height="40" rx="8" /><text x="95" y="80">4...Nf6</text></g>
+            <g class="xs-own"><rect x="200" y="55" width="100" height="40" rx="8" /><text x="250" y="80">5.b3</text></g>
+            <g class="xs-opp xs-ignored"><rect x="350" y="55" width="100" height="40" rx="8" /><text x="400" y="80">5...e4</text></g>
+            <g class="xs-value"><rect x="160" y="115" width="180" height="34" rx="17" /><text x="250" y="137">5.b3's own: 54%</text></g>
+
+            <text class="xs-equals" x="500" y="88">=</text>
+
+            <text class="xs-legend" x="560" y="30">Without it</text>
+            <path class="xs-edge" d="M680,75 L730,75" marker-end="url(#xs-arrow3)" />
+            <g class="xs-opp"><rect x="570" y="55" width="110" height="40" rx="8" /><text x="625" y="80">4...Nf6</text></g>
+            <g class="xs-own"><rect x="730" y="55" width="100" height="40" rx="8" /><text x="780" y="80">5.b3</text></g>
+            <g class="xs-value"><rect x="690" y="115" width="180" height="34" rx="17" /><text x="780" y="137">5.b3's own: 54%</text></g>
+          </svg>
+          <figcaption>An opponent move without a prepared answer doesn't change anything.</figcaption>
+        </figure>
+        <p>
+          The position after your last move, by contrast, can also be reached by other move orders, played by
+          other players with other plans. Using its results would mix in games that never went through your
+          line, and the score could change without any change in your preparation.
+        </p>
+      </section>
+
+      <section>
+        <h2>Coverage</h2>
+        <p>
+          Coverage is the share of games still in your preparation after each of your opponent's moves, with the
+          same weights. It starts at 100%. Your moves keep the games in; each opponent move splits them by how
+          often each reply is played; games on a reply your study doesn't answer leave your preparation. So
+          coverage can only go down, and only on your opponent's moves.
+        </p>
+        <figure class="xs-figure">
+          <svg viewBox="0 0 1000 200" role="img" aria-labelledby="xs-cov-title">
+            <title id="xs-cov-title">Coverage in the example: 80% after Black's first move, 18% after the second, 0% after the third</title>
+            <text class="xs-legend" x="30" y="45">After Black's 1st move</text>
+            <rect class="xs-bar-track" x="250" y="28" width="600" height="24" rx="6" />
+            <rect class="xs-bar" x="250" y="28" width="480" height="24" rx="6" />
+            <text class="xs-bar-label xs-after" x="738" y="41">80%</text>
+            <text class="xs-caption xs-left" x="250" y="72">3...dxe4 (50%) + 3...e6 (30%); 3...g6 (20%) leaves</text>
+            <text class="xs-legend" x="30" y="115">After Black's 2nd move</text>
+            <rect class="xs-bar-track" x="250" y="98" width="600" height="24" rx="6" />
+            <rect class="xs-bar" x="250" y="98" width="108" height="24" rx="6" />
+            <text class="xs-bar-label xs-after" x="366" y="111">18%</text>
+            <text class="xs-caption xs-left" x="250" y="142">30% × 60% after 4...Bb4; nothing is prepared after 4.fxe4</text>
+            <text class="xs-legend" x="30" y="185">After Black's 3rd move</text>
+            <rect class="xs-bar-track" x="250" y="168" width="600" height="24" rx="6" />
+            <text class="xs-bar-label xs-after" x="258" y="181">0%</text>
+          </svg>
+          <figcaption>Coverage in the worked example.</figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>What the expected score does and doesn't say</h2>
+        <ul>
+          <li>
+            <strong>It overstates your score where your preparation ends.</strong> Explorer results include how the
+            players continued after your last move, sometimes with preparation you may not have. This isn't a flaw
+            in using real games; it's a limit of treating the pool's average results as a stand-in for your own
+            play once you're out of book.
+          </li>
+          <li>
+            <strong>Rare replies are left out.</strong> The Explorer lists the most played moves in a position (up to
+            12); the weights are shares of those listed moves.
+          </li>
+          <li>
+            <strong>It depends on the pool.</strong> The rating band and time controls in the study's calculation
+            settings choose the games; results calculated with different settings aren't comparable, which is why
+            the leaderboards rank them separately.
+          </li>
+          <li>
+            <strong>Small samples are noisy.</strong> A move's results over a few dozen games are uncertain by several
+            points; the game counts are shown in the Explorer.
+          </li>
+        </ul>
+        <p>
+          The <strong>expected evaluation</strong> walks the same tree with the same weights, but values the end of
+          each line with Stockfish's evaluation: of the position after each of your opponent's likely replies
+          (weighted by how often they're played) when the line ends with your move, and of the position itself
+          after a reply your study doesn't answer. See the <a href="stats.html#expected-score">Stats documentation</a>
+          for both calculations' details.
+        </p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

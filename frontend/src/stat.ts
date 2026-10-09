@@ -759,7 +759,7 @@ function renderPage(
         <p class="stat-result__what">Wins plus half the draws, if you always play your prepared moves and opponents reply as in the Explorer.</p>
         <div class="stat-result__explain" id="score-explain" hidden>
           <p>After play leaves your repertoire, Explorer results include how those players continued, sometimes with preparation you may not have. They may overstate your own score if you don't know the follow-up. This isn't a flaw in using empirical results; it's a limitation of treating the pool's average outcomes as a proxy for your own unprepared play.</p>
-          <a href="/doc/stats.html#expected-score">More in the docs</a>
+          <a href="/doc/expected-score.html">More in the docs</a>
         </div>
         ${scoreHtml}
         <div id="score-stale"></div>
