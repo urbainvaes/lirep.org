@@ -42,6 +42,68 @@
     </header>
 
     <main class="site-main doc-main">
+      <section class="doc-section about-intro">
+        <h2>Lirep: the quantitative repertoire builder</h2>
+        <p>Most repertoire tools help you remember your moves. Lirep also tells you <em>how good</em> your repertoire is,
+          in numbers, against the moves real players choose, and helps you decide what to prepare next.</p>
+
+        <h3>Measure your repertoire</h3>
+        <ul>
+          <li><strong><a href="/doc/expected-score.html">Expected score</a></strong>: the score you would get on average if you
+            always played your prepared moves and your opponents chose theirs like the players in the Lichess Opening Explorer.
+            One number for your whole repertoire, from real games.</li>
+          <li><strong><a href="/doc/stats.html#expected-evaluation">Expected evaluation</a></strong>: Stockfish's evaluation
+            where your preparation ends, averaged over the lines your opponents actually play. It runs in your browser.</li>
+          <li><strong><a href="/doc/expected-score.html#coverage">Coverage</a></strong>: the share of your games still in
+            your preparation after each of your opponent's moves, to see where your preparation runs out.</li>
+          <li><strong>Your own player pool</strong>: choose the rating band and time controls, and Lichess's Explorer or
+            Lirep's own copy of it, which has no rate limit.</li>
+        </ul>
+
+        <h3>See the moves that matter</h3>
+        <p>In the study editor, Stockfish's arrows show two things at once: <strong>the colour says how good a move is</strong>,
+          compared with Stockfish's best move, and <strong>the thickness says how often it is played</strong> in the
+          Explorer. Popular mistakes, the moves your opponents actually get wrong, stand out at a glance, and Stockfish also
+          evaluates the popular moves its own top lines leave out.</p>
+        <figure class="xs-figure about-arrows">
+          <svg viewBox="0 0 1000 150" role="img" aria-labelledby="about-arrows-title">
+            <title id="about-arrows-title">The arrows: five colours for how good a move is, and thicker arrows for moves played more often</title>
+            <g>
+              <polygon points="40,35 113,35 113,28.5 130,40 113,51.5 113,45 40,45" fill="#15781B" opacity="0.85" />
+              <polygon points="220,35 293,35 293,28.5 310,40 293,51.5 293,45 220,45" fill="#629924" opacity="0.85" />
+              <polygon points="400,35 473,35 473,28.5 490,40 473,51.5 473,45 400,45" fill="#d9a400" opacity="0.85" />
+              <polygon points="580,35 653,35 653,28.5 670,40 653,51.5 653,45 580,45" fill="#e06a1a" opacity="0.85" />
+              <polygon points="760,35 833,35 833,28.5 850,40 833,51.5 833,45 760,45" fill="#c52b2b" opacity="0.85" />
+            </g>
+            <text class="xs-caption" x="85" y="78">best</text>
+            <text class="xs-caption" x="265" y="78">good</text>
+            <text class="xs-caption" x="445" y="78">inaccuracy</text>
+            <text class="xs-caption" x="625" y="78">mistake</text>
+            <text class="xs-caption" x="805" y="78">blunder</text>
+            <g>
+              <polygon points="40,115.5 118,115.5 118,110 130,118 118,126 118,120.5 40,120.5" fill="#629924" opacity="0.85" />
+              <polygon points="300,112.5 371.3,112.5 371.3,105.35 390,118 371.3,130.65 371.3,123.5 300,123.5" fill="#629924" opacity="0.85" />
+              <polygon points="560,109 619.4,109 619.4,97.3 650,118 619.4,138.7 619.4,127 560,127" fill="#629924" opacity="0.85" />
+            </g>
+            <text class="xs-legend" x="150" y="122">rarely played</text>
+            <text class="xs-legend" x="410" y="122">sometimes</text>
+            <text class="xs-legend" x="670" y="122">most of the games</text>
+          </svg>
+          <figcaption>Colour: winning chances lost against Stockfish's best move. Thickness: the move's share of the games in the Explorer.</figcaption>
+        </figure>
+
+        <h3>Remember it, share it, compare it</h3>
+        <ul>
+          <li><strong>Practice</strong> quizzes you on your own moves, line by line; each position's knowledge fades over time
+            and comes back for review before you would forget it.</li>
+          <li><strong>Community leaderboards</strong> rank shared openings by expected score or expected evaluation, and any
+            shared opening can be imported into your studies in one click.</li>
+          <li><strong>Games</strong>: attach master games or your own to a study, from PGN or Lichess links, and replay them.</li>
+          <li><strong>Study files</strong>: export a study, with its games, and import it again, here or on another Lirep server.</li>
+          <li><strong>Free software</strong>, signed in with your Lichess account: nothing new to create.</li>
+        </ul>
+      </section>
+
       <section class="doc-section">
         <h2>Based on Lichess</h2>
         <p>This website is based in part on source code and assets from <a href="https://lichess.org">Lichess</a>, including its open-source chessboard library, Chessground. Lirep.org also uses Stockfish for chess analysis. It is an independent project and is not an official Lichess service.</p>

@@ -4709,3 +4709,12 @@ button.study-head__link:disabled:hover {
 .xs-cases td:first-child {
   width: 45%;
 }
+
+/* About: the opening section. */
+.about-intro h3 {
+  margin: 20px 0 6px;
+}
+
+.about-arrows {
+  max-width: 760px;
+}
