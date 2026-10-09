@@ -3,6 +3,11 @@
 // its prepared move (the first child) and the opponent replies as in the
 // Explorer. Runs in the browser, so the Explorer requests are the user's own
 // (see explorerClient.ts); `explorer` supplies each position's data.
+//
+// A line ends with its last answered move, and counts with that move's own
+// Explorer results, as listed in the position before it. An opponent move in
+// the tree without a prepared answer is ignored, as if it weren't there. See
+// doc/expected-score.html.
 
 import { Chess } from "chess.js";
 
@@ -54,6 +59,14 @@ export async function calculateExpectedScore(
     next.move(san);
     return next;
   };
+  // An opponent move in the tree is answered if the studied side has a move
+  // prepared after it, or if it ends the game (nothing left to answer).
+  const answered = (nodeId: number, chess: Chess) =>
+    tree.nodes[nodeId].children.length > 0 || finishedGame(chess) !== null;
+  // After the studied side's move, the line goes on if at least one of the
+  // opponent's replies in the tree is answered.
+  const lineGoesOn = (nodeId: number, chess: Chess) =>
+    tree.nodes[nodeId].children.some((id) => answered(id, after(chess, tree.nodes[id].san as string)));
 
   async function outcomes(nodeId: number, chess: Chess): Promise<Outcome> {
     nodesEvaluated += 1;
@@ -63,13 +76,21 @@ export async function calculateExpectedScore(
     const node = tree.nodes[nodeId];
     if (studiedToMove(chess)) {
       if (!node.children.length) {
-        // Prep ends on the studied side's move: the position's overall
-        // Explorer results stand in for what happens from here.
+        // Nothing prepared at all (the starting point itself): the
+        // position's overall Explorer results.
         const { totals } = await explorerData(chess.fen());
         return outcomeProbabilities(totals.white, totals.draws, totals.black, side) ?? [0.5, 0, 0.5];
       }
       const childId = node.children[0];
-      return outcomes(childId, after(chess, tree.nodes[childId].san as string));
+      const san = tree.nodes[childId].san as string;
+      const next = after(chess, san);
+      if (finishedGame(next) || lineGoesOn(childId, next)) return outcomes(childId, next);
+      // The line ends with this move: its own results, as listed here.
+      const { moves } = await explorerData(chess.fen());
+      const row = moves.find((m) => m.san === san);
+      const own = row ? outcomeProbabilities(row.white, row.draws, row.black, side) : null;
+      // Too rare to be listed: what the opponent's replies to it gave.
+      return own ?? outcomes(childId, next);
     }
     // The opponent's move: each reply weighted by how often it is played; a
     // reply the tree doesn't answer ends prep there, with that move's results.
@@ -82,8 +103,9 @@ export async function calculateExpectedScore(
       const games = move.white + move.draws + move.black;
       if (!games) continue;
       const childId = children.get(move.san);
-      const value = childId !== undefined
-        ? await outcomes(childId, after(chess, move.san))
+      const next = childId !== undefined ? after(chess, move.san) : null;
+      const value = childId !== undefined && next && answered(childId, next)
+        ? await outcomes(childId, next)
         : outcomeProbabilities(move.white, move.draws, move.black, side);
       if (!value) continue;
       for (let i = 0; i < 3; i++) expected[i] += (games / total) * value[i];
@@ -109,7 +131,10 @@ export async function calculateExpectedScore(
     for (const move of moves) {
       const games = move.white + move.draws + move.black;
       const childId = children.get(move.san);
-      if (games && childId !== undefined) await coverageWalk(childId, after(chess, move.san), ply + 1, (mass * games) / total);
+      if (!games || childId === undefined) continue;
+      // An unanswered move leaves the preparation, like one not in the tree.
+      const next = after(chess, move.san);
+      if (answered(childId, next)) await coverageWalk(childId, next, ply + 1, (mass * games) / total);
     }
   }
 

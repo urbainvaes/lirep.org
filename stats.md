@@ -29,13 +29,24 @@ of a point do I score on average against real opposition?"* A win counts
 study's effective starting node:
 
 1. A finished game has its exact win/draw/loss outcome.
-2. On the studied side's turn, follow its sole prepared move. If there is no
-   child, use that position's overall Explorer results; if there are no games,
-   use a neutral 0.5 expected score.
+2. On the studied side's turn, follow its sole prepared move. If none of the
+   opponent's replies after it is answered, the line ends with that move: use
+   its own Explorer W/D/L, as listed in the position before it (if it isn't
+   listed, the weighted results of the replies to it). Only the starting
+   position with nothing prepared uses the position's overall results; with no
+   games, a neutral 0.5 expected score.
 3. On the opponent's turn, weight each Explorer-listed reply by its games
-   divided by the total games **in the listed moves**. Recurse into prepared
-   replies. For an unprepared reply, use that move's own Explorer W/D/L
-   distribution and stop that branch. With no listed games, use neutral 0.5.
+   divided by the total games **in the listed moves**. Recurse into replies
+   the tree answers (with a prepared move after them, or ending the game).
+   Any other reply, absent from the tree or present without an answer, uses
+   that move's own Explorer W/D/L distribution and stops that branch. With no
+   listed games, use neutral 0.5.
+
+A line therefore ends with its last answered move and counts with that move's
+own results, so the weights and the values come from the same games: with
+nothing prepared, a position's expected score is its own score. An opponent
+move without a prepared answer is ignored, as if it weren't in the tree (see
+`frontend/doc/expected-score.html`).
 
 This fallback is empirical, not an intrinsic evaluation of the position: it
 reflects what players in the selected pool actually played next, including
