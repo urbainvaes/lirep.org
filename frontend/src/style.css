@@ -4648,12 +4648,6 @@ button.study-head__link:disabled:hover {
   font-size: 14px;
 }
 
-.xs-figure .xs-equals {
-  font-size: 34px;
-  text-anchor: middle;
-  fill: var(--text-dim);
-}
-
 .xs-table__frame {
   fill: var(--card-nested-bg);
   stroke: var(--border);
@@ -4700,14 +4694,6 @@ button.study-head__link:disabled:hover {
   border-left: 3px solid var(--good);
   border-radius: 0 6px 6px 0;
   font-size: 1.02rem;
-}
-
-.xs-table-wrap {
-  overflow-x: auto;
-}
-
-.xs-cases td:first-child {
-  width: 45%;
 }
 
 /* About: the opening section. */
