@@ -2101,6 +2101,18 @@ button.study-head__link:disabled:hover {
   display: none;
 }
 
+/* The expected score needs the Explorer's data for the position after this
+   move, not loaded yet: a hollow ring, unlike the comment marker's dot. */
+.tree-move-unfetched {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 5px;
+  border: 1.5px solid var(--warn);
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
 .tree-move--mine {
   color: var(--primary-hover);
 }

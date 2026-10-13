@@ -118,6 +118,7 @@ function renderMove(
   currentId: number,
   side: "white" | "black",
   studyStartNodeId: number | null,
+  unfetched: ReadonlySet<number>,
 ): string {
   const isWhite = depth % 2 === 1;
   const classes = ["tree-move"];
@@ -126,7 +127,10 @@ function renderMove(
   if (nodeId === studyStartNodeId) classes.push("tree-move--start-point");
   const title = nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
   const hasComment = Boolean(tree.nodes[nodeId].comment?.trim());
-  return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}<span class="tree-move-comment-marker"${hasComment ? ' title="Has a comment"' : ""} ${hasComment ? "" : "hidden"} aria-hidden="true"></span></span>`;
+  const unfetchedMarker = unfetched.has(nodeId)
+    ? '<span class="tree-move-unfetched" title="The expected score needs Opening Explorer data for the position after this move, not loaded yet: open this move to load it"></span>'
+    : "";
+  return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}${unfetchedMarker}<span class="tree-move-comment-marker"${hasComment ? ' title="Has a comment"' : ""} ${hasComment ? "" : "hidden"} aria-hidden="true"></span></span>`;
 }
 
 function renderLine(
@@ -136,6 +140,7 @@ function renderLine(
   currentId: number,
   side: "white" | "black",
   studyStartNodeId: number | null,
+  unfetched: ReadonlySet<number>,
 ): string {
   let html = "";
   let nodeId: number | undefined = lineStartNodeId;
@@ -168,15 +173,15 @@ function renderLine(
       if (parentId === null) continue;
       const alternatives = tree.nodes[parentId].children.filter((childId) => childId !== playedId);
       for (const alternativeId of alternatives) {
-        branches.push(renderLine(tree, alternativeId, playedDepth, currentId, side, studyStartNodeId));
+        branches.push(renderLine(tree, alternativeId, playedDepth, currentId, side, studyStartNodeId, unfetched));
       }
     }
 
     html += `
       <div class="tree-move-row">
         <span class="tree-move-number">${number}</span>
-        <span class="tree-move-cell tree-move-cell--white">${whiteId === undefined ? "" : renderMove(tree, whiteId, rowStartDepth, currentId, side, studyStartNodeId)}</span>
-        <span class="tree-move-cell tree-move-cell--black">${blackId === undefined ? "" : renderMove(tree, blackId, rowStartDepth % 2 === 0 ? rowStartDepth : rowStartDepth + 1, currentId, side, studyStartNodeId)}</span>
+        <span class="tree-move-cell tree-move-cell--white">${whiteId === undefined ? "" : renderMove(tree, whiteId, rowStartDepth, currentId, side, studyStartNodeId, unfetched)}</span>
+        <span class="tree-move-cell tree-move-cell--black">${blackId === undefined ? "" : renderMove(tree, blackId, rowStartDepth % 2 === 0 ? rowStartDepth : rowStartDepth + 1, currentId, side, studyStartNodeId, unfetched)}</span>
       </div>
       ${branches.length ? `<div class="tree-variations">${branches.map((branch) => `<div class="tree-variation">${branch}</div>`).join("")}</div>` : ""}
     `;
@@ -195,6 +200,7 @@ export function renderTree(
   currentId: number,
   side: "white" | "black",
   startNodeId: number | null = null,
+  unfetched: ReadonlySet<number> = new Set(),
 ): string {
   const root = tree.nodes[tree.rootId];
   if (root.children.length === 0) {
@@ -202,7 +208,7 @@ export function renderTree(
   }
   const [mainChildId, ...variations] = root.children;
   return `
-    ${renderLine(tree, mainChildId, 1, currentId, side, startNodeId)}
-    ${variations.map((variationId) => `<div class="tree-variations tree-variations--root"><div class="tree-variation">${renderLine(tree, variationId, 1, currentId, side, startNodeId)}</div></div>`).join("")}
+    ${renderLine(tree, mainChildId, 1, currentId, side, startNodeId, unfetched)}
+    ${variations.map((variationId) => `<div class="tree-variations tree-variations--root"><div class="tree-variation">${renderLine(tree, variationId, 1, currentId, side, startNodeId, unfetched)}</div></div>`).join("")}
   `;
 }

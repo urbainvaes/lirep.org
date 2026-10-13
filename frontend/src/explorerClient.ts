@@ -255,6 +255,28 @@ function shape(raw: RawExplorerResponse, settings: ExplorerSettings, minRating: 
 
 const inflight = new Map<string, Promise<ExplorerData>>();
 
+function cacheKey(fen: string, settings: ExplorerSettings, side: "white" | "black"): { key: string; ttl: number } {
+  const minRating = settings.minRating ?? DEFAULT_MIN_RATING;
+  const speeds = settings.speeds.join(",");
+  const ratings = RATING_BUCKETS.filter((b) => b >= minRating).join(",");
+  const key =
+    settings.database === "masters"
+      ? `masters|${fen}`
+      : settings.database === "player"
+        ? `player|${(settings.player ?? "").toLowerCase()}|${side}|${speeds}|${fen}`
+        : `lichess|${ratings}|${speeds}|${fen}`;
+  return { key, ttl: settings.database === "player" ? PLAYER_CACHE_TTL_MS : CACHE_TTL_MS };
+}
+
+/** Whether this browser already holds Lichess Explorer data for `fen`,
+ * without asking Lichess. The 2016 sample comes from the backend, with no
+ * rate limit, and is always counted as available. */
+export async function hasExplorerData(fen: string, settings: ExplorerSettings, side: "white" | "black"): Promise<boolean> {
+  if (settings.source === "lirep" && settings.database !== "player") return true;
+  const { key, ttl } = cacheKey(fen, settings, side);
+  return (await cacheGet(key, ttl)) !== undefined;
+}
+
 /** The Opening Explorer's data for `fen`, under a study's Explorer settings,
  * from this browser's cache, Lichess's Explorer (paced), or for the 2016
  * sample, the backend. */
@@ -273,13 +295,7 @@ export async function fetchExplorerData(
   const minRating = settings.minRating ?? DEFAULT_MIN_RATING;
   const speeds = settings.speeds.join(",");
   const ratings = RATING_BUCKETS.filter((b) => b >= minRating).join(",");
-  const key =
-    settings.database === "masters"
-      ? `masters|${fen}`
-      : settings.database === "player"
-        ? `player|${(settings.player ?? "").toLowerCase()}|${side}|${speeds}|${fen}`
-        : `lichess|${ratings}|${speeds}|${fen}`;
-  const ttl = settings.database === "player" ? PLAYER_CACHE_TTL_MS : CACHE_TTL_MS;
+  const { key, ttl } = cacheKey(fen, settings, side);
 
   const cached = await cacheGet(key, ttl);
   if (cached) return cached;

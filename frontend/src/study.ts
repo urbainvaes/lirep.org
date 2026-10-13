@@ -34,7 +34,7 @@ import {
   type ExplorerSettings,
   type ExplorerSpeed,
 } from "./explorer";
-import { errorMessage, fetchExplorerData } from "./explorerClient";
+import { errorMessage, fetchExplorerData, hasExplorerData } from "./explorerClient";
 import { materialBalance, materialHtml } from "./material";
 import { downloadStudyFile } from "./studyFile";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
@@ -386,6 +386,9 @@ function renderEditor(
   function scheduleAutoSave(delay = 250): void {
     if (deleting) return;
     editVersion++;
+    // Moves, the starting point and the Explorer settings change which
+    // lines' data is already in this browser.
+    scheduleUnfetchedCheck();
     if (saveTimer !== null) window.clearTimeout(saveTimer);
     if (!nameInput.value.trim()) {
       setSaveStatus(
@@ -553,6 +556,7 @@ function renderEditor(
     try {
       const data = await fetchExplorerData(fen, settings, currentSide(), { priority: "interactive" });
       if (requestId !== explorerRequestId) return;
+      explorerFetched(fen);
       const chess = positionAt(tree, currentId);
       renderExplorer(explorerPanelEl, data, playSan, {
         inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
@@ -661,8 +665,89 @@ function renderEditor(
     });
   }
 
+  // Moves after which the expected score needs a position whose Explorer
+  // data this browser hasn't loaded yet: every position where the opponent
+  // is to move (how often each reply is played), and the one before each
+  // line's last move (that move's results). Opening such a move with the
+  // Explorer panel on loads it. Checked in the browser's Explorer cache
+  // only, never fetched for this.
+  let unfetched: ReadonlyMap<number, string> = new Map(); // node id -> position after it
+  let unfetchedRun = 0;
+  let unfetchedTimer: number | null = null;
+
+  // The positions the expected score's walk reads, by the move leading to
+  // each (the starting point's own position has no move to mark if it's the
+  // initial one).
+  function neededPositions(): Map<number, string> {
+    const side = currentSide();
+    const start = startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId;
+    const needed = new Map<number, string>();
+    const after = (chess: Chess, nodeId: number) => {
+      const next = new Chess(chess.fen());
+      next.move(tree.nodes[nodeId].san as string);
+      return next;
+    };
+    const walk = (nodeId: number, chess: Chess): void => {
+      if (chess.isGameOver()) return;
+      const children = tree.nodes[nodeId].children;
+      if ((chess.turn() === "w") === (side === "white")) {
+        const own = children[0];
+        // Nothing prepared from the starting point: its own results.
+        if (own === undefined) {
+          if (nodeId === start) needed.set(nodeId, chess.fen());
+          return;
+        }
+        const next = after(chess, own);
+        // The line goes on after your move if an opponent's reply in the
+        // tree is answered; otherwise it ends with it, valued here.
+        if (!next.isGameOver() && tree.nodes[own].children.some((reply) => tree.nodes[reply].children.length > 0)) {
+          walk(own, next);
+        } else if (!next.isGameOver()) {
+          needed.set(nodeId, chess.fen());
+        }
+        return;
+      }
+      needed.set(nodeId, chess.fen());
+      for (const reply of children) walk(reply, after(chess, reply));
+    };
+    walk(start, positionAt(tree, start));
+    needed.delete(tree.rootId);
+    return needed;
+  }
+
+  function setUnfetched(found: ReadonlyMap<number, string>): void {
+    if (found.size === unfetched.size && [...found.keys()].every((id) => unfetched.has(id))) return;
+    unfetched = found;
+    renderTreeView();
+  }
+
+  // After edits, a moment after the last one: they change what's needed.
+  function scheduleUnfetchedCheck(): void {
+    if (unfetchedTimer !== null) window.clearTimeout(unfetchedTimer);
+    unfetchedTimer = window.setTimeout(() => {
+      unfetchedTimer = null;
+      void checkUnfetched();
+    }, 300);
+  }
+
+  async function checkUnfetched(): Promise<void> {
+    const run = ++unfetchedRun;
+    const side = currentSide();
+    const needed = [...neededPositions()];
+    const loaded = await Promise.all(needed.map(([, fen]) => hasExplorerData(fen, settings, side)));
+    if (run !== unfetchedRun) return;
+    setUnfetched(new Map(needed.filter((_, i) => !loaded[i])));
+  }
+
+  // The panel just loaded this position: every move leading to it has its
+  // data now.
+  function explorerFetched(fen: string): void {
+    if (!unfetched.size) return;
+    setUnfetched(new Map([...unfetched].filter(([, needed]) => needed !== fen)));
+  }
+
   function renderTreeView(): void {
-    treeViewEl.innerHTML = renderTree(tree, currentId, currentSide(), startNodeId);
+    treeViewEl.innerHTML = renderTree(tree, currentId, currentSide(), startNodeId, new Set(unfetched.keys()));
     treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
       el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
     });
@@ -851,6 +936,7 @@ function renderEditor(
   applyToolsUI();
   flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   goToStart();
+  void checkUnfetched();
 
   function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
