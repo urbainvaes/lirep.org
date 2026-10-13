@@ -9,7 +9,7 @@ they were calculated from.
 """
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -54,13 +54,26 @@ def _resolve_start_node_id(study: dict) -> int:
 
 
 Share = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+# How the expected score values a line where the preparation ends: the
+# Explorer's results, Stockfish's evaluation as an expected score, or the
+# Explorer's results with Stockfish where they count too few games. See
+# doc/expected-score.html.
+LeafValue = Literal["explorer", "stockfish", "explorer-stockfish"]
 
 
 class ExpectedScoreIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    winRate: Share
-    lossProbability: Share
+    # Missing from pages loaded before Stockfish could value lines' ends,
+    # which send only the win and loss probabilities.
+    score: Share | None = None
+    # Unknown (None) once a line's end is valued with Stockfish.
+    winRate: Share | None = None
+    lossProbability: Share | None = None
+    leafValue: LeafValue = "explorer"
+    # Stockfish depth, when Stockfish values some lines' ends.
+    depth: int | None = Field(default=None, strict=True, ge=1, le=99)
+    stockfishLeaves: int = Field(default=0, strict=True, ge=0)
     # coverage[i]: share of games still in the tree after the opponent's
     # (i+1)th move from the starting point.
     coverage: list[Share] = Field(max_length=500)
@@ -70,8 +83,23 @@ class ExpectedScoreIn(BaseModel):
 
     @model_validator(mode="after")
     def _outcomes_add_up(self) -> "ExpectedScoreIn":
-        if self.winRate + self.lossProbability > 1 + 1e-9:
-            raise ValueError("win and loss probabilities add up to more than 1")
+        if (self.winRate is None) != (self.lossProbability is None):
+            raise ValueError("win and loss probabilities go together")
+        if self.leafValue == "explorer" and self.winRate is None:
+            raise ValueError("Explorer results give win and loss probabilities")
+        if self.leafValue != "explorer" and self.depth is None:
+            raise ValueError("Stockfish values need a depth")
+        if self.winRate is not None and self.lossProbability is not None:
+            if self.winRate + self.lossProbability > 1 + 1e-9:
+                raise ValueError("win and loss probabilities add up to more than 1")
+            # The expected score: wins plus half the draws.
+            from_outcomes = (1 + self.winRate - self.lossProbability) / 2
+            if self.score is None:
+                self.score = from_outcomes
+            elif abs(self.score - from_outcomes) > 1e-6:
+                raise ValueError("the score doesn't match the win and loss probabilities")
+        if self.score is None:
+            raise ValueError("no score")
         return self
 
 
@@ -94,15 +122,17 @@ def save_expected_score(study_id: int, request: Request, payload: ExpectedScoreI
         raise HTTPException(status_code=404, detail="not found")
     settings = payload.explorerSettings.model_dump()
     is_player = settings["database"] == "player"
-    draw = max(0.0, 1.0 - payload.winRate - payload.lossProbability)
     updated = store.merge_study_stats(
         owner,
         study_id,
         {
             # "winProbability" is the expected score: wins plus half the draws.
-            "winProbability": payload.winRate + 0.5 * draw,
+            "winProbability": payload.score,
             "winRate": payload.winRate,
             "lossProbability": payload.lossProbability,
+            "leafValue": payload.leafValue,
+            "scoreDepth": payload.depth if payload.leafValue != "explorer" else None,
+            "stockfishLeaves": payload.stockfishLeaves,
             "coverage": payload.coverage,
             "winProbabilityCalculatedAt": datetime.now(UTC).isoformat(),
             "winProbabilityMovesFingerprint": study["movesFingerprint"],

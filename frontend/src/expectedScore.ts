@@ -4,17 +4,38 @@
 // Explorer. Runs in the browser, so the Explorer requests are the user's own
 // (see explorerClient.ts); `explorer` supplies each position's data.
 //
-// A line ends with its last answered move, and counts with that move's own
-// Explorer results, as listed in the position before it. An opponent move in
-// the tree without a prepared answer is ignored, as if it weren't there. See
-// doc/expected-score.html.
+// A line ends with its last answered move. Its value comes from `leafValue`:
+// that move's own Explorer results, as listed in the position before it;
+// Stockfish's evaluation of the position it leads to, as an expected score;
+// or the Explorer results, with Stockfish where they count fewer than
+// MIN_LEAF_GAMES games. An opponent move in the tree without a prepared
+// answer is ignored, as if it weren't there. See doc/expected-score.html.
 
 import { Chess } from "chess.js";
 
-import type { ExplorerData } from "./explorer";
+import { MIN_LEAF_GAMES, type ExplorerData, type LeafValue } from "./explorer";
 import { sanPathTo, type StudyTree } from "./tree";
 
 type Outcome = [win: number, draw: number, loss: number]; // for the studied side
+
+// A position's value: its expected score, and the win/draw/loss split behind
+// it when every line's end has one (Stockfish's values don't).
+interface Value {
+  score: number;
+  outcome: Outcome | null;
+}
+
+const NEUTRAL: Value = { score: 0.5, outcome: [0.5, 0, 0.5] };
+
+// Centipawns to an expected score, with the curve Lichess uses for its
+// winning chances.
+export function scoreFromCp(cp: number): number {
+  return 1 / (1 + Math.exp(-0.00368208 * cp));
+}
+
+function fromOutcome(outcome: Outcome): Value {
+  return { score: outcome[0] + outcome[1] / 2, outcome };
+}
 
 function outcomeProbabilities(white: number, draws: number, black: number, side: "white" | "black"): Outcome | null {
   const games = white + draws + black;
@@ -33,11 +54,13 @@ function finishedGame(chess: Chess): "white" | "black" | "draw" | null {
 }
 
 export interface ExpectedScoreResult {
-  winRate: number;
-  lossProbability: number;
+  score: number;
+  winRate: number | null; // null when some line's end was valued with Stockfish
+  lossProbability: number | null;
   coverage: number[]; // coverage[i] = share of games still in the tree after the opponent's (i+1)th move
   nodesEvaluated: number;
   explorerCalls: number;
+  stockfishLeaves: number; // distinct positions valued with Stockfish
 }
 
 export async function calculateExpectedScore(
@@ -45,8 +68,14 @@ export async function calculateExpectedScore(
   startNodeId: number,
   side: "white" | "black",
   explorer: (fen: string) => Promise<ExplorerData>,
+  leafValue: LeafValue = "explorer",
+  // Stockfish's evaluation in centipawns, from White's point of view; null
+  // when the engine gave none (counted as 0.00). Needed unless leafValue is
+  // "explorer".
+  evaluate?: (fen: string) => Promise<number | null>,
 ): Promise<ExpectedScoreResult> {
   let nodesEvaluated = 0;
+  const stockfishLeaves = new Set<string>();
   const fetched = new Set<string>();
   const explorerData = (fen: string): Promise<ExplorerData> => {
     fetched.add(fen);
@@ -68,49 +97,77 @@ export async function calculateExpectedScore(
   const lineGoesOn = (nodeId: number, chess: Chess) =>
     tree.nodes[nodeId].children.some((id) => answered(id, after(chess, tree.nodes[id].san as string)));
 
-  async function outcomes(nodeId: number, chess: Chess): Promise<Outcome> {
+  async function stockfishValue(chess: Chess): Promise<Value> {
+    if (!evaluate) throw new Error("Stockfish is needed for these end-of-prep values");
+    const fen = chess.fen();
+    stockfishLeaves.add(fen);
+    const cp = (await evaluate(fen)) ?? 0;
+    return { score: scoreFromCp(side === "white" ? cp : -cp), outcome: null };
+  }
+
+  // A line's end valued from Explorer results (a move's row, or a position's
+  // totals), `position` being where the line ends. With the Stockfish
+  // fallback, too few games give Stockfish's value instead. null: no games,
+  // for the caller's own fallback.
+  async function explorerValue(
+    results: { white: number; draws: number; black: number } | undefined,
+    position: () => Chess,
+  ): Promise<Value | null> {
+    const games = results ? results.white + results.draws + results.black : 0;
+    if (leafValue === "explorer-stockfish" && games < MIN_LEAF_GAMES) return stockfishValue(position());
+    const outcome = results ? outcomeProbabilities(results.white, results.draws, results.black, side) : null;
+    return outcome && fromOutcome(outcome);
+  }
+
+  async function value(nodeId: number, chess: Chess): Promise<Value> {
     nodesEvaluated += 1;
     const finished = finishedGame(chess);
-    if (finished === "draw") return [0, 1, 0];
-    if (finished) return finished === side ? [1, 0, 0] : [0, 0, 1];
+    if (finished === "draw") return fromOutcome([0, 1, 0]);
+    if (finished) return fromOutcome(finished === side ? [1, 0, 0] : [0, 0, 1]);
     const node = tree.nodes[nodeId];
     if (studiedToMove(chess)) {
       if (!node.children.length) {
         // Nothing prepared at all (the starting point itself): the
         // position's overall Explorer results.
+        if (leafValue === "stockfish") return stockfishValue(chess);
         const { totals } = await explorerData(chess.fen());
-        return outcomeProbabilities(totals.white, totals.draws, totals.black, side) ?? [0.5, 0, 0.5];
+        return (await explorerValue(totals, () => chess)) ?? NEUTRAL;
       }
       const childId = node.children[0];
       const san = tree.nodes[childId].san as string;
       const next = after(chess, san);
-      if (finishedGame(next) || lineGoesOn(childId, next)) return outcomes(childId, next);
+      if (finishedGame(next) || lineGoesOn(childId, next)) return value(childId, next);
       // The line ends with this move: its own results, as listed here.
+      if (leafValue === "stockfish") return stockfishValue(next);
       const { moves } = await explorerData(chess.fen());
-      const row = moves.find((m) => m.san === san);
-      const own = row ? outcomeProbabilities(row.white, row.draws, row.black, side) : null;
+      const own = await explorerValue(moves.find((m) => m.san === san), () => next);
       // Too rare to be listed: what the opponent's replies to it gave.
-      return own ?? outcomes(childId, next);
+      return own ?? value(childId, next);
     }
     // The opponent's move: each reply weighted by how often it is played; a
     // reply the tree doesn't answer ends prep there, with that move's results.
     const { moves } = await explorerData(chess.fen());
     const total = moves.reduce((n, m) => n + m.white + m.draws + m.black, 0);
-    if (!total) return [0.5, 0, 0.5];
+    if (!total) return leafValue === "explorer" ? NEUTRAL : stockfishValue(chess);
     const children = childrenBySan(nodeId);
-    const expected: Outcome = [0, 0, 0];
+    let score = 0;
+    let outcome: Outcome | null = [0, 0, 0];
     for (const move of moves) {
       const games = move.white + move.draws + move.black;
       if (!games) continue;
       const childId = children.get(move.san);
-      const next = childId !== undefined ? after(chess, move.san) : null;
-      const value = childId !== undefined && next && answered(childId, next)
-        ? await outcomes(childId, next)
-        : outcomeProbabilities(move.white, move.draws, move.black, side);
-      if (!value) continue;
-      for (let i = 0; i < 3; i++) expected[i] += (games / total) * value[i];
+      const next = after(chess, move.san);
+      const reply = childId !== undefined && answered(childId, next)
+        ? await value(childId, next)
+        : leafValue === "stockfish"
+          ? await stockfishValue(next)
+          : await explorerValue(move, () => next);
+      if (!reply) continue;
+      score += (games / total) * reply.score;
+      if (outcome && reply.outcome) for (let i = 0; i < 3; i++) outcome[i] += (games / total) * reply.outcome[i];
+      else outcome = null;
     }
-    return expected;
+    return { score, outcome };
   }
 
   // Probability mass still inside the tree at each ply from the start.
@@ -140,7 +197,7 @@ export async function calculateExpectedScore(
 
   const start = new Chess();
   for (const san of sanPathTo(tree, startNodeId)) start.move(san);
-  const [winRate, , lossProbability] = await outcomes(startNodeId, start);
+  const { score, outcome } = await value(startNodeId, start);
   await coverageWalk(startNodeId, start, 0, 1);
   // Coverage is sampled right after each of the opponent's moves, counted
   // from the starting point: plies 1, 3, 5… if the opponent moves first
@@ -149,5 +206,13 @@ export async function calculateExpectedScore(
   const maxPly = Math.max(0, ...massByPly.keys());
   const coverage: number[] = [];
   for (let ply = firstPly; ply <= maxPly; ply += 2) coverage.push(massByPly.get(ply) ?? 0);
-  return { winRate, lossProbability, coverage, nodesEvaluated, explorerCalls: fetched.size };
+  return {
+    score,
+    winRate: outcome ? outcome[0] : null,
+    lossProbability: outcome ? outcome[2] : null,
+    coverage,
+    nodesEvaluated,
+    explorerCalls: fetched.size,
+    stockfishLeaves: stockfishLeaves.size,
+  };
 }

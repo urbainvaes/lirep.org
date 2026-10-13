@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from . import store
 from .config import HTTP_TIMEOUT, MAX_USERS
+from .stats import LeafValue
 
 router = APIRouter()
 
@@ -19,7 +20,8 @@ LEADERBOARD_SIZE = 10
 # not comparable, so they are never ranked together.
 Source = Literal["lichess", "lirep"]
 # The "Balanced" Stockfish depth on a study's Stats page; shallower expected
-# evaluations are too noisy to compare.
+# evaluations, and expected scores valued with Stockfish, are too noisy to
+# compare.
 MIN_LEADERBOARD_EVAL_DEPTH = 12
 
 
@@ -85,16 +87,20 @@ def _entry(
     ranked_source: Source = "lichess",
     any_source: bool = False,
     names: _Names = _Names(),
+    ranked_leaf: LeafValue = "explorer",
 ) -> dict:
     """A leaderboard row. Only win probabilities calculated with
-    `ranked_source`'s Explorer get a score and a rank; the rest are listed
-    with the reason they are not ranked. Each scored row carries the
-    settings that produced it."""
+    `ranked_source`'s Explorer, and with lines' ends valued by `ranked_leaf`,
+    get a score and a rank; the rest are listed with the reason they are not
+    ranked. Each scored row carries the settings that produced it."""
     stats = study.get("stats") or {}
     settings = study["explorerSettings"]
     probability = stats.get("winProbability")
     # Older stats records predate the "source" field; fall back to the study's.
     source = stats.get("source") or settings.get("source")
+    # Scores saved before the choice existed used the Explorer's results.
+    leaf = stats.get("leafValue") or "explorer"
+    depth = stats.get("scoreDepth")
     moves, lines = _count_moves_and_lines(study["tree"])
     reason = None
     if probability is None:
@@ -107,6 +113,12 @@ def _entry(
     elif source != ranked_source:
         reason = "Calculated with another Explorer"
         probability = None
+    elif leaf != ranked_leaf:
+        reason = "Lines' ends valued another way"
+        probability = None
+    elif leaf != "explorer" and (depth or 0) < MIN_LEADERBOARD_EVAL_DEPTH:
+        reason = f"Stockfish depth under {MIN_LEADERBOARD_EVAL_DEPTH}"
+        probability = None
     return {
         "id": study["id"],
         "name": study["name"],
@@ -118,6 +130,8 @@ def _entry(
         "database": stats.get("database") or settings.get("database"),
         "minRating": stats.get("minRating", settings.get("minRating")),
         "speeds": stats.get("speeds") or settings.get("speeds") or [],
+        "leafValue": leaf,
+        "depth": depth if leaf != "explorer" else None,
         "calculatedAt": stats.get("winProbabilityCalculatedAt"),
         "moves": moves,
         "lines": lines,
@@ -276,13 +290,16 @@ def shared_study(study_id: int, request: Request) -> dict:
 
 
 @router.get("/api/community/openings")
-def openings(request: Request, source: Source = "lichess") -> list[dict]:
+def openings(request: Request, source: Source = "lichess", leaf: LeafValue = "explorer") -> list[dict]:
     """Up to LEADERBOARD_SIZE ranked studies per side, best score first. Only
     studies with a comparable score appear: win probabilities calculated with
-    `source`'s Explorer. Everything else is left out. Ranks are per side."""
+    `source`'s Explorer, lines' ends valued by `leaf`. Everything else is left
+    out. Ranks are per side."""
     me = request.session.get("username")
     names = _names()
-    entries = [_entry(owner, study, me, source, names=names) for owner, study in store.list_shared_studies()]
+    entries = [
+        _entry(owner, study, me, source, names=names, ranked_leaf=leaf) for owner, study in store.list_shared_studies()
+    ]
     shown: list[dict] = []
     for side in ("white", "black"):
         ranked = sorted(

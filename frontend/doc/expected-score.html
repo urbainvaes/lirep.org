@@ -10,7 +10,7 @@
           t === "light" || t === "dark" ? t : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       } catch (e) {}
     </script>
-    <meta name="description" content="How Lirep calculates a study's expected score and coverage, with diagrams and a worked example." />
+    <meta name="description" content="How Lirep calculates a study's expected score and coverage, the three ways it values the end of preparation, with diagrams and a worked example." />
     <title>Expected score · lirep.org</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -43,12 +43,21 @@
 
     <main class="site-main doc-main xs-page">
       <h1 class="page-title">How the expected score is calculated</h1>
-      <p class="doc-intro">
-        A study's expected score is the score you would get, on average, if you always played your prepared moves
-        and your opponents chose their moves like the players in the Opening Explorer. This page describes the
-        calculation exactly, with a worked example. The numbers in the example are made up, so that the
-        arithmetic is easy to follow.
-      </p>
+      <div class="xs-intro">
+        <p>
+          A study's expected score is your probability of winning plus half your probability of drawing,
+          $$\text{Expected score} = P(\text{win}) + \tfrac{1}{2}\, P(\text{draw}),$$
+          that is, the average number of points you score per game, with a win worth 1, a draw ½ and a loss 0. The
+          probabilities are those of a game in which you always play your prepared moves and your opponents choose
+          their moves like the players in the Opening Explorer.
+        </p>
+        <p>
+          It is calculated in two parts: a walk through your study, always the same, and a value for each line where
+          your preparation ends, which you choose in the Stats page's calculation settings. This page describes both
+          exactly, with a worked example. The numbers in the example are made up, so that the arithmetic is easy to
+          follow.
+        </p>
+      </div>
 
       <section>
         <h2>The idea</h2>
@@ -64,22 +73,144 @@
             the Explorer lists gets a weight: its number of games, divided by the total of the listed moves.
           </li>
           <li>
-            <strong>Where your preparation ends, the line counts with the results of its last move</strong>, as
-            the Explorer lists them in the position before that move: its share of wins, draws and losses, scored
-            as a win 1, a draw ½ and a loss 0, from your side.
+            <strong>Each line's end gets a value</strong> \(v\): the expected score of a game from that
+            position on, between 0 and 1, from your side.
           </li>
         </ol>
         <p>
-          The expected score is then the weighted average of the values where the lines end: the
-          probability of reaching the end of each line, times its value, summed over all lines.
+          The expected score is then the weighted average of the values where the lines end: the probability
+          \(P(\ell)\) of reaching the end \(\ell\) of each line, that is the product of your opponent's
+          weights along it, times its value, summed over all lines:
+        </p>
+        <p>$$\text{Expected score} = \sum_{\ell} P(\ell)\, v(\ell).$$</p>
+        <p>
+          The walk and the weights \(P(\ell)\) only depend on your study and on the Explorer settings. The
+          values \(v(\ell)\) are a choice: Lirep offers <a href="#leaf-values">three</a>, based on the
+          Explorer's results, on Stockfish's evaluation, or on both.
+        </p>
+      </section>
+
+      <section>
+        <h2>Where a line ends</h2>
+        <p>
+          A line ends with its <strong>last answered move</strong>. Usually that's one of your moves, after which
+          you haven't prepared anything. It can also be one of your opponent's replies that your study doesn't
+          answer: it leaves your preparation, and the line ends with it. An opponent move in your study that you
+          haven't prepared an answer to isn't an answered move, and is ignored, as if it weren't in the study.
+        </p>
+        <p>
+          Say a line ends with 5.b3 e4, and you're White: 5...e4 has no prepared answer, so the line ends with
+          5.b3. With Explorer values, the line is worth <strong>5.b3's own results</strong>: the games in which
+          5.b3 was played in the position before it. The Explorer shows them on 5.b3's row when you look at the
+          position after Black's 4th move. It isn't an average over Black's replies after 5.b3. With Stockfish,
+          the line is worth the evaluation of the position after 5.b3.
+        </p>
+        <figure class="xs-figure">
+          <svg viewBox="0 0 1000 250" role="img" aria-labelledby="xs-end-title">
+            <title id="xs-end-title">A line ending with 5.b3: the unanswered 5...e4 is ignored, and 5.b3's row in the Explorer gives the line's value</title>
+            <defs>
+              <marker id="xs-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="xs-arrowhead" />
+              </marker>
+            </defs>
+            <path class="xs-edge" d="M140,60 L200,60" marker-end="url(#xs-arrow2)" />
+            <path class="xs-edge" d="M300,60 L360,60" marker-end="url(#xs-arrow2)" />
+            <g class="xs-opp"><rect x="30" y="40" width="110" height="40" rx="8" /><text x="85" y="65">4...Nf6</text></g>
+            <g class="xs-own"><rect x="200" y="40" width="100" height="40" rx="8" /><text x="250" y="65">5.b3</text></g>
+            <g class="xs-opp xs-ignored"><rect x="360" y="40" width="100" height="40" rx="8" /><text x="410" y="65">5...e4</text></g>
+            <text class="xs-caption" x="410" y="100">no answer: ignored</text>
+            <text class="xs-caption" x="250" y="100">the line ends here</text>
+
+            <!-- the explorer, in the position before 5.b3 -->
+            <g class="xs-table">
+              <rect class="xs-table__frame" x="520" y="20" width="450" height="210" rx="10" />
+              <text class="xs-table__title" x="540" y="48">Opening Explorer, after 4...Nf6</text>
+              <text class="xs-table__head" x="540" y="78">Move</text>
+              <text class="xs-table__head" x="640" y="78">Games</text>
+              <text class="xs-table__head" x="740" y="78">White / draws / Black</text>
+              <text x="540" y="108">Nf3</text><text x="640" y="108">2,410</text><text x="740" y="108">49% / 7% / 44%</text>
+              <rect class="xs-table__mark" x="530" y="118" width="430" height="30" rx="6" />
+              <text x="540" y="138"><tspan font-weight="700">b3</tspan></text><text x="640" y="138">812</text><text x="740" y="138">50% / 8% / 42%</text>
+              <text x="540" y="168">Nc3</text><text x="640" y="168">655</text><text x="740" y="168">47% / 6% / 47%</text>
+              <text class="xs-table__note" x="540" y="208">5.b3's value: 50% + 8% ÷ 2 = 54%</text>
+            </g>
+            <path class="xs-edge xs-edge--hint" d="M300,72 C400,150 450,133 528,133" marker-end="url(#xs-arrow2)" />
+          </svg>
+          <figcaption>
+            With Explorer values, a line ending with your move is worth that move's row in the Explorer, in the
+            position before it.
+          </figcaption>
+        </figure>
+        <p>
+          The row of 5.b3 and the Explorer's totals in the position after it can differ: the Explorer stores games
+          by position, and the totals also count the games that reached the same position by another move order.
+          The row counts only the games that played 5.b3 in the position before it.
+        </p>
+      </section>
+
+      <section id="leaf-values">
+        <h2>The value of a line's end</h2>
+        <p>
+          A line's value \(v\) is your expected score in a game that reaches the end of that prepared line: the
+          points you can expect from there on, once your preparation stops, between 0 and 1. It can't be known
+          exactly, so it is estimated, in one of three ways chosen in the calculation settings on a study's Stats
+          page:
+        </p>
+        <ul>
+          <li>
+            <p>
+              <strong>Explorer results</strong>, the default. A line is worth the results of its last move, as the
+              Explorer lists them in the position before that move: its share of wins plus half its share of
+              draws, from your side. The Stats page also shows the share of wins, draws and losses this gives.
+            </p>
+          </li>
+          <li>
+            <p>
+              <strong>Stockfish.</strong> A line is worth Stockfish's evaluation of the position where it ends, at
+              the depth chosen in the calculation settings, turned into an expected score with the curve Lichess
+              uses for its winning chances. With \(c\) the evaluation in centipawns, from your side:
+            </p>
+            <p>$$v = \frac{1}{1 + e^{-0.00368208\, c}}.$$</p>
+            <div class="xs-curve-wrap">
+              <table class="xs-curve">
+                <tbody>
+                  <tr><th scope="row">Evaluation, in pawns</th><td>0.00</td><td>+0.50</td><td>+1.00</td><td>+2.00</td><td>+3.00</td><td>+5.00</td><td>Mate for you</td></tr>
+                  <tr><th scope="row">Value \(v\)</th><td>50%</td><td>54.6%</td><td>59.1%</td><td>67.6%</td><td>75.1%</td><td>86.3%</td><td>100%</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              The curve gives an expected score, not wins, draws and losses apart, so the Stats page doesn't show
+              them. Stockfish runs in your browser, like for the expected evaluation, and the two share the
+              positions it has already evaluated.
+            </p>
+          </li>
+          <li>
+            <p>
+              <strong>Explorer, Stockfish under 50 games.</strong> Explorer results, except where the last move's
+              row has fewer than 50 games, or isn't listed at all: there the line is worth Stockfish's value
+              instead. A score over 50 games still has a standard error of about 7 points, and the error grows
+              quickly below that. The Stats page shows how many lines' ends Stockfish valued. As with Stockfish
+              alone, there is no split into wins, draws and losses.
+            </p>
+          </li>
+        </ul>
+        <h3>Where the Explorer has no games</h3>
+        <p>
+          If the Explorer has no games at all in a position where your opponent is to move, the walk can't go on:
+          Explorer values count the position as 50%, the two others take its Stockfish value. If the study's
+          starting point has nothing prepared, Explorer values take the Explorer's totals for that position. If
+          your last move is too rare to be listed, Explorer values average the results of your opponent's replies
+          to it.
         </p>
       </section>
 
       <section>
         <h2>A worked example</h2>
         <p>
-          A study for White in the Caro-Kann Fantasy, starting after 3.f3. Black's replies in the Explorer:
-          3...dxe4 in 50% of the games, 3...e6 in 30%, 3...g6 in 20% (made-up numbers, as all numbers below).
+          We consider a study for White in the Caro-Kann Fantasy, starting after 3.f3, with lines' ends valued
+          with Explorer results. In the Explorer, Black replies 3...dxe4 in 50% of the games, 3...e6 in 30% and
+          3...g6 in 20% (made-up numbers, as are all the numbers below).
         </p>
         <figure class="xs-figure">
           <svg viewBox="0 0 1000 420" role="img" aria-labelledby="xs-tree-title">
@@ -137,7 +268,7 @@
           </svg>
           <figcaption>
             Your moves in blue, your opponent's in grey, the opponent's weights on the arrows, and the value of each
-            line's end in green: the results of the line's last move.
+            line's end in green: here, the Explorer results of the line's last move.
           </figcaption>
         </figure>
         <p>From the ends of the lines back to the start:</p>
@@ -149,57 +280,11 @@
         <p class="xs-formula">
           Expected score = 50% × 58% + 30% × 52.2% + 20% × 51% = 29 + 15.66 + 10.2 = <strong>54.86%</strong>
         </p>
-      </section>
-
-      <section>
-        <h2>Where a line ends</h2>
         <p>
-          A line ends with its <strong>last answered move</strong>. Usually that's one of your moves, after which
-          you haven't prepared anything. An opponent move in your study that you haven't prepared an answer to
-          isn't an answered move, and is ignored, as if it weren't in the study.
+          The same sum, line by line: 4.fxe4 is reached with probability 50%, 5.a3 with 30% × 60% = 18%, 4...dxe4
+          with 30% × 40% = 12%, and 3...g6 with 20%. With Stockfish values, only the four values change: if
+          Stockfish rated each of the four positions +0.50, each would be worth 54.6%, and so would the study.
         </p>
-        <p>
-          Say a line ends with 5.b3 e4, and you're White: 5...e4 has no prepared answer, so the line ends with
-          5.b3. Its value is <strong>5.b3's own results</strong>: the games in which 5.b3 was played in the
-          position before it. The Explorer shows them on 5.b3's row when you look at the position after
-          Black's 4th move. It isn't an average over Black's replies after 5.b3.
-        </p>
-        <figure class="xs-figure">
-          <svg viewBox="0 0 1000 250" role="img" aria-labelledby="xs-end-title">
-            <title id="xs-end-title">A line ending with 5.b3: the unanswered 5...e4 is ignored, and 5.b3's row in the Explorer gives the line's value</title>
-            <defs>
-              <marker id="xs-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" class="xs-arrowhead" />
-              </marker>
-            </defs>
-            <path class="xs-edge" d="M140,60 L200,60" marker-end="url(#xs-arrow2)" />
-            <path class="xs-edge" d="M300,60 L360,60" marker-end="url(#xs-arrow2)" />
-            <g class="xs-opp"><rect x="30" y="40" width="110" height="40" rx="8" /><text x="85" y="65">4...Nf6</text></g>
-            <g class="xs-own"><rect x="200" y="40" width="100" height="40" rx="8" /><text x="250" y="65">5.b3</text></g>
-            <g class="xs-opp xs-ignored"><rect x="360" y="40" width="100" height="40" rx="8" /><text x="410" y="65">5...e4</text></g>
-            <text class="xs-caption" x="410" y="100">no answer: ignored</text>
-            <text class="xs-caption" x="250" y="100">the line ends here</text>
-
-            <!-- the explorer, in the position before 5.b3 -->
-            <g class="xs-table">
-              <rect class="xs-table__frame" x="520" y="20" width="450" height="210" rx="10" />
-              <text class="xs-table__title" x="540" y="48">Opening Explorer, after 4...Nf6</text>
-              <text class="xs-table__head" x="540" y="78">Move</text>
-              <text class="xs-table__head" x="640" y="78">Games</text>
-              <text class="xs-table__head" x="740" y="78">White / draws / Black</text>
-              <text x="540" y="108">Nf3</text><text x="640" y="108">2,410</text><text x="740" y="108">49% / 7% / 44%</text>
-              <rect class="xs-table__mark" x="530" y="118" width="430" height="30" rx="6" />
-              <text x="540" y="138"><tspan font-weight="700">b3</tspan></text><text x="640" y="138">812</text><text x="740" y="138">50% / 8% / 42%</text>
-              <text x="540" y="168">Nc3</text><text x="640" y="168">655</text><text x="740" y="168">47% / 6% / 47%</text>
-              <text class="xs-table__note" x="540" y="208">5.b3's value: 50% + 8% ÷ 2 = 54%</text>
-            </g>
-            <path class="xs-edge xs-edge--hint" d="M300,72 C400,150 450,133 528,133" marker-end="url(#xs-arrow2)" />
-          </svg>
-          <figcaption>
-            The value of a line ending with your move comes from that move's row in the Explorer, in the position
-            before it.
-          </figcaption>
-        </figure>
       </section>
 
       <section id="coverage">
@@ -233,12 +318,24 @@
 
       <section>
         <h2>What the expected score does and doesn't say</h2>
+        <p>
+          Neither way of valuing a line's end gives your own score once you're out of book; each errs in its own
+          way.
+        </p>
         <ul>
           <li>
-            <strong>It overstates your score where your preparation ends.</strong> Explorer results include how the
-            players continued after your last move, sometimes with preparation you may not have. This isn't a flaw
-            in using real games; it's a limit of treating the pool's average results as a stand-in for your own
-            play once you're out of book.
+            <strong>Explorer results overstate your score where your preparation ends.</strong> They are the
+            results of every player who reached the position: the average score of a player picked at random among
+            them, including the ones who knew how to go on. What the expected score is after is the score of a
+            player whose preparation stops there. In other words, the Explorer gives an average over all players
+            where an average over unprepared players is wanted, and the prepared ones raise it.
+          </li>
+          <li>
+            <strong>Stockfish's evaluations often differ widely from how people score.</strong> A position
+            Stockfish calls equal can be much easier to play for one side, and an engine's advantage can be out of
+            reach for a human. Over many lines, some of these errors cancel out, but not all: in a given opening
+            they often lean the same way. The curve from centipawns to an expected score is also the same for
+            every rating, while a pawn is worth more between strong players.
           </li>
           <li>
             <strong>Rare replies are left out.</strong> The Explorer lists the most played moves in a position (up to
@@ -246,23 +343,29 @@
           </li>
           <li>
             <strong>It depends on the pool.</strong> The rating band and time controls in the study's calculation
-            settings choose the games; results calculated with different settings aren't comparable, which is why
-            the leaderboards rank them separately.
+            settings choose the games; results calculated with different settings aren't comparable, nor are
+            results with different values at the end of preparation. The leaderboards rank each separately.
           </li>
           <li>
             <strong>Small samples are noisy.</strong> A move's results over a few dozen games are uncertain by several
-            points; the game counts are shown in the Explorer.
+            points; the game counts are shown in the Explorer. The third value, with Stockfish under 50 games,
+            avoids the smallest samples.
           </li>
         </ul>
+      </section>
+
+      <section id="expected-evaluation">
+        <h2>Expected evaluation</h2>
         <p>
-          The <strong>expected evaluation</strong> walks the same tree with the same weights, but values the end of
-          each line with Stockfish's evaluation: of the position after each of your opponent's likely replies
-          (weighted by how often they're played) when the line ends with your move, and of the position itself
-          after a reply your study doesn't answer. See the <a href="stats.html#expected-score">Stats documentation</a>
-          for both calculations' details.
+          The <strong>expected evaluation</strong> walks the same tree with the same weights, but averages
+          Stockfish's evaluations in pawns, without turning them into scores: of the position after each of your
+          opponent's likely replies (weighted by how often they're played) when the line ends with your move, and
+          of the position itself after a reply your study doesn't answer. See the
+          <a href="stats.html#expected-score">Stats documentation</a> for both calculations' details.
         </p>
       </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/doc-math.ts"></script>
   </body>
 </html>

@@ -3636,8 +3636,9 @@ button.study-head__link:disabled:hover {
   gap: 8px 18px;
 }
 
-/* A choice between two options (the leaderboards' metric, their Explorer
-   data): two segments, the chosen one filled. The Explorer data switch is
+/* A choice between a few options (the leaderboards' metric, their Explorer
+   data, how the expected score values lines' ends): segments, the chosen one
+   filled. The Explorer data switch is
    shown only when the 2016 sample has something to rank. */
 .source-switch {
   display: inline-flex;
@@ -3665,8 +3666,11 @@ button.study-head__link:disabled:hover {
   border-radius: 6px 0 0 6px;
 }
 
-.source-switch button:last-of-type {
+.source-switch button + button {
   margin-left: -1px;
+}
+
+.source-switch button:last-of-type {
   border-radius: 0 6px 6px 0;
 }
 
@@ -4758,6 +4762,51 @@ button.study-head__link:disabled:hover {
 
 .xs-page > section {
   margin-bottom: 36px;
+}
+
+/* Stockfish's evaluations next to the values the curve gives them. */
+.xs-curve-wrap {
+  overflow-x: auto;
+  margin: 4px 0 12px;
+}
+
+.xs-curve {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.xs-curve th,
+.xs-curve td {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.xs-curve th {
+  color: var(--text-dim);
+  font-weight: 600;
+  text-align: left;
+}
+
+/* The page's introduction, in a card like the figures. */
+.xs-intro {
+  margin: 0 0 36px;
+  padding: 18px 22px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1.02rem;
+  line-height: 1.65;
+}
+
+.xs-intro p {
+  margin: 0 0 12px;
+}
+
+.xs-intro p:last-child {
+  margin-bottom: 0;
 }
 
 .xs-figure {

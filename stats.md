@@ -12,13 +12,18 @@ of the tree:
 
 | Stat | At the edge of preparation | Where calculated |
 | --- | --- | --- |
-| Expected score / win and loss probabilities | Explorer win/draw/loss results | Backend job |
+| Expected score / win and loss probabilities | Explorer win/draw/loss results, Stockfish's evaluation as an expected score, or the first with the second under 50 games (the end-of-prep value setting) | Browser |
 | Coverage | Drop probability mass that leaves the tree | Backend job |
 | Expected evaluation | Local Stockfish centipawns, weighted by Explorer move frequency | Browser |
 
-**Expected score and coverage never use engine evaluations.** They measure
-real game outcomes and the chance of staying in book, not objective position
-quality. Expected evaluation uses actual local Stockfish results, never a
+**Coverage never uses engine evaluations, nor does the expected score with
+its default end-of-prep value (Explorer results).** They measure real game
+outcomes and the chance of staying in book, not objective position quality.
+The expected score can instead value lines' ends with local Stockfish,
+converted to an expected score by Lichess's winning-chances curve
+`1 / (1 + exp(-0.00368208 * cp))`, alone or where the Explorer row has fewer
+than 50 games; Stockfish values have no win/draw/loss split. Expected
+evaluation uses actual local Stockfish results, never a
 win-rate-to-centipawn conversion or a Lichess Cloud Eval fallback.
 
 ## 1. Expected score and win probability
@@ -48,7 +53,14 @@ nothing prepared, a position's expected score is its own score. An opponent
 move without a prepared answer is ignored, as if it weren't in the tree (see
 `frontend/doc/expected-score.html`).
 
-This fallback is empirical, not an intrinsic evaluation of the position: it
+With the `stockfish` end-of-prep value, each line's end is worth the
+Stockfish evaluation of the position its last move leads to, converted to an
+expected score; with `explorer-stockfish`, the Explorer row when it has at
+least 50 games, Stockfish otherwise. Where an opponent position has no
+Explorer games, both use Stockfish instead of the neutral 0.5. See
+`frontend/doc/expected-score.html`.
+
+The Explorer value is empirical, not an intrinsic evaluation of the position: it
 reflects what players in the selected pool actually played next, including
 prepared follow-ups. A favorable Explorer result may depend on a continuation
 the user has not prepared. This is not a flaw in using empirical results; it is

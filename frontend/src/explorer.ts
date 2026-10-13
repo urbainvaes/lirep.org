@@ -31,6 +31,20 @@ export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
   speeds: ["blitz", "rapid", "classical"],
 };
 
+/** How the expected score values a line where the preparation ends: with
+ * the Explorer's results, with Stockfish's evaluation turned into an
+ * expected score, or with the Explorer's results unless they count fewer
+ * than MIN_LEAF_GAMES games, then Stockfish's. See doc/expected-score.html. */
+export type LeafValue = "explorer" | "stockfish" | "explorer-stockfish";
+
+export const MIN_LEAF_GAMES = 50;
+
+export const LEAF_VALUE_LABELS: Record<LeafValue, string> = {
+  explorer: "Explorer results",
+  stockfish: "Stockfish",
+  "explorer-stockfish": `Explorer, Stockfish under ${MIN_LEAF_GAMES} games`,
+};
+
 export interface ExplorerDefaults {
   ratingBuckets: number[];
   defaultMinRating: number;

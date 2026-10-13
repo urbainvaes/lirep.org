@@ -7,12 +7,14 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
   fetchExplorerDefaults,
+  LEAF_VALUE_LABELS,
   ratingOptionsHtml,
   speedCheckboxesHtml,
   type ExplorerData,
   type ExplorerDefaults,
   type ExplorerSettings,
   type ExplorerSpeed,
+  type LeafValue,
 } from "./explorer";
 import { calculateExpectedScore } from "./expectedScore";
 import { fetchExplorerData } from "./explorerClient";
@@ -49,8 +51,12 @@ interface StudyStats extends CalculationSettings {
   // Despite the name, the expected score: wins plus half the draws. The
   // score tiers and the community leaderboard use it.
   winProbability?: number;
-  winRate?: number;
-  lossProbability?: number;
+  // null when Stockfish valued some line's end: no win/draw/loss split then.
+  winRate?: number | null;
+  lossProbability?: number | null;
+  leafValue?: LeafValue; // missing on scores saved before the choice existed: "explorer"
+  scoreDepth?: number | null; // Stockfish depth, when Stockfish valued some lines' ends
+  stockfishLeaves?: number;
   coverage?: number[]; // coverage[i] = fraction of games still in-book after the opponent's (i+1)th move
   winProbabilityCalculatedAt?: string;
   winProbabilityMovesFingerprint?: string;
@@ -525,14 +531,20 @@ function readDepthFromDom(): number {
   return Number((document.getElementById("eval-depth") as HTMLSelectElement).value);
 }
 
+function readLeafValueFromDom(): LeafValue {
+  return (document.getElementById("leaf-value") as HTMLSelectElement).value as LeafValue;
+}
+
 // Why a result no longer matches the current settings or moves; empty when
 // it is up to date. Results saved before fingerprints (or the depth) were
 // recorded are not flagged for what wasn't recorded.
-function scoreStaleness(study: Study, current: ExplorerSettings): string[] {
+function scoreStaleness(study: Study, current: ExplorerSettings, leaf: LeafValue, depth: number): string[] {
   const stats = study.stats;
   if (stats?.winProbability === undefined) return [];
   const reasons: string[] = [];
   if (!sameExplorerSettings(stats, current)) reasons.push("Explorer settings changed");
+  if ((stats.leafValue ?? "explorer") !== leaf) reasons.push("end-of-prep values changed");
+  else if (leaf !== "explorer" && stats.scoreDepth && stats.scoreDepth !== depth) reasons.push("Stockfish depth changed");
   const fingerprint = stats.winProbabilityMovesFingerprint;
   if (fingerprint && fingerprint !== study.movesFingerprint) reasons.push("moves changed");
   return reasons;
@@ -577,9 +589,10 @@ async function leaderboardStatus(study: Study): Promise<{ score: string; evaluat
   // Each result is ranked among scores from the same Explorer: Lichess's, or
   // the 2016 sample's (a separate view of the leaderboards).
   const scoreSource = stats?.source ?? "lichess";
+  const scoreLeaf = stats?.leafValue ?? "explorer";
   const evalSource = stats?.evalSettings?.source ?? "lichess";
   const [byScore, byEval] = await Promise.all([
-    fetchBoard(`/api/community/openings?source=${scoreSource}`),
+    fetchBoard(`/api/community/openings?source=${scoreSource}&leaf=${scoreLeaf}`),
     fetchBoard(`/api/community/openings-by-eval?source=${evalSource}`),
   ]);
 
@@ -596,7 +609,9 @@ async function leaderboardStatus(study: Study): Promise<{ score: string; evaluat
     return `Not in the top 10 for ${sideName} on the ${where}.`;
   };
   return {
-    score: stats?.winProbability !== undefined ? status(byScore, stats) : "",
+    score: stats?.winProbability !== undefined
+      ? status(byScore, stats, scoreLeaf === "explorer" ? undefined : stats.scoreDepth ?? null)
+      : "",
     evaluation: stats?.evalCp !== undefined ? status(byEval, stats.evalSettings, stats.evalDepth ?? null) : "",
   };
 }
@@ -636,16 +651,25 @@ function renderPage(
 
   const scoreHtml = stats?.winProbability !== undefined
     ? (() => {
-        const outcomes = stats.winRate !== undefined && stats.lossProbability !== undefined
+        const leaf = stats.leafValue ?? "explorer";
+        const outcomes = stats.winRate != null && stats.lossProbability != null
           ? (() => {
               const draw = Math.max(0, Math.min(1, 1 - stats.winRate! - stats.lossProbability!));
               const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
               return `<p class="stat-outcomes">Win <strong>${pct(stats.winRate)}</strong> · Draw <strong>${pct(draw)}</strong> · Loss <strong>${pct(stats.lossProbability)}</strong></p>`;
             })()
-          : `<p class="stat-outcomes">Recalculate to see wins, draws and losses.</p>`;
+          : leaf === "explorer"
+            ? `<p class="stat-outcomes">Recalculate to see wins, draws and losses.</p>`
+            : `<p class="stat-outcomes">No win, draw and loss split: Stockfish gives an expected score only.</p>`;
+        const leafNote = leaf === "explorer"
+          ? ""
+          : ` · ${LEAF_VALUE_LABELS[leaf]}${stats.scoreDepth ? `, depth ${stats.scoreDepth}` : ""}`;
+        const stockfishNote = leaf === "explorer-stockfish"
+          ? ` · ${stats.stockfishLeaves ?? 0} valued with Stockfish`
+          : "";
         return `<div class="stat-detail__score">${(stats.winProbability * 100).toFixed(1)}%</div>
           ${outcomes}
-          <p class="stat-card__meta">Calculated with ${explorerSummary(stats)} · ${stats.nodesEvaluated ?? 0} positions · ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
+          <p class="stat-card__meta">Calculated with ${explorerSummary(stats)}${leafNote} · ${stats.nodesEvaluated ?? 0} positions${stockfishNote} · ${formatDate(stats.winProbabilityCalculatedAt ?? "")}</p>`;
       })()
     : `<div class="stat-detail__score stat-card__score--empty">—</div>
        <p class="stat-card__meta">Not calculated yet.</p>`;
@@ -732,8 +756,20 @@ function renderPage(
             </div>
           </div>
           <div class="calc-settings__group">
+            <h3>End of preparation</h3>
+            <p class="stat-card__meta">How the expected score values a line where your preparation ends. <a href="/doc/expected-score.html#leaf-values">How each works</a></p>
+            <label class="eval-depth-control" for="leaf-value">
+              <span>Value</span>
+              <select id="leaf-value">
+                ${(Object.keys(LEAF_VALUE_LABELS) as LeafValue[])
+                  .map((leaf) => `<option value="${leaf}" ${(stats?.leafValue ?? "explorer") === leaf ? "selected" : ""}>${LEAF_VALUE_LABELS[leaf]}</option>`)
+                  .join("")}
+              </select>
+            </label>
+          </div>
+          <div class="calc-settings__group">
             <h3>Stockfish</h3>
-            <p class="stat-card__meta">How deep Stockfish searches each end-of-prep position, for the expected evaluation.</p>
+            <p class="stat-card__meta">How deep Stockfish searches each end-of-prep position, for the expected evaluation, and for the expected score when Stockfish values lines' ends.</p>
             <label class="eval-depth-control" for="eval-depth">
               <span>Depth</span>
               <select id="eval-depth">
@@ -758,7 +794,7 @@ function renderPage(
         </div>
         <p class="stat-result__what">Wins plus half the draws, if you always play your prepared moves and opponents reply as in the Explorer.</p>
         <div class="stat-result__explain" id="score-explain" hidden>
-          <p>After play leaves your repertoire, Explorer results include how those players continued, sometimes with preparation you may not have. They may overstate your own score if you don't know the follow-up. This isn't a flaw in using empirical results; it's a limitation of treating the pool's average outcomes as a proxy for your own unprepared play.</p>
+          <p>Where your preparation ends, Explorer results are those of every player who reached the position, including those who knew how to go on; they may overstate your own score if you don't know the follow-up. Stockfish's evaluation, the other choice in the calculation settings, can differ widely from how players at your level actually score.</p>
           <a href="/doc/expected-score.html">More in the docs</a>
         </div>
         ${scoreHtml}
@@ -826,7 +862,7 @@ function renderPage(
   const depthEl = document.getElementById("eval-depth") as HTMLSelectElement;
   // The depth the expected evaluation was last calculated at, like the Explorer
   // settings; this browser's last choice for a study never calculated.
-  const studyDepth = stats?.evalDepth;
+  const studyDepth = stats?.evalDepth ?? stats?.scoreDepth;
   depthEl.value = String(
     studyDepth && EVAL_DEPTHS.includes(studyDepth as (typeof EVAL_DEPTHS)[number]) ? studyDepth : getSavedEvalDepth(),
   );
@@ -885,9 +921,10 @@ function renderPage(
   function refreshStatus(): void {
     const current = readSettingsFromDom();
     const depth = readDepthFromDom();
+    const leaf = readLeafValueFromDom();
     (document.getElementById("settings-summary") as HTMLElement).textContent =
-      `${explorerSummary(current)} · Stockfish depth ${depth}`;
-    const scoreReasons = scoreStaleness(study, current);
+      `${explorerSummary(current)} · ${LEAF_VALUE_LABELS[leaf]} · Stockfish depth ${depth}`;
+    const scoreReasons = scoreStaleness(study, current, leaf, depth);
     const evalReasons = evalStaleness(study, current, depth);
     (document.getElementById("score-stale") as HTMLElement).innerHTML = staleHtml(scoreReasons);
     (document.getElementById("coverage-stale") as HTMLElement).innerHTML = staleHtml(scoreReasons);
@@ -936,7 +973,7 @@ function renderPage(
     fill.style.width = "0%";
   }
 
-  async function calculateScore(current: Study, settings: ExplorerSettings): Promise<Study> {
+  async function calculateScore(current: Study, settings: ExplorerSettings, leaf: LeafValue, depth: number): Promise<Study> {
     const { fill, label } = progressElements("score");
     const startNodeId = current.startNodeId !== null && current.startNodeId in current.tree.nodes
       ? current.startNodeId
@@ -946,22 +983,50 @@ function renderPage(
     const estimate = Object.keys(current.tree.nodes).length;
     label.textContent = "Checking positions…";
     const explorerCache = new Map<string, ExplorerData>();
-    const result = await calculateExpectedScore(current.tree, startNodeId, current.side, async (fen) => {
-      const known = explorerCache.has(fen);
-      const data = await fetchExplorerPosition(fen, settings, current.side, explorerCache);
-      if (!known) {
-        const positions = explorerCache.size;
-        fill.style.width = `${Math.min(100, Math.round((positions / Math.max(1, estimate)) * 100))}%`;
-        label.textContent = `${positions} position${positions === 1 ? "" : "s"} checked…`;
-      }
-      return data;
-    });
+    let positions = 0;
+    const progress = () => {
+      fill.style.width = `${Math.min(100, Math.round((positions / Math.max(1, estimate)) * 100))}%`;
+      label.textContent = `${positions} position${positions === 1 ? "" : "s"} checked…`;
+    };
+    // Stockfish starts only if a line's end needs it; its evaluations are
+    // shared with the expected evaluation's, in this browser's cache.
+    let engine: Engine | null = null;
+    const evaluate = async (fen: string): Promise<number | null> => {
+      const known = await cache.get(fen, depth);
+      if (known !== undefined) return known;
+      engine ??= new Engine();
+      label.textContent = `Stockfish: evaluating a position (depth ${depth})…`;
+      const cp = await evaluatePosition(engine, new Chess(fen), depth);
+      if (cp !== null) await cache.set(fen, depth, cp);
+      positions += 1;
+      progress();
+      return cp;
+    };
+    let result;
+    try {
+      result = await calculateExpectedScore(current.tree, startNodeId, current.side, async (fen) => {
+        const known = explorerCache.has(fen);
+        const data = await fetchExplorerPosition(fen, settings, current.side, explorerCache);
+        if (!known) {
+          positions += 1;
+          progress();
+        }
+        return data;
+      }, leaf, evaluate);
+    } finally {
+      (engine as Engine | null)?.terminate();
+    }
     label.textContent = "Saving…";
     const res = await fetch(`/api/studies/${current.id}/expected-score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ ...result, explorerSettings: settings }),
+      body: JSON.stringify({
+        ...result,
+        leafValue: leaf,
+        depth: leaf === "explorer" ? null : depth,
+        explorerSettings: settings,
+      }),
     });
     if (!res.ok) throw new Error("Could not save the expected score");
     return res.json();
@@ -1011,6 +1076,7 @@ function renderPage(
   async function run(which: ("score" | "eval")[]): Promise<void> {
     const settings = readSettingsFromDom();
     const depth = readDepthFromDom();
+    const leaf = readLeafValueFromDom();
     let current = study;
     setBusy(true);
     for (const id of which) {
@@ -1020,7 +1086,9 @@ function renderPage(
         label.textContent = `Lichess asked to slow down; resuming at ${time}…`;
       };
       try {
-        current = id === "score" ? await calculateScore(current, settings) : await calculateEvaluation(current, settings, depth);
+        current = id === "score"
+          ? await calculateScore(current, settings, leaf, depth)
+          : await calculateEvaluation(current, settings, depth);
       } catch (err) {
         showError(id, err);
         setBusy(false);
