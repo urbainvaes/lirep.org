@@ -16,12 +16,17 @@ import {
   type ExplorerSpeed,
   type LeafValue,
 } from "./explorer";
-import { calculateExpectedScore } from "./expectedScore";
+import { calculateExpectedScore, MATE_SCORE_CP } from "./expectedScore";
 import { fetchExplorerData } from "./explorerClient";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { mainLineSans, sanPathTo, type StudyTree } from "./tree";
 
 const EVAL_DEPTHS = [8, 12, DEFAULT_SEARCH_DEPTH] as const;
+// The expected evaluation's method, saved with it (see EVAL_METHOD in
+// backend/app/stats.py): 3 evaluates the same lines' ends as the expected
+// score with Stockfish values, each evaluation capped at ±10 pawns. Older
+// evaluations are out of date.
+const EVAL_METHOD = 3;
 const EVAL_DEPTH_STORAGE_KEY = "stats-evaluation-depth";
 
 function getSavedEvalDepth(): number {
@@ -66,6 +71,7 @@ interface StudyStats extends CalculationSettings {
   evalCalculatedAt?: string;
   evalOrigin?: "local";
   evalDepth?: number | null; // Stockfish depth; missing on evaluations saved before it was recorded
+  evalMethod?: number; // missing on evaluations from method 1
   evalSettings?: CalculationSettings;
   evalMovesFingerprint?: string;
   explorerCalls?: number;
@@ -109,10 +115,6 @@ async function loadPracticeKnowledge(studyId: number): Promise<number | null> {
   }
 }
 
-// A forced mate is capped at this centipawn value so it can be averaged
-// with ordinary evaluations.
-const MATE_SCORE_CP = 100_000;
-
 function formatEval(cp: number): string {
   if (Math.abs(cp) > MATE_SCORE_CP - 1000) return cp > 0 ? "Forced mate" : "Forced mate against";
   const pawns = cp / 100;
@@ -151,58 +153,6 @@ async function evaluatePosition(engine: Engine, chess: Chess, depth: number): Pr
   return null;
 }
 
-// Follow the expected-evaluation tree walk and collect only the positions at
-// its frontier: prepared-side leaves, opponent nodes with no games, and
-// positions one opponent move beyond the prepared tree.
-async function findRequiredEvaluations(
-  tree: StudyTree,
-  startNodeId: number,
-  side: "white" | "black",
-  settings: ExplorerSettings,
-  explorerCache: Map<string, ExplorerData>,
-): Promise<Set<string>> {
-  const positions = new Set<string>();
-
-  async function walk(nodeId: number, chess: Chess): Promise<void> {
-    if (chess.isGameOver()) return;
-    const node = tree.nodes[nodeId];
-    const studiedSideToMove = (chess.turn() === "w") === (side === "white");
-
-    if (studiedSideToMove) {
-      if (node.children.length === 0) positions.add(chess.fen());
-      else {
-        const childId = node.children[0];
-        const child = new Chess(chess.fen());
-        child.move(tree.nodes[childId].san);
-        await walk(childId, child);
-      }
-      return;
-    }
-
-    const data = await fetchExplorerPosition(chess.fen(), settings, side, explorerCache);
-    const totalGames = data.moves.reduce((total, move) => total + move.white + move.draws + move.black, 0);
-    if (totalGames === 0) {
-      positions.add(chess.fen());
-      return;
-    }
-
-    const childrenBySan = new Map(node.children.map((childId) => [tree.nodes[childId].san, childId]));
-    for (const move of data.moves) {
-      if (move.white + move.draws + move.black === 0) continue;
-      const childId = childrenBySan.get(move.san);
-      const child = new Chess(chess.fen());
-      child.move(move.san);
-      if (childId === undefined) positions.add(child.fen());
-      else await walk(childId, child);
-    }
-  }
-
-  const start = new Chess();
-  for (const san of sanPathTo(tree, startNodeId)) start.move(san);
-  await walk(startNodeId, start);
-  return positions;
-}
-
 // Told when a calculation's Explorer requests wait out a Lichess rate-limit
 // pause, so its progress label can say so; set by the running calculation.
 let onRateLimited: ((resumeAt: number) => void) | null = null;
@@ -223,8 +173,9 @@ async function fetchExplorerPosition(
   return data;
 }
 
-// Evaluate only the frontier positions the expected score needs, persisting
-// each result in the browser as it completes so interrupted runs can resume.
+// Evaluate only the positions where lines end (see expectedScore.ts),
+// persisting each result in the browser as it completes so interrupted runs
+// can resume.
 async function calculateEvaluationsLocally(
   tree: StudyTree,
   startNodeId: number,
@@ -236,18 +187,21 @@ async function calculateEvaluationsLocally(
   onPlan: (ready: number, required: number, work: number) => void,
   onProgress: (done: number, total: number) => void,
 ): Promise<Map<string, number | null>> {
-  const required = await findRequiredEvaluations(tree, startNodeId, side, settings, explorerCache);
+  // A first walk, without evaluations, finds the positions to evaluate.
+  const { stockfishPositions } = await calculateExpectedScore(
+    tree, startNodeId, side, (fen) => fetchExplorerPosition(fen, settings, side, explorerCache), "stockfish", async () => null,
+  );
   const evaluated = new Map<string, number | null>();
   const pending: string[] = [];
-  for (const fen of required) {
+  for (const fen of stockfishPositions) {
     const cp = await cache.get(fen, depth);
     if (cp === undefined) pending.push(fen);
     else evaluated.set(fen, cp);
   }
   const total = pending.length;
-  const initiallyReady = required.size - total;
+  const initiallyReady = stockfishPositions.length - total;
   let done = 0;
-  onPlan(initiallyReady, required.size, total);
+  onPlan(initiallyReady, stockfishPositions.length, total);
 
   if (total === 0) return evaluated;
   const engine = new Engine();
@@ -265,6 +219,9 @@ async function calculateEvaluationsLocally(
   return evaluated;
 }
 
+// The expected evaluation: the expected score's walk with Stockfish values,
+// averaging the evaluations themselves (centipawns, studied side's point of
+// view). A position without a usable evaluation counts as 0.00.
 export async function expectedEvaluation(
   tree: StudyTree,
   startNodeId: number,
@@ -273,44 +230,15 @@ export async function expectedEvaluation(
   evaluated: Map<string, number | null>,
   explorerCache: Map<string, ExplorerData>,
 ): Promise<number> {
-  const sign = side === "white" ? 1 : -1;
-  const valueAt = (fen: string): number => {
-    const cp = evaluated.get(fen);
-    if (cp === undefined) throw new Error("An evaluation is missing; update evaluations first");
-    return (cp ?? 0) * sign;
-  };
-
-  async function walk(nodeId: number, chess: Chess): Promise<number> {
-    const terminal = terminalCp(chess);
-    if (terminal !== null) return terminal * sign;
-    const node = tree.nodes[nodeId];
-    if ((chess.turn() === "w") === (side === "white")) {
-      if (!node.children.length) return valueAt(chess.fen());
-      const childId = node.children[0];
-      const child = new Chess(chess.fen());
-      child.move(tree.nodes[childId].san);
-      return walk(childId, child);
-    }
-
-    const data = await fetchExplorerPosition(chess.fen(), settings, side, explorerCache);
-    const total = data.moves.reduce((games, move) => games + move.white + move.draws + move.black, 0);
-    if (!total) return valueAt(chess.fen());
-    const childrenBySan = new Map(node.children.map((id) => [tree.nodes[id].san, id]));
-    let expected = 0;
-    for (const move of data.moves) {
-      const games = move.white + move.draws + move.black;
-      if (!games) continue;
-      const child = new Chess(chess.fen());
-      child.move(move.san);
-      const childId = childrenBySan.get(move.san);
-      expected += (games / total) * (childId === undefined ? valueAt(child.fen()) : await walk(childId, child));
-    }
-    return expected;
-  }
-
-  const start = new Chess();
-  for (const san of sanPathTo(tree, startNodeId)) start.move(san);
-  return walk(startNodeId, start);
+  const { evalCp } = await calculateExpectedScore(
+    tree, startNodeId, side, (fen) => fetchExplorerPosition(fen, settings, side, explorerCache), "stockfish",
+    async (fen) => {
+      const cp = evaluated.get(fen);
+      if (cp === undefined) throw new Error("An evaluation is missing; update evaluations first");
+      return cp;
+    },
+  );
+  return evalCp ?? 0;
 }
 
 function getStudyId(): number | null {
@@ -556,6 +484,7 @@ function evalStaleness(study: Study, current: ExplorerSettings, depth: number): 
   const reasons: string[] = [];
   if (stats.evalSettings && !sameExplorerSettings(stats.evalSettings, current)) reasons.push("Explorer settings changed");
   if (stats.evalDepth && stats.evalDepth !== depth) reasons.push("Stockfish depth changed");
+  if ((stats.evalMethod ?? 1) < EVAL_METHOD) reasons.push("the calculation method changed");
   const fingerprint = stats.evalMovesFingerprint;
   if (fingerprint && fingerprint !== study.movesFingerprint) reasons.push("moves changed");
   return reasons;
@@ -612,7 +541,11 @@ async function leaderboardStatus(study: Study): Promise<{ score: string; evaluat
     score: stats?.winProbability !== undefined
       ? status(byScore, stats, scoreLeaf === "explorer" ? undefined : stats.scoreDepth ?? null)
       : "",
-    evaluation: stats?.evalCp !== undefined ? status(byEval, stats.evalSettings, stats.evalDepth ?? null) : "",
+    evaluation: stats?.evalCp === undefined
+      ? ""
+      : (stats.evalMethod ?? 1) < EVAL_METHOD
+        ? "Not ranked: calculated with an older method. Recalculate to rank it."
+        : status(byEval, stats.evalSettings, stats.evalDepth ?? null),
   };
 }
 
@@ -1022,7 +955,13 @@ function renderPage(
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({
-        ...result,
+        score: result.score,
+        winRate: result.winRate,
+        lossProbability: result.lossProbability,
+        coverage: result.coverage,
+        nodesEvaluated: result.nodesEvaluated,
+        explorerCalls: result.explorerCalls,
+        stockfishLeaves: result.stockfishLeaves,
         leafValue: leaf,
         depth: leaf === "explorer" ? null : depth,
         explorerSettings: settings,
@@ -1063,7 +1002,7 @@ function renderPage(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ evalCp, evalMisses, depth, explorerSettings: settings }),
+      body: JSON.stringify({ evalCp, evalMisses, depth, explorerSettings: settings, method: EVAL_METHOD }),
     });
     if (!res.ok) throw new Error("Could not save expected evaluation");
     lastEvalRun = { required, computed };

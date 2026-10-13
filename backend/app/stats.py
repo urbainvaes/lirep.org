@@ -103,6 +103,15 @@ class ExpectedScoreIn(BaseModel):
         return self
 
 
+# The expected evaluation's method. 1: lines ending with the studied side's
+# move were evaluated after each of the opponent's Explorer replies. 2: they
+# are evaluated after the move itself, the same lines' ends as the expected
+# score with Stockfish values. 3: as 2, each evaluation capped at ±10 pawns
+# (a mate counts as 10). Evaluations from an older method are out of date,
+# and not ranked.
+EVAL_METHOD = 3
+
+
 class ExpectedEvalIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -112,6 +121,8 @@ class ExpectedEvalIn(BaseModel):
     # community leaderboard only ranks expected evaluations at depth 12 or more.
     depth: int | None = Field(default=None, strict=True, ge=1, le=99)
     explorerSettings: ExplorerSettings | None = None
+    # Missing from pages loaded before method 2: method 1.
+    method: int = Field(default=1, strict=True, ge=1, le=EVAL_METHOD)
 
 
 @router.post("/api/studies/{study_id}/expected-score")
@@ -169,6 +180,7 @@ def save_expected_eval(study_id: int, request: Request, payload: ExpectedEvalIn)
             "evalCalculatedAt": datetime.now(UTC).isoformat(),
             "evalOrigin": "local",
             "evalDepth": payload.depth,
+            "evalMethod": payload.method,
             "evalMovesFingerprint": study["movesFingerprint"],
             # Kept apart from source/database/minRating/speeds, which describe
             # the expected score: the two can be calculated with different

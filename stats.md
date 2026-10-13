@@ -55,7 +55,8 @@ move without a prepared answer is ignored, as if it weren't in the tree (see
 
 With the `stockfish` end-of-prep value, each line's end is worth the
 Stockfish evaluation of the position its last move leads to, converted to an
-expected score; with `explorer-stockfish`, the Explorer row when it has at
+expected score (unlike the expected evaluation, before the opponent's reply
+to a studied-side move: one evaluation per line); with `explorer-stockfish`, the Explorer row when it has at
 least 50 games, Stockfish otherwise. Where an opponent position has no
 Explorer games, both use Stockfish instead of the neutral 0.5. See
 `frontend/doc/expected-score.html`.
@@ -91,23 +92,32 @@ as the persistent Explorer cache described in
 
 The `eeval` objective: *"If both sides play according to real-world
 tendencies until preparation runs out, what does Stockfish think of the
-resulting position?"* `findRequiredEvaluations` and `expectedEvaluation`
-in `frontend/src/stat.ts` walk only the reachable portion of the tree from
-the effective starting node:
+resulting position?"* It is the expected score's walk
+(`calculateExpectedScore` in `frontend/src/expectedScore.ts`) with the
+`stockfish` end-of-prep value, averaging centipawns instead of converted
+scores, so both have the same lines' ends and evaluate the same positions:
 
 1. A terminal position has its exact result: checkmate is capped at
    `±100,000` cp and a draw is 0. No Explorer or engine call is needed.
-2. At the studied side's turn, follow the sole prepared child. If none
-   exists, the position itself is an evaluation frontier.
-3. At the opponent's turn, fetch the move list via `/api/explorer`. Recurse
-   into prepared replies. Each listed unprepared reply with games creates a
-   frontier position *after* that move. With no listed games, the current
-   position is the frontier instead.
+2. A line ending with the studied side's move is evaluated in the position
+   after that move, before the opponent's reply.
+3. A reply the tree doesn't answer is evaluated in the position after it.
+   An opponent position with no listed games is evaluated itself.
 4. For the expected-eval result, weight each opponent reply's child value
    by its fraction of games among listed moves. Values at frontier positions
    come from the browser's FEN cache or local Stockfish. A position without
    a usable local evaluation contributes **0 cp**; `evalMisses` reports the
    number of such required positions. There is no Cloud Eval fallback.
+
+Each evaluation is capped at ±1,000 cp (`EVAL_CAP_CP`) before averaging; a
+mate counts as ±1,000. Without the cap, a mate after a rare blunder (0.1% of
+games) adds a whole pawn to the average. The expected score converts the
+uncapped values.
+
+Results carry `evalMethod` 3. Method 2 didn't cap evaluations; method 1
+(missing) also evaluated the positions after each Explorer reply to a
+studied-side move. Older results are shown out of date and are not ranked
+until recalculated.
 
 The browser uses the same Stockfish WASM engine as the Study editor. Stats
 offers Quick (depth 8), Balanced (12), and Thorough (16, the default); live

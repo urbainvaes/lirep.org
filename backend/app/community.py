@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from . import store
 from .config import HTTP_TIMEOUT, MAX_USERS
-from .stats import LeafValue
+from .stats import EVAL_METHOD, LeafValue
 
 router = APIRouter()
 
@@ -319,12 +319,15 @@ def _eval_entry(
     """A row of the expected-evaluation leaderboard, or None when the study's
     expected evaluation is not comparable: not calculated, a legacy server
     calculation (depth unknown), Stockfish below MIN_LEADERBOARD_EVAL_DEPTH,
-    or Explorer settings the score leaderboard leaves out too."""
+    an older method than EVAL_METHOD, or Explorer settings the score
+    leaderboard leaves out too."""
     stats = study.get("stats") or {}
     eval_cp = stats.get("evalCp")
     depth = stats.get("evalDepth")
     settings = stats.get("evalSettings")
     if eval_cp is None or settings is None or depth is None or depth < MIN_LEADERBOARD_EVAL_DEPTH:
+        return None
+    if (stats.get("evalMethod") or 1) < EVAL_METHOD:
         return None
     if settings["database"] == "player" or settings["source"] != ranked_source:
         return None

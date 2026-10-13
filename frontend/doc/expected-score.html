@@ -167,8 +167,8 @@
           <li>
             <p>
               <strong>Stockfish.</strong> A line is worth Stockfish's evaluation of the position where it ends, at
-              the depth chosen in the calculation settings, turned into an expected score with the curve Lichess
-              uses for its winning chances. With \(c\) the evaluation in centipawns, from your side:
+              the depth chosen in the calculation settings, turned into an expected score with the curve Lichess uses for its winning
+              chances. With \(c\) the evaluation in centipawns, from your side:
             </p>
             <p>$$v = \frac{1}{1 + e^{-0.00368208\, c}}.$$</p>
             <div class="xs-curve-wrap">
@@ -181,8 +181,8 @@
             </div>
             <p>
               The curve gives an expected score, not wins, draws and losses apart, so the Stats page doesn't show
-              them. Stockfish runs in your browser, like for the expected evaluation, and the two share the
-              positions it has already evaluated.
+              them. Stockfish runs in your browser, like for the expected evaluation, and reuses the positions it has
+              already evaluated on this device.
             </p>
           </li>
           <li>
@@ -357,11 +357,19 @@
       <section id="expected-evaluation">
         <h2>Expected evaluation</h2>
         <p>
-          The <strong>expected evaluation</strong> walks the same tree with the same weights, but averages
-          Stockfish's evaluations in pawns, without turning them into scores: of the position after each of your
-          opponent's likely replies (weighted by how often they're played) when the line ends with your move, and
-          of the position itself after a reply your study doesn't answer. See the
-          <a href="stats.html#expected-score">Stats documentation</a> for both calculations' details.
+          The <strong>expected evaluation</strong> is the same calculation with Stockfish values, the same
+          lines' ends and the same evaluations, but averages the evaluations themselves, in pawns, without turning
+          them into scores:
+        </p>
+        <p>$$\text{Expected evaluation} = \sum_{\ell} P(\ell)\, c(\ell),$$</p>
+        <p>
+          with \(c(\ell)\) Stockfish's evaluation where the line \(\ell\) ends, from your side, capped at ±10
+          pawns; a mate counts as 10 pawns. Without the cap, a mate after a blunder in 0.1% of games would add a
+          whole pawn to the average. Even with it, a few lines with a large advantage raise the expected
+          evaluation more than the expected score: the curve flattens out, so each counts at most 100% in the
+          score, but up to 10 pawns in the average. Once one of the two is calculated at a given depth, the other needs no new
+          Stockfish evaluations. See the <a href="stats.html#expected-score">Stats documentation</a> for both
+          calculations' details.
         </p>
       </section>
     </main>

@@ -1,4 +1,4 @@
-// The expected score and coverage of a study. Walks the tree with the
+// The expected score, coverage and expected evaluation of a study. Walks the tree with the
 // Opening Explorer's move frequencies, assuming the studied side always plays
 // its prepared move (the first child) and the opponent replies as in the
 // Explorer. Runs in the browser, so the Explorer requests are the user's own
@@ -10,6 +10,10 @@
 // or the Explorer results, with Stockfish where they count fewer than
 // MIN_LEAF_GAMES games. An opponent move in the tree without a prepared
 // answer is ignored, as if it weren't there. See doc/expected-score.html.
+//
+// With Stockfish values, the same walk also averages the evaluations
+// themselves, in centipawns, each capped at ±EVAL_CAP_CP: the expected
+// evaluation, which therefore has the same lines' ends as the expected score.
 
 import { Chess } from "chess.js";
 
@@ -18,14 +22,29 @@ import { sanPathTo, type StudyTree } from "./tree";
 
 type Outcome = [win: number, draw: number, loss: number]; // for the studied side
 
-// A position's value: its expected score, and the win/draw/loss split behind
-// it when every line's end has one (Stockfish's values don't).
+// A position's value: its expected score; the win/draw/loss split behind it
+// when every line's end has one (Stockfish's values don't); and its
+// evaluation in centipawns, for the studied side, when every line's end has
+// one (Explorer results don't).
 interface Value {
   score: number;
   outcome: Outcome | null;
+  cp: number | null;
 }
 
-const NEUTRAL: Value = { score: 0.5, outcome: [0.5, 0, 0.5] };
+const NEUTRAL: Value = { score: 0.5, outcome: [0.5, 0, 0.5], cp: null };
+
+// A mate on the board, or forced, is capped at this centipawn value so it can
+// be averaged with ordinary evaluations.
+export const MATE_SCORE_CP = 100_000;
+
+// The expected evaluation counts each evaluation within ±10 pawns, a mate as
+// 10 pawns: otherwise a mate after a blunder in 0.1% of games would add a
+// whole pawn to the average. The expected score needs no cap, since its
+// curve flattens out.
+export const EVAL_CAP_CP = 1000;
+
+const capped = (cp: number) => Math.max(-EVAL_CAP_CP, Math.min(EVAL_CAP_CP, cp));
 
 // Centipawns to an expected score, with the curve Lichess uses for its
 // winning chances.
@@ -33,8 +52,8 @@ export function scoreFromCp(cp: number): number {
   return 1 / (1 + Math.exp(-0.00368208 * cp));
 }
 
-function fromOutcome(outcome: Outcome): Value {
-  return { score: outcome[0] + outcome[1] / 2, outcome };
+function fromOutcome(outcome: Outcome, cp: number | null = null): Value {
+  return { score: outcome[0] + outcome[1] / 2, outcome, cp };
 }
 
 function outcomeProbabilities(white: number, draws: number, black: number, side: "white" | "black"): Outcome | null {
@@ -61,6 +80,10 @@ export interface ExpectedScoreResult {
   nodesEvaluated: number;
   explorerCalls: number;
   stockfishLeaves: number; // distinct positions valued with Stockfish
+  // The expected evaluation, in centipawns for the studied side: null unless
+  // every line's end was valued with Stockfish (leafValue "stockfish").
+  evalCp: number | null;
+  stockfishPositions: string[]; // the FENs Stockfish valued
 }
 
 export async function calculateExpectedScore(
@@ -101,20 +124,20 @@ export async function calculateExpectedScore(
     if (!evaluate) throw new Error("Stockfish is needed for these end-of-prep values");
     const fen = chess.fen();
     stockfishLeaves.add(fen);
-    const cp = (await evaluate(fen)) ?? 0;
-    return { score: scoreFromCp(side === "white" ? cp : -cp), outcome: null };
+    const white = (await evaluate(fen)) ?? 0;
+    const cp = side === "white" ? white : -white;
+    return { score: scoreFromCp(cp), outcome: null, cp: capped(cp) };
   }
 
   // A line's end valued from Explorer results (a move's row, or a position's
-  // totals), `position` being where the line ends. With the Stockfish
-  // fallback, too few games give Stockfish's value instead. null: no games,
-  // for the caller's own fallback.
+  // totals). With the Stockfish fallback, too few games give `stockfish()`
+  // instead. null: no games, for the caller's own fallback.
   async function explorerValue(
     results: { white: number; draws: number; black: number } | undefined,
-    position: () => Chess,
+    stockfish: () => Promise<Value>,
   ): Promise<Value | null> {
     const games = results ? results.white + results.draws + results.black : 0;
-    if (leafValue === "explorer-stockfish" && games < MIN_LEAF_GAMES) return stockfishValue(position());
+    if (leafValue === "explorer-stockfish" && games < MIN_LEAF_GAMES) return stockfish();
     const outcome = results ? outcomeProbabilities(results.white, results.draws, results.black, side) : null;
     return outcome && fromOutcome(outcome);
   }
@@ -122,8 +145,8 @@ export async function calculateExpectedScore(
   async function value(nodeId: number, chess: Chess): Promise<Value> {
     nodesEvaluated += 1;
     const finished = finishedGame(chess);
-    if (finished === "draw") return fromOutcome([0, 1, 0]);
-    if (finished) return fromOutcome(finished === side ? [1, 0, 0] : [0, 0, 1]);
+    if (finished === "draw") return fromOutcome([0, 1, 0], 0);
+    if (finished) return finished === side ? fromOutcome([1, 0, 0], EVAL_CAP_CP) : fromOutcome([0, 0, 1], -EVAL_CAP_CP);
     const node = tree.nodes[nodeId];
     if (studiedToMove(chess)) {
       if (!node.children.length) {
@@ -131,7 +154,7 @@ export async function calculateExpectedScore(
         // position's overall Explorer results.
         if (leafValue === "stockfish") return stockfishValue(chess);
         const { totals } = await explorerData(chess.fen());
-        return (await explorerValue(totals, () => chess)) ?? NEUTRAL;
+        return (await explorerValue(totals, () => stockfishValue(chess))) ?? NEUTRAL;
       }
       const childId = node.children[0];
       const san = tree.nodes[childId].san as string;
@@ -140,7 +163,7 @@ export async function calculateExpectedScore(
       // The line ends with this move: its own results, as listed here.
       if (leafValue === "stockfish") return stockfishValue(next);
       const { moves } = await explorerData(chess.fen());
-      const own = await explorerValue(moves.find((m) => m.san === san), () => next);
+      const own = await explorerValue(moves.find((m) => m.san === san), () => stockfishValue(next));
       // Too rare to be listed: what the opponent's replies to it gave.
       return own ?? value(childId, next);
     }
@@ -152,6 +175,7 @@ export async function calculateExpectedScore(
     const children = childrenBySan(nodeId);
     let score = 0;
     let outcome: Outcome | null = [0, 0, 0];
+    let cp: number | null = 0;
     for (const move of moves) {
       const games = move.white + move.draws + move.black;
       if (!games) continue;
@@ -161,13 +185,14 @@ export async function calculateExpectedScore(
         ? await value(childId, next)
         : leafValue === "stockfish"
           ? await stockfishValue(next)
-          : await explorerValue(move, () => next);
+          : await explorerValue(move, () => stockfishValue(next));
       if (!reply) continue;
       score += (games / total) * reply.score;
       if (outcome && reply.outcome) for (let i = 0; i < 3; i++) outcome[i] += (games / total) * reply.outcome[i];
       else outcome = null;
+      cp = cp !== null && reply.cp !== null ? cp + (games / total) * reply.cp : null;
     }
-    return { score, outcome };
+    return { score, outcome, cp };
   }
 
   // Probability mass still inside the tree at each ply from the start.
@@ -197,7 +222,7 @@ export async function calculateExpectedScore(
 
   const start = new Chess();
   for (const san of sanPathTo(tree, startNodeId)) start.move(san);
-  const { score, outcome } = await value(startNodeId, start);
+  const { score, outcome, cp } = await value(startNodeId, start);
   await coverageWalk(startNodeId, start, 0, 1);
   // Coverage is sampled right after each of the opponent's moves, counted
   // from the starting point: plies 1, 3, 5… if the opponent moves first
@@ -214,5 +239,7 @@ export async function calculateExpectedScore(
     nodesEvaluated,
     explorerCalls: fetched.size,
     stockfishLeaves: stockfishLeaves.size,
+    evalCp: leafValue === "stockfish" ? cp : null,
+    stockfishPositions: [...stockfishLeaves],
   };
 }
