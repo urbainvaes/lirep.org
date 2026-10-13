@@ -210,6 +210,34 @@ def init_db() -> None:
             """
         )
 
+        # One row per practice answer, for the Practice page's activity
+        # calendar. It outlives the study it was practiced in: deleting a
+        # study doesn't erase the days you practiced it. Created after
+        # practice_state existed, so a new log starts with each position's
+        # last attempt, the only one practice_state remembers.
+        has_log = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'practice_log'"
+        ).fetchone()
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS practice_log (
+                owner TEXT NOT NULL,
+                study_id INTEGER NOT NULL,
+                node_id INTEGER NOT NULL,
+                correct INTEGER NOT NULL,
+                answered_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS practice_log_owner ON practice_log (owner, answered_at)")
+        if not has_log:
+            conn.execute(
+                """
+                INSERT INTO practice_log (owner, study_id, node_id, correct, answered_at)
+                SELECT owner, study_id, node_id, streak > 0, last_seen_at FROM practice_state
+                """
+            )
+
 
 
 def moves_fingerprint(tree: dict[str, Any], start_node_id: int | None) -> str:
@@ -614,6 +642,33 @@ def upsert_practice_state(
         )
 
 
+def log_practice_answer(owner: str, study_id: int, node_id: int, correct: bool, answered_at: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO practice_log (owner, study_id, node_id, correct, answered_at) VALUES (?, ?, ?, ?, ?)",
+            (owner, study_id, node_id, int(correct), answered_at),
+        )
+
+
+def practice_totals(owner: str) -> dict[int, dict[str, int]]:
+    """Per study, all time: how many answers were given."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT study_id, COUNT(*) AS answers FROM practice_log WHERE owner = ? GROUP BY study_id", (owner,)
+        ).fetchall()
+    return {row["study_id"]: {"answers": row["answers"]} for row in rows}
+
+
+def list_practice_answers(owner: str, since: str) -> list[dict[str, Any]]:
+    """Every practice answer at or after `since` (an ISO UTC timestamp)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT correct, answered_at FROM practice_log WHERE owner = ? AND answered_at >= ? ORDER BY answered_at",
+            (owner, since),
+        ).fetchall()
+    return [{"correct": bool(row["correct"]), "answered_at": row["answered_at"]} for row in rows]
+
+
 def list_forum_topics(category: str | None = None) -> list[dict[str, Any]]:
     """Topics, most recently active first, with their reply count and the
     author of the last post."""
@@ -835,13 +890,14 @@ DELETED_AUTHOR = "[deleted]"
 
 def delete_account(username: str) -> None:
     """Deletes a player and everything that is theirs: studies (with their
-    games and practice history), cached rating, and forum posts. A topic they
+    games and practice history), practice log, cached rating, and forum posts. A topic they
     started that others replied to is kept for those replies, with its author
     and opening post replaced; without replies it is deleted."""
     with _connect() as conn:
         study_ids = [r[0] for r in conn.execute("SELECT id FROM studies WHERE owner = ? COLLATE NOCASE", (username,))]
         conn.executemany("DELETE FROM study_games WHERE study_id = ?", [(i,) for i in study_ids])
         conn.execute("DELETE FROM practice_state WHERE owner = ? COLLATE NOCASE", (username,))
+        conn.execute("DELETE FROM practice_log WHERE owner = ? COLLATE NOCASE", (username,))
         conn.execute("DELETE FROM studies WHERE owner = ? COLLATE NOCASE", (username,))
         conn.execute("DELETE FROM rating_cache WHERE username = ? COLLATE NOCASE", (username,))
 

@@ -9,11 +9,11 @@ individual decisions, not aggregating values.
 """
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import chess
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from . import store
@@ -26,6 +26,8 @@ router = APIRouter()
 TAU0_DAYS = 1.0
 RETENTION_FLOOR = 0.80
 SESSION_SIZE = 20
+# The activity calendar's span: a year, with a day to spare for time zones.
+ACTIVITY_DAYS = 366
 
 
 def _require_owner(request: Request) -> str:
@@ -128,6 +130,28 @@ def practice_summary_all(request: Request) -> dict[str, dict]:
     return {str(study["id"]): _study_summary(owner, study) for study in store.list_studies(owner)}
 
 
+@router.get("/api/practice/activity")
+def practice_activity(request: Request, tz_offset: int = Query(0, alias="tzOffset", ge=-900, le=900)) -> dict:
+    """The Practice page's overview: answers per day over the last
+    ACTIVITY_DAYS days, across all studies, for the calendar, and each
+    study's all-time answer count. Days are the player's own: tzOffset is
+    their UTC offset in minutes (east positive). Days without answers are
+    left out."""
+    owner = _require_owner(request)
+    offset = timedelta(minutes=tz_offset)
+    since = datetime.now(UTC) - timedelta(days=ACTIVITY_DAYS + 1)
+    days: dict[str, dict[str, int]] = {}
+    for answer in store.list_practice_answers(owner, since.isoformat()):
+        day = (datetime.fromisoformat(answer["answered_at"]) + offset).date().isoformat()
+        counts = days.setdefault(day, {"answers": 0, "correct": 0})
+        counts["answers"] += 1
+        counts["correct"] += answer["correct"]
+    return {
+        "days": days,
+        "studies": {str(study_id): totals for study_id, totals in store.practice_totals(owner).items()},
+    }
+
+
 @router.get("/api/studies/{study_id}/practice/queue")
 def practice_queue(study_id: int, request: Request) -> dict:
     """Node ids to drill this session: due items first (staler retention
@@ -202,6 +226,7 @@ def record_attempt(study_id: int, payload: AttemptIn, request: Request) -> dict:
     streak, tau_days = apply_answer(prev, payload.correct)
     now = datetime.now(UTC).isoformat()
     store.upsert_practice_state(owner, study_id, payload.nodeId, streak, tau_days, now)
+    store.log_practice_answer(owner, study_id, payload.nodeId, payload.correct, now)
 
     # Retention is exp(0) = 1.0 immediately after an attempt, so knowledge
     # right now is exactly streak/3 — no need to round-trip through

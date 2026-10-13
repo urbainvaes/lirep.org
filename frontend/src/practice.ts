@@ -1,4 +1,5 @@
 import { escapeHtml, fetchMe, renderAuthArea, renderSignedOut } from "./layout";
+import { activityTzOffset, renderPracticeOverview, type PracticeActivity } from "./practiceActivity";
 import { openingMovesHtml, renderStudyGroups, type StudyCardData } from "./studyCard";
 
 interface PracticeSummary {
@@ -56,13 +57,16 @@ async function init(): Promise<void> {
 
   let studies: StudyCardData[] = [];
   let summaries: Record<string, PracticeSummary> = {};
+  let activity: PracticeActivity | null = null;
   try {
-    const [studiesRes, summaryRes] = await Promise.all([
+    const [studiesRes, summaryRes, activityRes] = await Promise.all([
       fetch("/api/studies", { credentials: "same-origin" }),
       fetch("/api/practice/summary", { credentials: "same-origin" }),
+      fetch(`/api/practice/activity?tzOffset=${activityTzOffset()}`, { credentials: "same-origin" }),
     ]);
     if (studiesRes.ok) studies = await studiesRes.json();
     if (summaryRes.ok) summaries = await summaryRes.json();
+    if (activityRes.ok) activity = await activityRes.json();
   } catch {
     // Network error / backend not running: show the empty state below.
   }
@@ -89,7 +93,15 @@ async function init(): Promise<void> {
     return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2] || a.name.localeCompare(b.name);
   });
 
-  grid.innerHTML = renderStudyGroups(sorted, (study) => renderCard(study, summaries), "practice-grid");
+  const knowledge = Object.fromEntries(
+    Object.entries(summaries).map(([id, summary]) => [id, summary.totalItems ? summary.aggregateKnowledge : null]),
+  );
+  grid.innerHTML =
+    (activity ? renderPracticeOverview(activity, studies, knowledge) : "") +
+    renderStudyGroups(sorted, (study) => renderCard(study, summaries), "practice-grid");
+  // On a narrow screen the calendar scrolls; start on the recent weeks.
+  const scroll = grid.querySelector(".activity__scroll");
+  if (scroll) scroll.scrollLeft = scroll.scrollWidth;
 }
 
 init();
