@@ -1980,8 +1980,15 @@ button.study-head__link:disabled:hover {
 }
 
 @media (max-width: 980px) {
+  /* minmax(0, …): nothing below the board, like Stockfish's controls, may
+     widen the column, which would widen the board past the screen. */
   .study-editor--edit .study-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stockfish's depth control goes under the tabs when they don't fit. */
+  .tool-tabs {
+    flex-wrap: wrap;
   }
 
   .study-side-col__inner {
