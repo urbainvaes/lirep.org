@@ -1,0 +1,86 @@
+// What Lirep is for, with screenshots: the home page for signed-out
+// visitors, and the Tutorial page.
+
+// A screenshot in the visitor's theme: both versions are in the page, and
+// CSS shows the one matching <html data-theme>. Lazy, so the hidden one is
+// never downloaded. The images are at twice these sizes, for sharp
+// rendering and for the zoomed view (see bindZoom).
+function screenshot(name: string, alt: string, width: number, height: number): string {
+  const images = ["light", "dark"]
+    .map(
+      (theme) =>
+        `<img class="landing__shot landing__shot--${theme}" src="/screenshots/${name}-${theme}.webp" alt="${alt}" width="${width}" height="${height}" loading="lazy" decoding="async" />`,
+    )
+    .join("");
+  return `<button class="landing__zoom" type="button" aria-label="Enlarge: ${alt}" title="Click to enlarge">${images}</button>`;
+}
+
+// Clicking a screenshot shows it at full resolution over the page; Esc, a
+// click anywhere or the close button dismisses it.
+export function bindZoom(root: HTMLElement): void {
+  const dialog = document.createElement("dialog");
+  dialog.className = "landing__lightbox";
+  dialog.innerHTML = `<button class="landing__lightbox-close" type="button" aria-label="Close">×</button><img alt="" />`;
+  document.body.append(dialog);
+  const img = dialog.querySelector("img") as HTMLImageElement;
+  dialog.addEventListener("click", () => dialog.close());
+  root.querySelectorAll<HTMLButtonElement>(".landing__zoom").forEach((button) => {
+    button.addEventListener("click", () => {
+      const shown = [...button.querySelectorAll("img")].find((i) => i.offsetParent !== null) ?? button.querySelector("img");
+      if (!shown) return;
+      img.src = shown.currentSrc || shown.src;
+      img.alt = shown.alt;
+      dialog.showModal();
+    });
+  });
+}
+
+// What Lirep is for, then a way in: what a signed-out visitor sees on the
+// home page, and the Tutorial page for everyone (`signedIn`: without the
+// sign-in button).
+export function renderLanding(signedIn: boolean): string {
+  return `
+    <section class="landing">
+      <div class="landing__hero">
+        <h1>Build, drill and assess your repertoire</h1>
+        <p class="landing__pitch">Lirep evaluates your repertoire against the moves real Lichess players choose, then helps you remember it.</p>
+        <div class="landing__actions">
+          ${signedIn ? `<a class="btn btn-primary landing__cta" href="/">Your studies</a>` : `<a class="btn btn-primary landing__cta" href="/auth/login">Sign in with Lichess</a>`}
+          <a class="btn btn-primary landing__cta" href="/community.html">Browse community openings</a>
+        </div>
+        ${signedIn ? "" : `<p class="landing__note">Free and open source. No new account: you sign in with Lichess.</p>`}
+      </div>
+      <figure class="landing__hero-shot">
+        ${screenshot("editor", "The study editor: a move tree with variations beside the board, and Stockfish's suggested moves drawn as arrows coloured by quality.", 1272, 778)}
+        <figcaption>Build your lines in the study editor, with Stockfish and the Lichess Opening Explorer beside the board.</figcaption>
+      </figure>
+      <div class="landing__features">
+        <article class="landing__feature">
+          <div class="landing__feature-text">
+            <h2>Know how good it is</h2>
+            <p>See the expected score of your whole repertoire (calculated as the win probability plus half the draw probability),
+            the share of games that stay in your preparation after a given number of moves,
+            and the expected Stockfish evaluation when it ends.</p>
+          </div>
+          ${screenshot("stats", "A study's Stats page: a 55.4% expected score, and a chart of the share of games still in preparation after each move.", 874, 619)}
+        </article>
+        <article class="landing__feature">
+          <div class="landing__feature-text">
+            <h2>Remember it</h2>
+            <p>Practice quizzes you on your own moves. Each position's knowledge fades over time, and comes back
+              for review just before you would forget it.</p>
+          </div>
+          ${screenshot("practice", "A practice session: the board after a correctly played move, marked Correct.", 812, 536)}
+        </article>
+        <article class="landing__feature">
+          <div class="landing__feature-text">
+            <h2>Share and reuse</h2>
+            <p>Publish your openings on the community page, and import someone else's
+              in one click.</p>
+          </div>
+          ${screenshot("community", "The community leaderboards: shared openings for White and Black, ranked by expected score.", 1092, 500)}
+        </article>
+      </div>
+    </section>
+  `;
+}
