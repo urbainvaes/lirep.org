@@ -26,19 +26,6 @@ export function getSavedEngineDepth(): number {
   }
 }
 
-// The depths the Stats page names too.
-const DEPTH_NAMES: Record<number, string> = { 8: "Quick", 12: "Balanced", 16: "Thorough" };
-
-/** The live engine's depths, for a <select>. */
-export function engineDepthOptionsHtml(selected: number): string {
-  const options: string[] = [];
-  for (let depth = ENGINE_DEPTH_MIN; depth <= ENGINE_DEPTH_MAX; depth += ENGINE_DEPTH_STEP) {
-    const name = DEPTH_NAMES[depth] ? ` · ${DEPTH_NAMES[depth]}` : "";
-    options.push(`<option value="${depth}"${depth === selected ? " selected" : ""}>${depth}${name}</option>`);
-  }
-  return options.join("");
-}
-
 export function saveEngineDepth(depth: number): void {
   try {
     localStorage.setItem(ENGINE_DEPTH_STORAGE_KEY, String(depth));
@@ -218,9 +205,8 @@ export function boardColumnHtml(): string {
 }
 
 /** Stockfish's panel and the tool tabs; `settings` adds the gear that opens
- * the settings (see the editor), which then hold Stockfish's depth: the
- * tabs only show its progress. The tabs' names give way to their icons on
- * phones. */
+ * the Explorer settings (see the editor). The tabs' names give way to their
+ * icons on phones. */
 export function toolTabsHtml(options: { settings?: boolean } = {}): string {
   return `
     <div id="tool-engine" class="tool-panel tool-panel--engine" hidden>
@@ -235,9 +221,9 @@ export function toolTabsHtml(options: { settings?: boolean } = {}): string {
         <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span><span class="tool-tab__name">Stockfish</span>
       </button>
       <span id="engine-depth" class="engine-depth tool-tabs__status" hidden>
-        ${options.settings ? "" : `<button id="depth-down" class="engine-depth__btn" type="button" aria-label="Search less deep">‹</button>`}
+        <button id="depth-down" class="engine-depth__btn" type="button" aria-label="Search less deep">‹</button>
         <span id="engine-status" class="engine-eval" title="Stockfish's search depth, in this browser" aria-live="polite"></span>
-        ${options.settings ? "" : `<button id="depth-up" class="engine-depth__btn" type="button" aria-label="Search deeper">›</button>`}
+        <button id="depth-up" class="engine-depth__btn" type="button" aria-label="Search deeper">›</button>
       </span>
       ${
         options.settings

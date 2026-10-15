@@ -1937,10 +1937,6 @@ button.study-head__link:disabled:hover {
 
 /* The editor's Explorer settings, in the tools card in place of the tools
    while the gear is on: the same controls as the Stats page's. */
-.tool-settings__group + .tool-settings__group {
-  margin-top: 14px;
-}
-
 .tool-settings__title {
   margin: 0 0 2px;
   font-size: 0.9rem;

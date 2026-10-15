@@ -9,7 +9,7 @@ import {
   engineMovesView,
   ENGINE_DEPTH_MAX,
   ENGINE_DEPTH_MIN,
-  engineDepthOptionsHtml,
+  ENGINE_DEPTH_STEP,
   getSavedEngineDepth,
   getSavedTools,
   missingPopularMoves,
@@ -239,24 +239,14 @@ function renderEditor(
               </div>
 
               <div id="tool-settings" class="tool-panel tool-panel--settings" hidden>
-                <div class="tool-settings__group">
-                  <h3 class="tool-settings__title">Opening Explorer</h3>
-                  <p class="tool-settings__note">Which games the Explorer shows. They are also the ones this study's stats are calculated with.</p>
-                  <div id="explorer-settings-form">${explorerSettingsFormHtml(settings, {
-                    lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
-                    ratingBuckets,
-                    defaultMinRating,
-                    speeds: allSpeeds,
-                  })}</div>
-                </div>
-                <div class="tool-settings__group">
-                  <h3 class="tool-settings__title">Stockfish</h3>
-                  <p class="tool-settings__note">How deep Stockfish searches the position on the board, in this browser.</p>
-                  <label class="eval-depth-control" for="engine-depth-select">
-                    <span>Depth</span>
-                    <select id="engine-depth-select">${engineDepthOptionsHtml(getSavedEngineDepth())}</select>
-                  </label>
-                </div>
+                <h3 class="tool-settings__title">Opening Explorer</h3>
+                <p class="tool-settings__note">Which games the Explorer shows. They are also the ones this study's stats are calculated with.</p>
+                <div id="explorer-settings-form">${explorerSettingsFormHtml(settings, {
+                  lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
+                  ratingBuckets,
+                  defaultMinRating,
+                  speeds: allSpeeds,
+                })}</div>
               </div>
 
               ${toolTabsHtml({ settings: true })}
@@ -299,7 +289,8 @@ function renderEditor(
   const explorerPanelEl = document.getElementById("explorer-panel") as HTMLElement;
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
   const engineDepthEl = document.getElementById("engine-depth") as HTMLElement;
-  const depthSelect = document.getElementById("engine-depth-select") as HTMLSelectElement;
+  const depthDownBtn = document.getElementById("depth-down") as HTMLButtonElement;
+  const depthUpBtn = document.getElementById("depth-up") as HTMLButtonElement;
   let engineDepth = getSavedEngineDepth();
   const enginePanelEl = document.getElementById("engine-panel") as HTMLElement;
   const nameInput = document.getElementById("study-name") as HTMLInputElement;
@@ -1105,14 +1096,20 @@ function renderEditor(
 
   function setEngineDepth(depth: number): void {
     engineDepth = Math.min(ENGINE_DEPTH_MAX, Math.max(ENGINE_DEPTH_MIN, depth));
-    depthSelect.value = String(engineDepth);
+    depthDownBtn.disabled = engineDepth <= ENGINE_DEPTH_MIN;
+    depthUpBtn.disabled = engineDepth >= ENGINE_DEPTH_MAX;
+    depthDownBtn.title = `Depth ${Math.max(ENGINE_DEPTH_MIN, engineDepth - ENGINE_DEPTH_STEP)}`;
+    depthUpBtn.title = `Depth ${Math.min(ENGINE_DEPTH_MAX, engineDepth + ENGINE_DEPTH_STEP)}`;
     saveEngineDepth(engineDepth);
   }
 
-  // In the settings, under the gear; the tabs show the search's progress.
-  depthSelect.addEventListener("change", () => {
-    setEngineDepth(Number(depthSelect.value));
-    if (shownTools.has("engine")) void updateEngine(positionAt(tree, currentId));
+  depthDownBtn.addEventListener("click", () => {
+    setEngineDepth(engineDepth - ENGINE_DEPTH_STEP);
+    void updateEngine(positionAt(tree, currentId));
+  });
+  depthUpBtn.addEventListener("click", () => {
+    setEngineDepth(engineDepth + ENGINE_DEPTH_STEP);
+    void updateEngine(positionAt(tree, currentId));
   });
   setEngineDepth(engineDepth);
 
