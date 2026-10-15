@@ -1969,8 +1969,40 @@ button.study-head__link:disabled:hover {
   color: var(--good);
 }
 
+/* In the editor, compact rows leave more room for the move list: less
+   padding, a thinner bar, the percentages tight under it. */
+.study-editor--edit .explorer-rows {
+  gap: 1px;
+}
+
 .study-editor--edit .explorer-row {
-  padding: 4px 8px;
+  padding: 2px 8px;
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  background: transparent;
+  line-height: 1.2;
+}
+
+/* No frame around each move; the left mark for moves in the study, or
+   missing from it, stays. Hover shades the row instead. */
+.study-editor--edit .explorer-row:not(.explorer-row--prepared, .explorer-row--gap) {
+  border-left-color: transparent;
+}
+
+.study-editor--edit .explorer-row:hover {
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  background: var(--border);
+}
+
+.study-editor--edit .explorer-row__bar-wrap {
+  gap: 1px;
+}
+
+.study-editor--edit .explorer-row__bar {
+  height: 7px;
 }
 
 .engine-status-line {
