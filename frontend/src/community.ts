@@ -136,7 +136,12 @@ const BY_EXPECTED_SCORE: Leaderboard<Opening> = {
     "opponents reply as in the Explorer.",
   column: "Expected score",
   value: (o) => (o.winProbability === null ? "—" : percent(o.winProbability)),
-  settings: (o) => `${settingsLabel(o)}${o.depth ? ` · depth ${o.depth}` : ""}`,
+  // Scores whose lines' ends weren't valued with the Explorer's results say
+  // how they were, with Stockfish's depth.
+  settings: (o) =>
+    o.leafValue === "explorer"
+      ? settingsLabel(o)
+      : `${settingsLabel(o)} · <span title="${escapeHtml(LEAF_VALUE_LABELS[o.leafValue])}">${LEAF_SHORT_LABELS[o.leafValue]}${o.depth ? `, depth ${o.depth}` : ""}</span>`,
   empty: (side) => `No ranked openings for ${side} yet.`,
 };
 
@@ -213,12 +218,12 @@ function renderLeaderboard<T extends LeaderboardRow>(board: Leaderboard<T>, open
   `;
 }
 
-// The expected-score leaderboard ranks one way of valuing lines' ends at a
-// time; the switch's buttons are shorter than the Stats page's labels.
-const LEAF_SWITCH_LABELS: Record<LeafValue, string> = {
-  explorer: "Explorer",
-  stockfish: "Stockfish",
-  "explorer-stockfish": "Mixed",
+// How a score's lines' ends were valued, in a row's settings: shorter than
+// the Stats page's labels, which the title shows in full.
+const LEAF_SHORT_LABELS: Record<LeafValue, string> = {
+  explorer: "Explorer values",
+  stockfish: "Stockfish values",
+  "explorer-stockfish": "Explorer and Stockfish values",
 };
 
 // The leaderboards rank one Explorer's scores at a time, since the two
@@ -307,12 +312,6 @@ function render(
             <button type="button" data-source="lichess" aria-pressed="true">Lichess</button>
             <button type="button" data-source="lirep" aria-pressed="false" title="${escapeHtml(SAMPLE_TITLE)}">2016 sample</button>
           </div>
-          <div class="source-switch" role="group" aria-label="End of preparation" id="leaf-switch">
-            <span class="source-switch__label" title="How lines are valued where the preparation ends">End of prep</span>
-            ${(Object.keys(LEAF_VALUE_LABELS) as LeafValue[])
-              .map((leaf) => `<button type="button" data-leaf="${leaf}" aria-pressed="${leaf === "explorer"}" title="${escapeHtml(LEAF_VALUE_LABELS[leaf])}">${LEAF_SWITCH_LABELS[leaf]}</button>`)
-              .join("")}
-          </div>
         </div>
       </div>
       <p class="community-note">
@@ -368,39 +367,33 @@ function render(
   bindImports();
 
   const switchButtons = [...main.querySelectorAll<HTMLButtonElement>(".source-switch [data-source]")];
-  const leafButtons = [...main.querySelectorAll<HTMLButtonElement>(".source-switch [data-leaf]")];
   let source: Source = "lichess";
-  let leaf: LeafValue = "explorer";
 
-  async function show(wantedSource: Source, wantedLeaf: LeafValue): Promise<void> {
-    if (wantedSource === source && wantedLeaf === leaf) return;
-    const buttons = [...switchButtons, ...leafButtons];
-    buttons.forEach((b) => (b.disabled = true));
+  async function show(wantedSource: Source): Promise<void> {
+    if (wantedSource === source) return;
+    switchButtons.forEach((b) => (b.disabled = true));
     try {
       const [res, evalRes] = await Promise.all([
-        fetch(`/api/community/openings?source=${wantedSource}&leaf=${wantedLeaf}`, { credentials: "same-origin" }),
+        fetch(`/api/community/openings?source=${wantedSource}`, { credentials: "same-origin" }),
         fetch(`/api/community/openings-by-eval?source=${wantedSource}`, { credentials: "same-origin" }),
       ]);
       if (!res.ok || !evalRes.ok) throw new Error(String(res.ok ? evalRes.status : res.status));
       const fresh: Opening[] = await res.json();
       const freshEval: EvalOpening[] = await evalRes.json();
       source = wantedSource;
-      leaf = wantedLeaf;
       tables.innerHTML = renderTables(BY_EXPECTED_SCORE, fresh, signedIn);
       evalTables.innerHTML = renderTables(BY_EXPECTED_EVALUATION, freshEval, signedIn);
       bindImports();
       switchButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.source === source)));
-      leafButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.leaf === leaf)));
     } catch {
       message.hidden = false;
       message.textContent = "Could not update the leaderboards. Please try again.";
     } finally {
-      buttons.forEach((b) => (b.disabled = false));
+      switchButtons.forEach((b) => (b.disabled = false));
     }
   }
 
-  switchButtons.forEach((b) => b.addEventListener("click", () => void show(b.dataset.source as Source, leaf)));
-  leafButtons.forEach((b) => b.addEventListener("click", () => void show(source, b.dataset.leaf as LeafValue)));
+  switchButtons.forEach((b) => b.addEventListener("click", () => void show(b.dataset.source as Source)));
 
   // One leaderboard at a time; both are already loaded, so switching is instant.
   const metricButtons = [...main.querySelectorAll<HTMLButtonElement>(".source-switch [data-metric]")];
@@ -408,15 +401,12 @@ function render(
     score: main.querySelector<HTMLElement>(`#${BY_EXPECTED_SCORE.id}-section`)!,
     eval: main.querySelector<HTMLElement>(`#${BY_EXPECTED_EVALUATION.id}-section`)!,
   };
-  const leafSwitch = main.querySelector<HTMLElement>("#leaf-switch")!;
   metricButtons.forEach((button) =>
     button.addEventListener("click", () => {
       const metric = button.dataset.metric as keyof typeof sections;
       metricButtons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
       sections.score.hidden = metric !== "score";
       sections.eval.hidden = metric !== "eval";
-      // Only the expected score values lines' ends.
-      leafSwitch.hidden = metric !== "score";
     }),
   );
 }

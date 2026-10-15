@@ -518,10 +518,11 @@ async function leaderboardStatus(study: Study): Promise<{ score: string; evaluat
   // Each result is ranked among scores from the same Explorer: Lichess's, or
   // the 2016 sample's (a separate view of the leaderboards).
   const scoreSource = stats?.source ?? "lichess";
+  // Scores valued with Stockfish rank only at depth 12 or more.
   const scoreLeaf = stats?.leafValue ?? "explorer";
   const evalSource = stats?.evalSettings?.source ?? "lichess";
   const [byScore, byEval] = await Promise.all([
-    fetchBoard(`/api/community/openings?source=${scoreSource}&leaf=${scoreLeaf}`),
+    fetchBoard(`/api/community/openings?source=${scoreSource}`),
     fetchBoard(`/api/community/openings-by-eval?source=${evalSource}`),
   ]);
 
