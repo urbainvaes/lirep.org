@@ -46,11 +46,13 @@ export function pathTo(tree: StudyTree, nodeId: number): TreeNode[] {
 
 /** The previous (-1) or next (1) variation from `nodeId`: at the nearest
  * branching above it, the first move of the variation before or after the
- * one it's in, in the tree's order; undefined at either end. */
+ * one it's in, in the tree's order; if it's the first or last there, the
+ * same one level up, and so on; undefined if there is none. */
 export function siblingVariation(tree: StudyTree, nodeId: number, step: -1 | 1): number | undefined {
   for (let node = tree.nodes[nodeId]; node.parentId !== null; node = tree.nodes[nodeId]) {
     const siblings = tree.nodes[node.parentId].children;
-    if (siblings.length > 1) return siblings[siblings.indexOf(nodeId) + step];
+    const sibling = siblings[siblings.indexOf(nodeId) + step];
+    if (sibling !== undefined) return sibling;
     nodeId = node.parentId;
   }
   return undefined;
