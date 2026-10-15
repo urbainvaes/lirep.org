@@ -207,6 +207,9 @@ export async function calculateExpectedScore(
       if (childId !== undefined) await coverageWalk(childId, after(chess, tree.nodes[childId].san as string), ply + 1, mass);
       return;
     }
+    // Nothing prepared after this move: all the games leave the tree here,
+    // whatever the opponent plays, so there's no need to ask.
+    if (!node.children.length) return;
     const { moves } = await explorerData(chess.fen());
     const total = moves.reduce((n, m) => n + m.white + m.draws + m.black, 0);
     if (!total) return;
