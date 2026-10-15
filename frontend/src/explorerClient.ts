@@ -277,6 +277,19 @@ export async function hasExplorerData(fen: string, settings: ExplorerSettings, s
   return (await cacheGet(key, ttl)) !== undefined;
 }
 
+/** The Explorer data this browser already holds for `fen`, without asking
+ * Lichess; undefined if it holds none. The 2016 sample is asked from the
+ * backend, as it has no rate limit. */
+export async function cachedExplorerData(
+  fen: string,
+  settings: ExplorerSettings,
+  side: "white" | "black",
+): Promise<ExplorerData | undefined> {
+  if (settings.source === "lirep" && settings.database !== "player") return fetchExplorerData(fen, settings, side);
+  const { key, ttl } = cacheKey(fen, settings, side);
+  return cacheGet(key, ttl);
+}
+
 /** The Opening Explorer's data for `fen`, under a study's Explorer settings,
  * from this browser's cache, Lichess's Explorer (paced), or for the 2016
  * sample, the backend. */

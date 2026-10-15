@@ -111,6 +111,46 @@ export function mainLineSans(tree: StudyTree): string[] {
   return sans;
 }
 
+/** What the move list marks besides the moves themselves. */
+export interface TreeMarks {
+  /** Moves after which the expected score needs Explorer data not loaded yet. */
+  unfetched?: ReadonlySet<number>;
+  /** How likely the position after a move is to be reached, and its value. */
+  moveStats?: ReadonlyMap<number, { probability: number; score: number }>;
+  /** A figure for the starting position, shown next to it (or above the
+   * moves when it is the initial position). */
+  startStat?: { text: string; title: string };
+  /** Moves (or the starting point) whose figures lack Explorer data: a
+   * Calculate button, or what a running calculation says. */
+  calculate?: { buttons: ReadonlySet<number>; busy: ReadonlyMap<number, string> };
+  /** Fold the moves at each branching, each with what follows it. */
+  folding?: {
+    /** The folds shown open, by the id of the move they start with. */
+    open: ReadonlySet<number>;
+    /** By the move a branching follows: the replies the tree doesn't have. */
+    others?: ReadonlyMap<number, { probability: number; score: number }>;
+  };
+}
+
+const moveNumberLabel = (depth: number) => `${Math.floor((depth - 1) / 2) + 1}.${depth % 2 === 1 ? "" : ".."}`;
+
+// Small shares need a decimal to be told apart from zero.
+const share = (p: number) => `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`;
+
+function calculateHtml(nodeId: number, marks: TreeMarks): string {
+  if (!marks.calculate?.buttons.has(nodeId)) return "";
+  const busy = marks.calculate.busy.get(nodeId);
+  return busy !== undefined
+    ? `<span class="tree-move-stat tree-calc tree-calc--busy" role="status">${escapeHtml(busy)}</span>`
+    : `<button type="button" class="tree-move-stat tree-calc" data-calculate="${nodeId}" title="Load the Opening Explorer data these figures need">Calculate</button>`;
+}
+
+// The starting point's figure, with its Calculate button when it has one.
+const startStatHtml = (nodeId: number, marks: TreeMarks) =>
+  marks.startStat
+    ? `<span class="tree-move-stat" title="${escapeHtml(marks.startStat.title)}">${escapeHtml(marks.startStat.text)}${calculateHtml(nodeId, marks).replace(/tree-move-stat /, "")}</span>`
+    : "";
+
 function renderMove(
   tree: StudyTree,
   nodeId: number,
@@ -118,7 +158,7 @@ function renderMove(
   currentId: number,
   side: "white" | "black",
   studyStartNodeId: number | null,
-  unfetched: ReadonlySet<number>,
+  marks: TreeMarks,
 ): string {
   const isWhite = depth % 2 === 1;
   const classes = ["tree-move"];
@@ -127,10 +167,17 @@ function renderMove(
   if (nodeId === studyStartNodeId) classes.push("tree-move--start-point");
   const title = nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
   const hasComment = Boolean(tree.nodes[nodeId].comment?.trim());
-  const unfetchedMarker = unfetched.has(nodeId)
+  const unfetchedMarker = marks.unfetched?.has(nodeId)
     ? '<span class="tree-move-unfetched" title="The expected score needs Opening Explorer data for the position after this move, not loaded yet: open this move to load it"></span>'
     : "";
-  return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}${unfetchedMarker}<span class="tree-move-comment-marker"${hasComment ? ' title="Has a comment"' : ""} ${hasComment ? "" : "hidden"} aria-hidden="true"></span></span>`;
+  const stat = marks.moveStats?.get(nodeId);
+  const statMarker = stat
+    ? `<span class="tree-move-stat" title="Reached in ${(stat.probability * 100).toFixed(1)}% of games; expected score from here ${(stat.score * 100).toFixed(1)}%">${share(stat.probability)} · ${(stat.score * 100).toFixed(1)}%</span>`
+    : "";
+  // The figures follow the move, outside it: not part of what is clicked or
+  // highlighted.
+  const startMarker = nodeId === studyStartNodeId ? startStatHtml(nodeId, marks) : calculateHtml(nodeId, marks);
+  return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}${unfetchedMarker}<span class="tree-move-comment-marker"${hasComment ? ' title="Has a comment"' : ""} ${hasComment ? "" : "hidden"} aria-hidden="true"></span></span>${statMarker}${startMarker}`;
 }
 
 function renderLine(
@@ -140,7 +187,7 @@ function renderLine(
   currentId: number,
   side: "white" | "black",
   studyStartNodeId: number | null,
-  unfetched: ReadonlySet<number>,
+  marks: TreeMarks,
 ): string {
   let html = "";
   let nodeId: number | undefined = lineStartNodeId;
@@ -153,7 +200,8 @@ function renderLine(
     const node = tree.nodes[rowStartId];
     let pairedBlackId: number | undefined;
 
-    if (rowStartDepth % 2 === 1) {
+    // Folded, a branching ends the row: its moves go in folds below.
+    if (rowStartDepth % 2 === 1 && !(marks.folding && node.children.length > 1)) {
       const possibleBlackId = node.children[0];
       if (possibleBlackId !== undefined) pairedBlackId = possibleBlackId;
     }
@@ -168,25 +216,30 @@ function renderLine(
       [rowStartId, rowStartDepth],
       ...(pairedBlackId !== undefined ? [[pairedBlackId, rowStartDepth + 1]] : []),
     ] as [number, number][]) {
-      if (firstRow && playedId === rowStartId) continue;
+      if (marks.folding || (firstRow && playedId === rowStartId)) continue;
       const parentId = tree.nodes[playedId].parentId;
       if (parentId === null) continue;
       const alternatives = tree.nodes[parentId].children.filter((childId) => childId !== playedId);
       for (const alternativeId of alternatives) {
-        branches.push(renderLine(tree, alternativeId, playedDepth, currentId, side, studyStartNodeId, unfetched));
+        branches.push(renderLine(tree, alternativeId, playedDepth, currentId, side, studyStartNodeId, marks));
       }
     }
 
     html += `
       <div class="tree-move-row">
         <span class="tree-move-number">${number}</span>
-        <span class="tree-move-cell tree-move-cell--white">${whiteId === undefined ? "" : renderMove(tree, whiteId, rowStartDepth, currentId, side, studyStartNodeId, unfetched)}</span>
-        <span class="tree-move-cell tree-move-cell--black">${blackId === undefined ? "" : renderMove(tree, blackId, rowStartDepth % 2 === 0 ? rowStartDepth : rowStartDepth + 1, currentId, side, studyStartNodeId, unfetched)}</span>
+        <span class="tree-move-cell tree-move-cell--white">${whiteId === undefined ? "" : renderMove(tree, whiteId, rowStartDepth, currentId, side, studyStartNodeId, marks)}</span>
+        <span class="tree-move-cell tree-move-cell--black">${blackId === undefined ? "" : renderMove(tree, blackId, rowStartDepth % 2 === 0 ? rowStartDepth : rowStartDepth + 1, currentId, side, studyStartNodeId, marks)}</span>
       </div>
       ${branches.length ? `<div class="tree-variations">${branches.map((branch) => `<div class="tree-variation">${branch}</div>`).join("")}</div>` : ""}
     `;
 
     const lastPlayedId = pairedBlackId ?? rowStartId;
+    const nextDepth = rowStartDepth + (pairedBlackId === undefined ? 1 : 2);
+    if (marks.folding && tree.nodes[lastPlayedId].children.length > 1) {
+      html += renderFolds(tree, lastPlayedId, nextDepth, currentId, side, studyStartNodeId, marks);
+      break;
+    }
     nodeId = tree.nodes[lastPlayedId].children[0];
     depth = rowStartDepth + (pairedBlackId === undefined ? 1 : 2);
     firstRow = false;
@@ -195,20 +248,56 @@ function renderLine(
   return `<div class="tree-line">${html}</div>`;
 }
 
+// The moves at a branching, each in a fold with what follows it, in the
+// tree's own order (never reordered by their figures); then the replies the
+// tree doesn't have.
+function renderFolds(
+  tree: StudyTree,
+  parentId: number,
+  depth: number,
+  currentId: number,
+  side: "white" | "black",
+  studyStartNodeId: number | null,
+  marks: TreeMarks,
+): string {
+  const folds = tree.nodes[parentId].children.map((id) => {
+    const head = `<span class="tree-move-number">${moveNumberLabel(depth)}</span> ${renderMove(tree, id, depth, currentId, side, studyStartNodeId, marks)}`;
+    const next = tree.nodes[id].children;
+    if (!next.length) return `<div class="tree-fold tree-fold--leaf"><div class="tree-fold__head">${head}</div></div>`;
+    const body = next.length > 1
+      ? renderFolds(tree, id, depth + 1, currentId, side, studyStartNodeId, marks)
+      : renderLine(tree, next[0], depth + 1, currentId, side, studyStartNodeId, marks);
+    const open = marks.folding?.open.has(id) ? " open" : "";
+    return `<details class="tree-fold" data-fold-id="${id}"${open}><summary class="tree-fold__head">${head}</summary><div class="tree-fold__body">${body}</div></details>`;
+  });
+  const others = marks.folding?.others?.get(parentId);
+  const othersRow = others && others.probability > 0
+    ? `<div class="tree-fold tree-fold--others"><div class="tree-fold__head">Other replies <span class="tree-move-stat" title="Replies this study doesn't have: reached in ${(others.probability * 100).toFixed(1)}% of games; expected score ${(others.score * 100).toFixed(1)}%">${share(others.probability)} · ${(others.score * 100).toFixed(1)}%</span></div></div>`
+    : "";
+  return `<div class="tree-folds">${folds.join("")}${othersRow}</div>`;
+}
+
 export function renderTree(
   tree: StudyTree,
   currentId: number,
   side: "white" | "black",
   startNodeId: number | null = null,
-  unfetched: ReadonlySet<number> = new Set(),
+  marks: TreeMarks = {},
 ): string {
   const root = tree.nodes[tree.rootId];
   if (root.children.length === 0) {
     return '<span class="tree-empty">No moves yet — play them on the board.</span>';
   }
+  // From the initial position, the starting position's figure has no move
+  // to follow: it goes above the moves.
+  const fromRoot = startNodeId === null || startNodeId === tree.rootId || !(startNodeId in tree.nodes);
+  const rootStat = fromRoot && marks.startStat ? `<div class="tree-start-stat">${startStatHtml(tree.rootId, marks)}</div>` : "";
+  if (marks.folding && root.children.length > 1) {
+    return rootStat + renderFolds(tree, tree.rootId, 1, currentId, side, startNodeId, marks);
+  }
   const [mainChildId, ...variations] = root.children;
-  return `
-    ${renderLine(tree, mainChildId, 1, currentId, side, startNodeId, unfetched)}
-    ${variations.map((variationId) => `<div class="tree-variations tree-variations--root"><div class="tree-variation">${renderLine(tree, variationId, 1, currentId, side, startNodeId, unfetched)}</div></div>`).join("")}
+  return `${rootStat}
+    ${renderLine(tree, mainChildId, 1, currentId, side, startNodeId, marks)}
+    ${variations.map((variationId) => `<div class="tree-variations tree-variations--root"><div class="tree-variation">${renderLine(tree, variationId, 1, currentId, side, startNodeId, marks)}</div></div>`).join("")}
   `;
 }

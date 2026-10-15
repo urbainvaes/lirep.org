@@ -2145,6 +2145,105 @@ button.study-head__link:disabled:hover {
   vertical-align: 1px;
 }
 
+/* Experimental: how likely the position after a move is to be reached, and
+   its expected score, once the Explorer data for the whole study is loaded. */
+.tree-move-stat {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--card-nested-bg);
+  color: var(--text-dim);
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.live-score {
+  margin: 0 0 6px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+/* An on/off switch, for the move list's folding. */
+.study-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.study-switch[aria-checked="true"] {
+  color: var(--text);
+}
+
+.study-switch__track {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  flex: none;
+  border-radius: 7px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.study-switch__track::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--panel-bg);
+  content: "";
+  transition: transform 0.15s;
+}
+
+.study-switch[aria-checked="true"] .study-switch__track {
+  background: var(--primary);
+}
+
+.study-switch[aria-checked="true"] .study-switch__track::after {
+  transform: translateX(12px);
+}
+
+/* Experimental: Calculate, where figures lack Explorer data. */
+.tree-calc {
+  border: 0;
+  color: var(--primary-hover);
+  cursor: pointer;
+}
+
+button.tree-calc:hover {
+  text-decoration: underline;
+}
+
+.tree-move-stat .tree-calc {
+  margin-left: 4px;
+  padding: 0;
+  background: none;
+  font: inherit;
+}
+
+.tree-calc--busy {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.tree-start-stat {
+  margin-bottom: 2px;
+}
+
+.tree-start-stat .tree-move-stat {
+  margin-left: 0;
+}
+
 .tree-move--mine {
   color: var(--primary-hover);
 }
@@ -2187,6 +2286,59 @@ button.study-head__link:disabled:hover {
   width: 7px;
   border-top: 1px solid var(--border);
   content: "";
+}
+
+/* Experimental: the moves at a branching in folds, each with what follows
+   it, indented like a variation; the chevron opens and closes a fold. */
+.tree-folds {
+  margin: 2px 0 4px 6px;
+  padding-left: 9px;
+  border-left: 1px solid var(--border);
+}
+
+/* The fold is indented, and its chevron hangs in that indent: the head's
+   moves line up with the rows below it. */
+.tree-fold {
+  padding-left: 12px;
+}
+
+.tree-fold__head {
+  display: block;
+  list-style: none;
+}
+
+summary.tree-fold__head {
+  cursor: pointer;
+}
+
+summary.tree-fold__head::-webkit-details-marker {
+  display: none;
+}
+
+.tree-fold__head::before {
+  display: inline-block;
+  width: 12px;
+  margin-left: -12px;
+  color: var(--text-dim);
+  content: "";
+}
+
+summary.tree-fold__head::before {
+  content: "▸";
+}
+
+details[open] > summary.tree-fold__head::before {
+  content: "▾";
+}
+
+.tree-fold__body {
+  margin-left: 0;
+}
+
+.tree-fold--others .tree-fold__head {
+  color: var(--text-dim);
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
 }
 
 .tree-empty {

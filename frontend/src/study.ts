@@ -34,11 +34,14 @@ import {
   type ExplorerSettings,
   type ExplorerSpeed,
 } from "./explorer";
-import { errorMessage, fetchExplorerData, hasExplorerData } from "./explorerClient";
+import { calculateExpectedScore } from "./expectedScore";
+import { cachedExplorerData, errorMessage, fetchExplorerData } from "./explorerClient";
 import { materialBalance, materialHtml } from "./material";
 import { downloadStudyFile } from "./studyFile";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
+
+const FOLD_STORAGE_KEY = "study-fold-branches";
 
 interface StudyStats {
   winProbability: number;
@@ -206,6 +209,7 @@ function renderEditor(
                 <button id="delete-btn" class="btn btn-secondary study-icon-btn" type="button" data-icon="&#xe04f;" aria-label="Delete this move" title="Delete this move and everything after it (Delete)"></button>
                 <button id="start-point-btn" class="btn btn-secondary btn-small" type="button">Set as starting point</button>
                 <button id="comment-btn" class="btn btn-secondary btn-small" type="button" aria-expanded="false" aria-controls="comment-editor">Comment</button>
+                <button id="fold-btn" class="study-switch" type="button" role="switch" aria-checked="true" title="Put the moves at each branching in folds"><span class="study-switch__track" aria-hidden="true"></span>Fold branches</button>
                 <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
                 <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
               </div>
@@ -220,6 +224,7 @@ function renderEditor(
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
               </div>
+              <p id="live-score" class="live-score" aria-live="polite" hidden></p>
               <div id="tree-view" class="tree-view"></div>
               <p id="move-conflict" class="move-conflict" hidden></p>
               <div class="study-comment-editor" id="comment-editor" hidden>
@@ -269,6 +274,30 @@ function renderEditor(
 
   const boardEl = document.getElementById("board") as HTMLElement;
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
+  const liveScoreEl = document.getElementById("live-score") as HTMLElement;
+
+  // Experimental: the moves at each branching in folds (see renderFolds in
+  // tree.ts), on unless switched off in this browser.
+  let foldBranches = (() => {
+    try {
+      return localStorage.getItem(FOLD_STORAGE_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  })();
+  const openFolds = new Set<number>();
+  const foldBtn = document.getElementById("fold-btn") as HTMLButtonElement;
+  foldBtn.setAttribute("aria-checked", String(foldBranches));
+  foldBtn.addEventListener("click", () => {
+    foldBranches = !foldBranches;
+    foldBtn.setAttribute("aria-checked", String(foldBranches));
+    try {
+      localStorage.setItem(FOLD_STORAGE_KEY, foldBranches ? "on" : "off");
+    } catch {
+      // Keep the choice for this page even when browser storage is blocked.
+    }
+    renderTreeView();
+  });
   const commentInputEl = document.getElementById("study-comment") as HTMLTextAreaElement;
   const keyboardHelpButton = document.getElementById("keyboard-help-btn") as HTMLButtonElement;
   const keyboardHelpPanel = document.getElementById("keyboard-help") as HTMLElement;
@@ -665,61 +694,29 @@ function renderEditor(
     });
   }
 
-  // Moves after which the expected score needs a position whose Explorer
-  // data this browser hasn't loaded yet: every position where the opponent
-  // is to move (how often each reply is played), and the one before each
-  // line's last move (that move's results). Opening such a move with the
-  // Explorer panel on loads it. Checked in the browser's Explorer cache
-  // only, never fetched for this.
+  // Experimental: the expected score, live, in the move list. The Stats
+  // page's walk runs on the Explorer data this browser already holds, with
+  // Explorer results where lines end (whatever the Stats page's setting).
+  // Each of the opponent's replies at a branching shows how likely it is to
+  // be reached and what it is worth, so that they can be compared, and so do
+  // the replies the tree doesn't have, together; the total goes next to the
+  // starting position. A figure that lacks Explorer data shows Calculate
+  // instead, which loads just the positions it needs, in the background. A
+  // missing position also gets a ring on the move it follows: opening that
+  // move with the Explorer panel on loads it too.
+  type Figures = { probability: number; score: number };
+  type Missing = { fen: string; nodeId: number };
   let unfetched: ReadonlyMap<number, string> = new Map(); // node id -> position after it
-  let unfetchedRun = 0;
+  let missing: readonly Missing[] = [];
+  let moveStats: ReadonlyMap<number, Figures> = new Map();
+  let otherReplies: ReadonlyMap<number, Figures> = new Map();
+  let startStat: { text: string; title: string } | undefined;
+  let calcButtons: ReadonlySet<number> = new Set(); // replies, or the start, lacking figures
+  const calcBusy = new Map<number, string>(); // what a running Calculate says instead
+  let liveRun = 0;
   let unfetchedTimer: number | null = null;
 
-  // The positions the expected score's walk reads, by the move leading to
-  // each (the starting point's own position has no move to mark if it's the
-  // initial one).
-  function neededPositions(): Map<number, string> {
-    const side = currentSide();
-    const start = startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId;
-    const needed = new Map<number, string>();
-    const after = (chess: Chess, nodeId: number) => {
-      const next = new Chess(chess.fen());
-      next.move(tree.nodes[nodeId].san as string);
-      return next;
-    };
-    const walk = (nodeId: number, chess: Chess): void => {
-      if (chess.isGameOver()) return;
-      const children = tree.nodes[nodeId].children;
-      if ((chess.turn() === "w") === (side === "white")) {
-        const own = children[0];
-        // Nothing prepared from the starting point: its own results.
-        if (own === undefined) {
-          if (nodeId === start) needed.set(nodeId, chess.fen());
-          return;
-        }
-        const next = after(chess, own);
-        // The line goes on after your move if an opponent's reply in the
-        // tree is answered; otherwise it ends with it, valued here.
-        if (!next.isGameOver() && tree.nodes[own].children.some((reply) => tree.nodes[reply].children.length > 0)) {
-          walk(own, next);
-        } else if (!next.isGameOver()) {
-          needed.set(nodeId, chess.fen());
-        }
-        return;
-      }
-      needed.set(nodeId, chess.fen());
-      for (const reply of children) walk(reply, after(chess, reply));
-    };
-    walk(start, positionAt(tree, start));
-    needed.delete(tree.rootId);
-    return needed;
-  }
-
-  function setUnfetched(found: ReadonlyMap<number, string>): void {
-    if (found.size === unfetched.size && [...found.keys()].every((id) => unfetched.has(id))) return;
-    unfetched = found;
-    renderTreeView();
-  }
+  const effectiveStart = () => (startNodeId !== null && startNodeId in tree.nodes ? startNodeId : tree.rootId);
 
   // After edits, a moment after the last one: they change what's needed.
   function scheduleUnfetchedCheck(): void {
@@ -730,26 +727,177 @@ function renderEditor(
     }, 300);
   }
 
-  async function checkUnfetched(): Promise<void> {
-    const run = ++unfetchedRun;
-    const side = currentSide();
-    const needed = [...neededPositions()];
-    const loaded = await Promise.all(needed.map(([, fen]) => hasExplorerData(fen, settings, side)));
-    if (run !== unfetchedRun) return;
-    setUnfetched(new Map(needed.filter((_, i) => !loaded[i])));
+  // The panel just loaded this position: walk again if it was missing.
+  function explorerFetched(fen: string): void {
+    if (missing.some((m) => m.fen === fen)) void checkUnfetched();
   }
 
-  // The panel just loaded this position: every move leading to it has its
-  // data now.
-  function explorerFetched(fen: string): void {
-    if (!unfetched.size) return;
-    setUnfetched(new Map([...unfetched].filter(([, needed]) => needed !== fen)));
+  // The opponent's replies at branchings from the starting point on: where
+  // the figures go.
+  function branchReplies(start: number, side: "white" | "black"): number[] {
+    const replies: number[] = [];
+    const visit = (nodeId: number, ply: number): void => {
+      const children = tree.nodes[nodeId].children;
+      // After an even number of moves, White is to move: these are the
+      // opponent's moves when the study is for Black.
+      const opponentReplies = (ply % 2 === 0) === (side === "black");
+      for (const childId of children) {
+        if (opponentReplies && children.length > 1) replies.push(childId);
+        visit(childId, ply + 1);
+      }
+    };
+    visit(start, sanPathTo(tree, start).length);
+    return replies;
+  }
+
+  async function checkUnfetched(): Promise<void> {
+    const run = ++liveRun;
+    const side = currentSide();
+    if (Object.keys(tree.nodes).length <= 1) {
+      missing = [];
+      unfetched = new Map();
+      moveStats = new Map();
+      otherReplies = new Map();
+      startStat = undefined;
+      calcButtons = new Set();
+      liveScoreEl.hidden = true;
+      renderTreeView();
+      return;
+    }
+    const start = effectiveStart();
+    const stats = new Map<number, Figures>();
+    const others = new Map<number, Figures>(); // score summed as points until the end
+    let unprepared = 0;
+    let unpreparedPoints = 0;
+    let result;
+    try {
+      result = await calculateExpectedScore(
+        tree,
+        start,
+        side,
+        (fen) => cachedExplorerData(fen, settings, side),
+        "explorer",
+        undefined,
+        (position) => {
+          if (position.san !== null) {
+            unprepared += position.probability;
+            unpreparedPoints += position.probability * position.score;
+            const sum = others.get(position.nodeId) ?? { probability: 0, score: 0 };
+            others.set(position.nodeId, { probability: sum.probability + position.probability, score: sum.score + position.probability * position.score });
+            return;
+          }
+          if (position.complete) stats.set(position.nodeId, { probability: position.probability, score: position.score });
+        },
+      );
+    } catch {
+      // The 2016 sample's Explorer is asked from the backend, and can fail.
+      if (run !== liveRun) return;
+      liveScoreEl.hidden = false;
+      liveScoreEl.textContent = "Expected score: the Explorer data couldn't be read.";
+      return;
+    }
+    if (run !== liveRun) return;
+    liveScoreEl.hidden = true;
+    missing = result.missingPositions;
+    unfetched = new Map(missing.filter((m) => m.nodeId !== tree.rootId).map((m) => [m.nodeId, m.fen]));
+    for (const [id, sum] of others) others.set(id, { probability: sum.probability, score: sum.score / sum.probability });
+    const replies = branchReplies(start, side);
+    moveStats = new Map(replies.filter((id) => stats.has(id)).map((id) => [id, stats.get(id)!]));
+    otherReplies = others;
+    const buttons = new Set(replies.filter((id) => !stats.has(id)));
+    const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+    if (missing.length) {
+      buttons.add(start);
+      startStat = { text: "Expected score:", title: "Load the Opening Explorer data the whole study needs" };
+    } else {
+      startStat = {
+        text: `Expected score: ${pct(result.score)}`,
+        title: `Calculated live, with Explorer results where lines end. Replies you haven't prepared: ${pct(unprepared)} of games${
+          unprepared ? `, scoring ${pct(unpreparedPoints / unprepared)}` : ""
+        }.`,
+      };
+    }
+    calcButtons = buttons;
+    renderTreeView();
+  }
+
+  // Calculate for `target` (a reply at a branching, or the starting point
+  // for the whole study): load the missing positions on its way from the
+  // starting point and in what follows it, walk again, and repeat for those
+  // found missing further on, until its figures are complete.
+  async function calculateFigures(target: number): Promise<void> {
+    if (calcBusy.has(target)) return;
+    const side = currentSide();
+    const whole = target === effectiveStart();
+    const above = new Set(pathTo(tree, target).map((node) => node.id));
+    const concerns = (nodeId: number) =>
+      whole || above.has(nodeId) || (nodeId in tree.nodes && pathTo(tree, nodeId).some((node) => node.id === target));
+    let loaded = 0;
+    const say = (text: string) => {
+      calcBusy.set(target, text);
+      renderTreeView();
+    };
+    say("Calculating…");
+    try {
+      for (let round = 0; round < 100; round++) {
+        const needed = [...new Set(missing.filter((m) => concerns(m.nodeId)).map((m) => m.fen))];
+        if (!needed.length) break;
+        for (const fen of needed) {
+          await fetchExplorerData(fen, settings, side, {
+            priority: "background",
+            onRateLimited: (resumeAt) =>
+              say(`Lichess asked to wait; resuming at ${new Date(resumeAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}…`),
+          });
+          loaded += 1;
+          say(`Calculating… ${loaded} position${loaded === 1 ? "" : "s"} loaded`);
+        }
+        await checkUnfetched();
+      }
+      calcBusy.delete(target);
+    } catch (err) {
+      calcBusy.set(target, errorMessage(err) ?? "Couldn't load the Explorer data.");
+      renderTreeView();
+      window.setTimeout(() => {
+        calcBusy.delete(target);
+        renderTreeView();
+      }, 6000);
+      return;
+    }
+    renderTreeView();
   }
 
   function renderTreeView(): void {
-    treeViewEl.innerHTML = renderTree(tree, currentId, currentSide(), startNodeId, new Set(unfetched.keys()));
+    // Folded, the folds on the way to the current move are open too.
+    const open = new Set(openFolds);
+    for (const node of pathTo(tree, currentId)) open.add(node.id);
+    treeViewEl.innerHTML = renderTree(tree, currentId, currentSide(), startNodeId, {
+      unfetched: new Set(unfetched.keys()),
+      moveStats,
+      startStat,
+      calculate: { buttons: calcButtons, busy: calcBusy },
+      folding: foldBranches ? { open, others: otherReplies } : undefined,
+    });
+    treeViewEl.querySelectorAll<HTMLButtonElement>("[data-calculate]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        // In a fold's head: calculate rather than toggle the fold.
+        event.preventDefault();
+        event.stopPropagation();
+        void calculateFigures(Number(button.dataset.calculate));
+      });
+    });
     treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
-      el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
+      el.addEventListener("click", (event) => {
+        // A move in a fold's head goes to the move rather than toggling the fold.
+        if (el.closest("summary")) event.preventDefault();
+        goTo(Number(el.dataset.nodeId));
+      });
+    });
+    treeViewEl.querySelectorAll<HTMLDetailsElement>("details[data-fold-id]").forEach((fold) => {
+      fold.addEventListener("toggle", () => {
+        const id = Number(fold.dataset.foldId);
+        if (fold.open) openFolds.add(id);
+        else openFolds.delete(id);
+      });
     });
 
     const activeMove = treeViewEl.querySelector<HTMLElement>(".tree-move--current");
