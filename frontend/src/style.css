@@ -1935,25 +1935,39 @@ button.study-head__link:disabled:hover {
   font-size: 0.82rem;
 }
 
-.explorer-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  background: var(--card-nested-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+/* The editor's Explorer settings, in the tools card in place of the tools
+   while the gear is on: the same controls as the Stats page's. */
+.tool-settings__title {
+  margin: 0 0 2px;
+  font-size: 0.9rem;
 }
 
-.explorer-settings .speed-checkboxes {
-  margin-bottom: 0;
-}
-
-.explorer-settings__note {
-  margin: 0;
+.tool-settings__note {
+  margin: 0 0 8px;
   color: var(--text-dim);
   font-size: 0.78rem;
+}
+
+/* The gear sits at the right end of the tabs, after Stockfish's depth
+   control when that shows. */
+.tool-tab--settings {
+  margin-left: auto;
+  padding-inline: 8px;
+}
+
+.tool-tabs__status:not([hidden]) + .tool-tab--settings {
+  margin-left: 4px;
+}
+
+@media (max-width: 600px) {
+  /* On phones, the tools' tabs show their icons only. */
+  .tool-tab__name {
+    display: none;
+  }
+
+  .tool-tab .analysis-label::before {
+    margin-right: 0;
+  }
 }
 
 .explorer-row.explorer-row--prepared {

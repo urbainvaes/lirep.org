@@ -204,25 +204,32 @@ export function boardColumnHtml(): string {
   `;
 }
 
-/** Stockfish's panel and the row of tabs that turn the two tools on and off. */
-export function toolTabsHtml(): string {
+/** Stockfish's panel and the tool tabs; `settings` adds the gear that opens
+ * the Explorer settings (see the editor). The tabs' names give way to their
+ * icons on phones. */
+export function toolTabsHtml(options: { settings?: boolean } = {}): string {
   return `
     <div id="tool-engine" class="tool-panel tool-panel--engine" hidden>
       <div id="engine-panel" class="engine-chips"></div>
     </div>
 
     <div class="tool-tabs" role="group" aria-label="Analysis tools">
-      <button id="tab-explorer" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-explorer">
-        <span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span>Opening Explorer
+      <button id="tab-explorer" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-explorer" title="Opening Explorer">
+        <span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span><span class="tool-tab__name">Opening Explorer</span>
       </button>
-      <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine">
-        <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span>Stockfish
+      <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine" title="Stockfish">
+        <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span><span class="tool-tab__name">Stockfish</span>
       </button>
       <span id="engine-depth" class="engine-depth tool-tabs__status" hidden>
         <button id="depth-down" class="engine-depth__btn" type="button" aria-label="Search less deep">‹</button>
         <span id="engine-status" class="engine-eval" title="Stockfish's search depth, in this browser" aria-live="polite"></span>
         <button id="depth-up" class="engine-depth__btn" type="button" aria-label="Search deeper">›</button>
       </span>
+      ${
+        options.settings
+          ? `<button id="tab-settings" class="tool-tab tool-tab--settings" type="button" aria-pressed="false" aria-controls="tool-settings" title="Explorer settings" aria-label="Explorer settings"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>`
+          : ""
+      }
     </div>
   `;
 }

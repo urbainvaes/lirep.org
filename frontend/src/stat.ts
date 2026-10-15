@@ -8,8 +8,8 @@ import {
   explorerSummary,
   fetchExplorerDefaults,
   LEAF_VALUE_LABELS,
-  ratingOptionsHtml,
-  speedCheckboxesHtml,
+  bindExplorerSettingsForm,
+  explorerSettingsFormHtml,
   type ExplorerData,
   type ExplorerDefaults,
   type ExplorerSettings,
@@ -443,16 +443,13 @@ function renderCoverageChart(
   });
 }
 
+// The Explorer settings as edited in the calculation settings (see
+// bindExplorerSettingsForm); applied only by a calculation.
+let formSettings: ExplorerSettings = { ...DEFAULT_EXPLORER_SETTINGS };
+
 function readSettingsFromDom(): ExplorerSettings {
-  const source = (document.getElementById("stat-source") as HTMLSelectElement).value as ExplorerSettings["source"];
-  const database = (document.getElementById("stat-database") as HTMLSelectElement).value as ExplorerSettings["database"];
-  const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
-  const minRating = Number(minRatingEl.value);
-  const player = (document.getElementById("stat-player") as HTMLInputElement).value.trim() || null;
-  const speeds = Array.from(
-    document.querySelectorAll<HTMLInputElement>("#stat-speeds input:checked"),
-  ).map((cb) => cb.value as ExplorerSpeed);
-  return { enabled: true, source: database === "player" ? "lichess" : source, database, player, minRating, speeds };
+  const { database, source } = formSettings;
+  return { ...formSettings, enabled: true, source: database === "player" ? "lichess" : source, speeds: [...formSettings.speeds] };
 }
 
 function readDepthFromDom(): number {
@@ -576,9 +573,13 @@ function renderPage(
   const stats = study.stats;
   const displayedCoverage = trimCoverageTail(stats?.coverage);
   const settings = study.explorerSettings ?? { ...DEFAULT_EXPLORER_SETTINGS };
-  const ratingBuckets = explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
-  const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1400;
-  const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
+  formSettings = { ...settings, speeds: [...settings.speeds] };
+  const formChoices = {
+    lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
+    ratingBuckets: explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500],
+    defaultMinRating: explorerDefaults?.defaultMinRating ?? 1400,
+    speeds: explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]),
+  };
   const tier = scoreTier(stats?.winProbability);
   const startPoint = describeStartPoint(study.tree, study.startNodeId);
   const disabled = hasMoves ? "" : "disabled";
@@ -666,28 +667,7 @@ function renderPage(
           <div class="calc-settings__group">
             <h3>Opening Explorer</h3>
             <p class="stat-card__meta">Which games weight the opponent's replies, for both results.</p>
-            <div class="explorer-settings-panel">
-              <div class="analysis-header__settings">
-                <select id="stat-source" aria-label="Explorer data source">
-                  <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
-                  <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
-                </select>
-                <select id="stat-database" aria-label="Lichess database" ${settings.source === "lirep" ? "disabled" : ""}>
-                  <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
-                  <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
-                  <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
-                </select>
-                <select id="stat-min-rating" aria-label="Minimum rating" ${settings.database === "lichess" ? "" : "disabled"}>
-                  ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
-                </select>
-                <input id="stat-player" class="explorer-player" type="text" placeholder="Lichess username"
-                  aria-label="Player whose games to use" value="${escapeHtml(settings.player ?? "")}"
-                  ${settings.database === "player" ? "" : "hidden"} />
-              </div>
-              <div class="speed-checkboxes" id="stat-speeds">
-                ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database === "masters")}
-              </div>
-            </div>
+            <div id="stat-explorer-settings">${explorerSettingsFormHtml(formSettings, formChoices)}</div>
           </div>
           <div class="calc-settings__group">
             <h3>End of preparation</h3>
@@ -808,47 +788,12 @@ function renderPage(
     }
   });
 
-  const databaseEl = document.getElementById("stat-database") as HTMLSelectElement;
-  const sourceEl = document.getElementById("stat-source") as HTMLSelectElement;
-  const minRatingEl = document.getElementById("stat-min-rating") as HTMLSelectElement;
-  const speedsEl = document.getElementById("stat-speeds") as HTMLElement;
-  const playerEl = document.getElementById("stat-player") as HTMLInputElement;
-
-  function updateExplorerControls(): void {
-    const playerSelected = databaseEl.value === "player";
-    databaseEl.disabled = sourceEl.value === "lirep" && !playerSelected;
-    databaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = sourceEl.value === "lirep";
-    sourceEl.querySelector<HTMLOptionElement>('option[value="lirep"]')!.disabled =
-      playerSelected || !explorerDefaults?.lirepAvailable;
-    if (playerSelected) sourceEl.value = "lichess"; // one player's games exist only on Lichess
-    minRatingEl.disabled = databaseEl.value !== "lichess";
-    playerEl.hidden = !playerSelected;
-    speedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
-      cb.disabled = databaseEl.value === "masters";
-    });
-  }
-
-  sourceEl.addEventListener("change", () => {
-    if (sourceEl.value === "lirep" && databaseEl.value === "masters") databaseEl.value = "lichess";
-    updateExplorerControls();
-  });
-
-  databaseEl.addEventListener("change", () => {
-    updateExplorerControls();
-    if (databaseEl.value === "player" && !playerEl.value.trim()) {
-      void fetchMe().then((me) => {
-        if (me.username && !playerEl.value.trim()) playerEl.value = me.username;
-        refreshStatus();
-      });
-    }
-  });
-
-  speedsEl.addEventListener("change", (e) => {
-    const target = e.target as HTMLInputElement;
-    if (target.type !== "checkbox") return;
-    const checkedCount = speedsEl.querySelectorAll<HTMLInputElement>("input:checked").length;
-    if (!target.checked && checkedCount === 0) target.checked = true; // keep at least one speed selected
-  });
+  bindExplorerSettingsForm(
+    document.getElementById("stat-explorer-settings") as HTMLElement,
+    formSettings,
+    formChoices.lirepAvailable,
+    () => refreshStatus(),
+  );
 
   // The summary line and the out-of-date markers follow the settings as they
   // are edited; nothing recalculates until a Recalculate button is pressed.

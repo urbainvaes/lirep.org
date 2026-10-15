@@ -1,4 +1,4 @@
-import { escapeHtml } from "./layout";
+import { escapeHtml, fetchMe } from "./layout";
 
 /** What the Lirep (local) Explorer contains: Lichess's own public game
  * database (CC0), but only these months. Shown wherever Lirep is named so it
@@ -108,6 +108,130 @@ export function speedCheckboxesHtml(allSpeeds: ExplorerSpeed[], selected: Explor
     .join("");
 }
 
+/** What the Explorer settings' controls offer: whether the Lirep Explorer
+ * exists here, the rating buckets, and the time controls. */
+export interface ExplorerFormChoices {
+  lirepAvailable: boolean;
+  ratingBuckets: number[];
+  defaultMinRating: number;
+  speeds: ExplorerSpeed[];
+}
+
+/** The Explorer settings' controls, the same on the Stats page and in the
+ * editor: source, database, minimum rating or player, time controls. Wire
+ * them with bindExplorerSettingsForm. */
+export function explorerSettingsFormHtml(settings: ExplorerSettings, choices: ExplorerFormChoices): string {
+  const selected = (on: boolean) => (on ? " selected" : "");
+  return `
+    <div class="explorer-settings-panel">
+      <div class="analysis-header__settings">
+        <select data-setting="source" aria-label="Explorer data source">
+          <option value="lirep"${selected(settings.source === "lirep")}${choices.lirepAvailable ? "" : " disabled"}>Lirep</option>
+          <option value="lichess"${selected(settings.source === "lichess")}>Lichess</option>
+        </select>
+        <select data-setting="database" aria-label="Lichess database">
+          <option value="lichess"${selected(settings.database === "lichess")}>Players</option>
+          <option value="masters"${selected(settings.database === "masters")}>Masters</option>
+          <option value="player"${selected(settings.database === "player")}>Player</option>
+        </select>
+        <select data-setting="min-rating" aria-label="Minimum rating">
+          ${ratingOptionsHtml(choices.ratingBuckets, settings.minRating, choices.defaultMinRating)}
+        </select>
+        <input data-setting="player" class="explorer-player" type="text" placeholder="Lichess username"
+          aria-label="Player whose games to use" value="${escapeHtml(settings.player ?? "")}" />
+      </div>
+      <div class="speed-checkboxes" data-setting="speeds">
+        ${speedCheckboxesHtml(choices.speeds, settings.speeds, settings.database === "masters")}
+      </div>
+    </div>
+  `;
+}
+
+/** Wires the controls of explorerSettingsFormHtml inside `root`: keeps
+ * `settings` up to date as they change, enables only the controls that
+ * apply (one player's games exist only on Lichess, Masters has no ratings
+ * or time controls…), keeps a time control selected, and fills in the
+ * signed-in player's name for the Player database. `onChange` follows each
+ * change (a player's name: once it's entered). */
+export function bindExplorerSettingsForm(
+  root: HTMLElement,
+  settings: ExplorerSettings,
+  lirepAvailable: boolean,
+  onChange: () => void,
+): void {
+  const control = <T extends HTMLElement>(name: string) => root.querySelector<T>(`[data-setting="${name}"]`)!;
+  const sourceEl = control<HTMLSelectElement>("source");
+  const databaseEl = control<HTMLSelectElement>("database");
+  const minRatingEl = control<HTMLSelectElement>("min-rating");
+  const playerEl = control<HTMLInputElement>("player");
+  const speedsEl = control<HTMLElement>("speeds");
+
+  function update(): void {
+    const playerSelected = settings.database === "player";
+    sourceEl.querySelector<HTMLOptionElement>('option[value="lirep"]')!.disabled = playerSelected || !lirepAvailable;
+    databaseEl.disabled = settings.source === "lirep" && !playerSelected;
+    databaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = settings.source === "lirep";
+    minRatingEl.disabled = settings.database !== "lichess";
+    playerEl.hidden = !playerSelected;
+    speedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
+      cb.disabled = settings.database === "masters";
+    });
+  }
+  update();
+
+  sourceEl.addEventListener("change", () => {
+    settings.source = sourceEl.value as ExplorerSettings["source"];
+    if (settings.source === "lirep" && settings.database === "masters") {
+      settings.database = "lichess";
+      databaseEl.value = "lichess";
+    }
+    update();
+    onChange();
+  });
+
+  databaseEl.addEventListener("change", () => {
+    settings.database = databaseEl.value as ExplorerSettings["database"];
+    if (settings.database === "player") {
+      // One player's games exist only on Lichess; default to the signed-in user.
+      settings.source = "lichess";
+      sourceEl.value = "lichess";
+      if (!settings.player) {
+        void fetchMe().then((me) => {
+          if (me.username && !settings.player && settings.database === "player") {
+            settings.player = me.username;
+            playerEl.value = me.username;
+            onChange();
+          }
+        });
+      }
+    }
+    update();
+    onChange();
+  });
+
+  playerEl.addEventListener("input", () => {
+    settings.player = playerEl.value.trim() || null;
+  });
+  playerEl.addEventListener("change", onChange);
+
+  minRatingEl.addEventListener("change", () => {
+    settings.minRating = Number(minRatingEl.value);
+    onChange();
+  });
+
+  speedsEl.addEventListener("change", (e) => {
+    const target = e.target as HTMLInputElement;
+    if (target.type !== "checkbox") return;
+    const speed = target.value as ExplorerSpeed;
+    if (!target.checked && settings.speeds.length === 1 && settings.speeds[0] === speed) {
+      target.checked = true; // always keep at least one speed selected
+      return;
+    }
+    settings.speeds = target.checked ? [...settings.speeds, speed] : settings.speeds.filter((s) => s !== speed);
+    onChange();
+  });
+}
+
 // One line describing Explorer settings, e.g. "Lichess · 1600+ · blitz, rapid".
 // The Lirep source names its dataset, since its games are few and old.
 export function explorerSummary(settings: {
@@ -198,6 +322,8 @@ export function renderExplorer(
   data: ExplorerData,
   onPlay: (san: string) => void,
   repertoire?: RepertoireView,
+  // The settings' own summary, in place of what the data says it is.
+  summary?: string,
 ): void {
   if (data.moves.length === 0) {
     panel.innerHTML = `<p class="explorer-empty">No games found here yet.</p>`;
@@ -247,7 +373,7 @@ export function renderExplorer(
 
   panel.innerHTML = `
     <div class="explorer-header">
-      <span class="explorer-source">${source}</span>
+      <span class="explorer-source">${summary ? escapeHtml(summary) : source}</span>
       ${data.opening ? `<span class="explorer-opening">${escapeHtml(data.opening)}</span>` : ""}
       <span class="explorer-fetched-at" title="Fetched ${fetchedAtDate.toLocaleString()}">Fetched ${formatFetchedAt(data.fetchedAt)}</span>
     </div>

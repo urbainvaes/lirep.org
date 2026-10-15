@@ -25,11 +25,11 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
   fetchExplorerDefaults,
-  ratingOptionsHtml,
+  bindExplorerSettingsForm,
+  explorerSettingsFormHtml,
   renderExplorer,
   renderExplorerError,
   renderExplorerLoading,
-  speedCheckboxesHtml,
   type ExplorerDefaults,
   type ExplorerSettings,
   type ExplorerSpeed,
@@ -235,37 +235,21 @@ function renderEditor(
 
             <div class="study-card study-card--tools">
               <div id="tool-explorer" class="tool-panel tool-panel--explorer">
-                <div class="explorer-settings-line">
-                  <span id="explorer-summary"></span>
-                  <button id="explorer-settings-btn" class="btn btn-secondary btn-small" type="button" aria-expanded="false" aria-controls="explorer-settings">Change</button>
-                </div>
-                <div id="explorer-settings" class="explorer-settings" hidden>
-                  <div class="analysis-header__settings">
-                    <select id="explorer-source" aria-label="Explorer data source">
-                      <option value="lirep" ${settings.source === "lirep" ? "selected" : ""} ${explorerDefaults?.lirepAvailable ? "" : "disabled"}>Lirep</option>
-                      <option value="lichess" ${settings.source === "lichess" ? "selected" : ""}>Lichess</option>
-                    </select>
-                    <select id="explorer-database" aria-label="Lichess database" ${settings.source === "lichess" ? "" : "disabled"}>
-                      <option value="lichess" ${settings.database === "lichess" ? "selected" : ""}>Players</option>
-                      <option value="masters" ${settings.database === "masters" ? "selected" : ""} ${settings.source === "lirep" ? "disabled" : ""}>Masters</option>
-                      <option value="player" ${settings.database === "player" ? "selected" : ""}>Player</option>
-                    </select>
-                    <input id="explorer-player" class="explorer-player" type="text" placeholder="Lichess username"
-                      aria-label="Player whose games to show" value="${escapeHtml(settings.player ?? "")}"
-                      ${settings.database === "player" ? "" : "hidden"} />
-                    <select id="explorer-min-rating" aria-label="Minimum rating" ${settings.database === "lichess" ? "" : "disabled"}>
-                      ${ratingOptionsHtml(ratingBuckets, settings.minRating, defaultMinRating)}
-                    </select>
-                  </div>
-                  <div class="speed-checkboxes" id="explorer-speeds">
-                    ${speedCheckboxesHtml(allSpeeds, settings.speeds, settings.database === "masters")}
-                  </div>
-                  <p class="explorer-settings__note">These settings are also the ones this study's stats are calculated with.</p>
-                </div>
                 <div id="explorer-panel" class="explorer-panel"></div>
               </div>
 
-              ${toolTabsHtml()}
+              <div id="tool-settings" class="tool-panel tool-panel--settings" hidden>
+                <h3 class="tool-settings__title">Opening Explorer</h3>
+                <p class="tool-settings__note">Which games the Explorer shows. They are also the ones this study's stats are calculated with.</p>
+                <div id="explorer-settings-form">${explorerSettingsFormHtml(settings, {
+                  lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
+                  ratingBuckets,
+                  defaultMinRating,
+                  speeds: allSpeeds,
+                })}</div>
+              </div>
+
+              ${toolTabsHtml({ settings: true })}
             </div>
           </div>
         </div>
@@ -303,11 +287,6 @@ function renderEditor(
   const keyboardHelpButton = document.getElementById("keyboard-help-btn") as HTMLButtonElement;
   const keyboardHelpPanel = document.getElementById("keyboard-help") as HTMLElement;
   const explorerPanelEl = document.getElementById("explorer-panel") as HTMLElement;
-  const explorerSourceEl = document.getElementById("explorer-source") as HTMLSelectElement;
-  const explorerDatabaseEl = document.getElementById("explorer-database") as HTMLSelectElement;
-  const explorerPlayerEl = document.getElementById("explorer-player") as HTMLInputElement;
-  const explorerMinRatingEl = document.getElementById("explorer-min-rating") as HTMLSelectElement;
-  const explorerSpeedsEl = document.getElementById("explorer-speeds") as HTMLElement;
   const engineStatusEl = document.getElementById("engine-status") as HTMLElement;
   const engineDepthEl = document.getElementById("engine-depth") as HTMLElement;
   const depthDownBtn = document.getElementById("depth-down") as HTMLButtonElement;
@@ -337,9 +316,6 @@ function renderEditor(
   const studyMenuEl = document.getElementById("study-menu") as HTMLDetailsElement;
   const commentBtn = document.getElementById("comment-btn") as HTMLButtonElement;
   const commentEditorEl = document.getElementById("comment-editor") as HTMLElement;
-  const explorerSummaryEl = document.getElementById("explorer-summary") as HTMLElement;
-  const explorerSettingsBtn = document.getElementById("explorer-settings-btn") as HTMLButtonElement;
-  const explorerSettingsEl = document.getElementById("explorer-settings") as HTMLElement;
   const tabButtons = {
     explorer: document.getElementById("tab-explorer") as HTMLButtonElement,
     engine: document.getElementById("tab-engine") as HTMLButtonElement,
@@ -348,6 +324,9 @@ function renderEditor(
     explorer: document.getElementById("tool-explorer") as HTMLElement,
     engine: document.getElementById("tool-engine") as HTMLElement,
   };
+  const settingsPanel = document.getElementById("tool-settings") as HTMLElement;
+  const settingsTab = document.getElementById("tab-settings") as HTMLButtonElement;
+  let settingsShown = false;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
   let studyId = existing?.id ?? null;
@@ -588,10 +567,16 @@ function renderEditor(
       if (requestId !== explorerRequestId) return;
       explorerFetched(fen);
       const chess = positionAt(tree, currentId);
-      renderExplorer(explorerPanelEl, data, playSan, {
-        inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
-        yourTurn: (chess.turn() === "w") === (currentSide() === "white"),
-      });
+      renderExplorer(
+        explorerPanelEl,
+        data,
+        playSan,
+        {
+          inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
+          yourTurn: (chess.turn() === "w") === (currentSide() === "white"),
+        },
+        explorerSummary(settings),
+      );
     } catch (err) {
       if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl, errorMessage(err));
     }
@@ -1055,15 +1040,17 @@ function renderEditor(
   function applyToolsUI(): void {
     for (const name of ["explorer", "engine"] as const) {
       tabButtons[name].setAttribute("aria-pressed", String(shownTools.has(name)));
-      tabPanels[name].hidden = !shownTools.has(name);
+      tabPanels[name].hidden = settingsShown || !shownTools.has(name);
     }
+    settingsPanel.hidden = !settingsShown;
+    settingsTab.setAttribute("aria-pressed", String(settingsShown));
     gaugeEl.hidden = !shownTools.has("engine");
     engineDepthEl.hidden = !shownTools.has("engine");
     // The tools card takes only the room its open tools need; the tree has the rest.
     const toolsCard = document.querySelector(".study-card--tools");
     toolsCard?.classList.toggle("study-card--tools-both", shownTools.size === 2);
-    toolsCard?.classList.toggle("study-card--tools-explorer", shownTools.has("explorer"));
-    toolsCard?.classList.toggle("study-card--tools-none", shownTools.size === 0);
+    toolsCard?.classList.toggle("study-card--tools-explorer", settingsShown || shownTools.has("explorer"));
+    toolsCard?.classList.toggle("study-card--tools-none", !settingsShown && shownTools.size === 0);
   }
 
   // The Explorer panel, and Stockfish's arrow widths, which follow the
@@ -1075,7 +1062,12 @@ function renderEditor(
   }
 
   function toggleTool(tool: Tool): void {
-    if (shownTools.has(tool)) shownTools.delete(tool);
+    // From the settings, a tool's tab goes back to the tools, with it on.
+    if (settingsShown) {
+      settingsShown = false;
+      if (shownTools.has(tool)) return applyToolsUI();
+      shownTools.add(tool);
+    } else if (shownTools.has(tool)) shownTools.delete(tool);
     else shownTools.add(tool);
     saveTools(shownTools);
     applyToolsUI();
@@ -1124,16 +1116,21 @@ function renderEditor(
   tabButtons.explorer.addEventListener("click", () => toggleTool("explorer"));
   tabButtons.engine.addEventListener("click", () => toggleTool("engine"));
 
-  function updateExplorerSummary(): void {
-    explorerSummaryEl.textContent = explorerSummary(settings);
-  }
-  updateExplorerSummary();
-
-  explorerSettingsBtn.addEventListener("click", () => {
-    explorerSettingsEl.hidden = !explorerSettingsEl.hidden;
-    explorerSettingsBtn.setAttribute("aria-expanded", String(!explorerSettingsEl.hidden));
-    explorerSettingsBtn.textContent = explorerSettingsEl.hidden ? "Change" : "Done";
+  // The gear swaps the card's tools for the Explorer settings, and back.
+  settingsTab.addEventListener("click", () => {
+    settingsShown = !settingsShown;
+    applyToolsUI();
   });
+
+  bindExplorerSettingsForm(
+    document.getElementById("explorer-settings-form") as HTMLElement,
+    settings,
+    Boolean(explorerDefaults?.lirepAvailable),
+    () => {
+      refreshExplorerViews();
+      scheduleAutoSave();
+    },
+  );
 
   board = createBoard(boardEl, onMove, boardOrientation);
   board.set({ drawable: { brushes: { ...board.state.drawable.brushes, ...QUALITY_BRUSHES } } });
@@ -1438,82 +1435,6 @@ function renderEditor(
         toggleKeyboardHelp();
         break;
     }
-  });
-
-  function updateExplorerControls(): void {
-    const playerSelected = settings.database === "player";
-    explorerSourceEl.querySelector<HTMLOptionElement>('option[value="lirep"]')!.disabled =
-      playerSelected || !explorerDefaults?.lirepAvailable;
-    explorerDatabaseEl.disabled = settings.source === "lirep" && !playerSelected;
-    explorerDatabaseEl.querySelector<HTMLOptionElement>('option[value="masters"]')!.disabled = settings.source === "lirep";
-    explorerMinRatingEl.disabled = settings.database !== "lichess";
-    explorerPlayerEl.hidden = !playerSelected;
-    explorerSpeedsEl.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
-      cb.disabled = settings.database === "masters";
-    });
-    updateExplorerSummary();
-  }
-
-  explorerSourceEl.addEventListener("change", () => {
-    settings.source = explorerSourceEl.value as ExplorerSettings["source"];
-    if (settings.source === "lirep" && settings.database === "masters") {
-      settings.database = "lichess";
-      explorerDatabaseEl.value = "lichess";
-    }
-    updateExplorerControls();
-    refreshExplorerViews();
-    scheduleAutoSave();
-  });
-
-  explorerDatabaseEl.addEventListener("change", () => {
-    settings.database = explorerDatabaseEl.value as ExplorerSettings["database"];
-    if (settings.database === "player") {
-      // One player's games exist only on Lichess; default to the signed-in user.
-      settings.source = "lichess";
-      explorerSourceEl.value = "lichess";
-      if (!settings.player) {
-        void fetchMe().then((me) => {
-          if (me.username && !settings.player && settings.database === "player") {
-            settings.player = me.username;
-            explorerPlayerEl.value = me.username;
-            updateExplorerSummary();
-            refreshExplorerViews();
-            scheduleAutoSave();
-          }
-        });
-      }
-    }
-    updateExplorerControls();
-    refreshExplorerViews();
-    scheduleAutoSave();
-  });
-
-  explorerPlayerEl.addEventListener("change", () => {
-    settings.player = explorerPlayerEl.value.trim() || null;
-    updateExplorerSummary();
-    refreshExplorerViews();
-    scheduleAutoSave();
-  });
-
-  explorerMinRatingEl.addEventListener("change", () => {
-    settings.minRating = Number(explorerMinRatingEl.value);
-    updateExplorerSummary();
-    refreshExplorerViews();
-    scheduleAutoSave();
-  });
-
-  explorerSpeedsEl.addEventListener("change", (e) => {
-    const target = e.target as HTMLInputElement;
-    if (target.type !== "checkbox") return;
-    const speed = target.value as ExplorerSpeed;
-    if (!target.checked && settings.speeds.length === 1 && settings.speeds[0] === speed) {
-      target.checked = true; // always keep at least one speed selected
-      return;
-    }
-    settings.speeds = target.checked ? [...settings.speeds, speed] : settings.speeds.filter((s) => s !== speed);
-    updateExplorerSummary();
-    refreshExplorerViews();
-    scheduleAutoSave();
   });
 
 }
