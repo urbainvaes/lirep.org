@@ -30,7 +30,7 @@ import {
 import { errorMessage, fetchExplorerData } from "./explorerClient";
 import { escapeHtml } from "./layout";
 import { materialBalance, materialHtml } from "./material";
-import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
+import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, siblingVariation, type StudyTree } from "./tree";
 
 // A read-only view of a move tree: a shared opening (opening.ts) or one of
 // a study's games (games.ts). It is laid out like the study editor, with the
@@ -89,7 +89,8 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
                 <p class="study-keyboard-help__intro">${escapeHtml(view.intro)}</p>
                 <ul>
                   <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
-                  <li><kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
+                  <li><kbd>↑</kbd> / <kbd>↓</kbd> Previous / next variation</li>
+                  <li><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
                   <li><kbd>F</kbd> Flip the board</li>
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
@@ -350,6 +351,12 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     goTo(startNodeId ?? tree.rootId);
   }
 
+  // The previous (-1) or next (1) variation; nothing at either end.
+  function switchVariation(step: -1 | 1): void {
+    const target = siblingVariation(tree, currentId, step);
+    if (target !== undefined) goTo(target);
+  }
+
   function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     board.set({ orientation: boardOrientation });
@@ -479,11 +486,13 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
         break;
       case "ArrowUp":
         e.preventDefault();
-        goToStart();
+        if (e.shiftKey) goToStart();
+        else switchVariation(-1);
         break;
       case "ArrowDown":
         e.preventDefault();
-        goToLineEnd();
+        if (e.shiftKey) goToLineEnd();
+        else switchVariation(1);
         break;
       case "f":
       case "F":

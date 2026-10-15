@@ -194,10 +194,10 @@ export function boardColumnHtml(): string {
         </div>
       </div>
       <div class="board-nav" role="group" aria-label="Move navigation">
-        <button id="nav-start" class="board-nav__btn" type="button" title="Go to start (↑)" aria-label="Go to start"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+        <button id="nav-start" class="board-nav__btn" type="button" title="Go to start (Shift+↑)" aria-label="Go to start"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
         <button id="nav-back" class="board-nav__btn" type="button" title="Previous move (←)" aria-label="Previous move"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M17 5v14L6 12z"/></svg></button>
         <button id="nav-forward" class="board-nav__btn" type="button" title="Next move (→)" aria-label="Next move"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M7 5v14l11-7z"/></svg></button>
-        <button id="nav-end" class="board-nav__btn" type="button" title="End of line (↓)" aria-label="End of line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+        <button id="nav-end" class="board-nav__btn" type="button" title="End of line (Shift+↓)" aria-label="End of line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
         <button id="flip-board-btn" class="board-nav__btn board-flip-btn" type="button" data-icon="&#xe07b;" title="Flip board" aria-label="Flip board"></button>
       </div>
     </div>

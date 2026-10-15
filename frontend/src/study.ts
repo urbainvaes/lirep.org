@@ -39,7 +39,7 @@ import { cachedExplorerData, errorMessage, fetchExplorerData, hasExplorerData } 
 import { materialBalance, materialHtml } from "./material";
 import { downloadStudyFile } from "./studyFile";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, type StudyTree } from "./tree";
+import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, siblingVariation, type StudyTree } from "./tree";
 
 const FOLD_STORAGE_KEY = "study-fold-branches";
 
@@ -218,7 +218,8 @@ function renderEditor(
                 <p class="study-keyboard-help__intro">Click a move to jump there. Play a different move from any point to start a variation.</p>
                 <ul>
                   <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
-                  <li><kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
+                  <li><kbd>↑</kbd> / <kbd>↓</kbd> Previous / next variation</li>
+                  <li><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
                   <li><kbd>Delete</kbd> Delete selected move and its branches</li>
                   <li><kbd>F</kbd> Flip the board</li>
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
@@ -1382,10 +1383,17 @@ function renderEditor(
     }
   }, true);
 
+  // The previous (-1) or next (1) variation; nothing at either end.
+  function switchVariation(step: -1 | 1): void {
+    const target = siblingVariation(tree, currentId, step);
+    if (target !== undefined) goTo(target);
+  }
+
   // Lichess-style keyboard navigation: Left/Right step through the line
-  // you're currently viewing, Up jumps to the start, Down to its end,
-  // Delete/Backspace removes the selected move (same as lichess's own study
-  // editor), f flips the board.
+  // you're currently viewing, Up/Down go to the previous/next variation,
+  // Shift+Up jumps to the start, Shift+Down to the end, Delete/Backspace removes
+  // the selected move (same as lichess's own study editor), f flips the
+  // board.
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "Escape" && !keyboardHelpPanel.hidden) {
@@ -1407,11 +1415,13 @@ function renderEditor(
         break;
       case "ArrowUp":
         e.preventDefault();
-        goToStart();
+        if (e.shiftKey) goToStart();
+        else switchVariation(-1);
         break;
       case "ArrowDown":
         e.preventDefault();
-        goToLineEnd();
+        if (e.shiftKey) goToLineEnd();
+        else switchVariation(1);
         break;
       case "Delete":
       case "Backspace":
