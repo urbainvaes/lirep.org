@@ -875,8 +875,10 @@ function renderEditor(
       moveStats,
       startStat,
       calculate: { buttons: calcButtons, busy: calcBusy },
+      startFlag: true,
       folding: foldBranches ? { open, others: otherReplies } : undefined,
     });
+    treeViewEl.querySelector<HTMLButtonElement>("[data-clear-start]")?.addEventListener("click", () => setStartPoint(null));
     treeViewEl.querySelectorAll<HTMLButtonElement>("[data-calculate]").forEach((button) => {
       button.addEventListener("click", (event) => {
         // In a fold's head: calculate rather than toggle the fold.
@@ -1134,11 +1136,15 @@ function renderEditor(
 
   deleteBtn.addEventListener("click", deleteCurrentMove);
 
-  document.getElementById("start-point-btn")?.addEventListener("click", () => {
-    startNodeId = currentId === startNodeId ? null : currentId;
+  function setStartPoint(nodeId: number | null): void {
+    startNodeId = nodeId;
     renderTreeView();
     updateStartPointUI();
     scheduleAutoSave(0);
+  }
+
+  document.getElementById("start-point-btn")?.addEventListener("click", () => {
+    setStartPoint(currentId === startNodeId ? null : currentId);
   });
 
   deleteStudyBtn.addEventListener("click", () => void deleteStudy());

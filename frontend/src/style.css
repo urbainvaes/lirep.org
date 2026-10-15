@@ -2165,6 +2165,22 @@ button.study-head__link:disabled:hover {
   font-size: 0.8rem;
 }
 
+/* After the starting point's move: clicking the flag clears it. */
+.tree-start-flag {
+  margin-left: 4px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tree-start-flag:hover {
+  background: var(--border);
+}
+
 /* An on/off switch, for the move list's folding. */
 .study-switch {
   display: inline-flex;

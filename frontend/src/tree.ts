@@ -123,6 +123,8 @@ export interface TreeMarks {
   /** Moves (or the starting point) whose figures lack Explorer data: a
    * Calculate button, or what a running calculation says. */
   calculate?: { buttons: ReadonlySet<number>; busy: ReadonlyMap<number, string> };
+  /** A flag after the starting point's move, which clears it when clicked. */
+  startFlag?: boolean;
   /** Fold the moves at each branching, each with what follows it. */
   folding?: {
     /** The folds shown open, by the id of the move they start with. */
@@ -176,7 +178,10 @@ function renderMove(
     : "";
   // The figures follow the move, outside it: not part of what is clicked or
   // highlighted.
-  const startMarker = nodeId === studyStartNodeId ? startStatHtml(nodeId, marks) : calculateHtml(nodeId, marks);
+  const flag = nodeId === studyStartNodeId && marks.startFlag
+    ? '<button type="button" class="tree-start-flag" data-clear-start title="The starting point: stats are calculated from here. Click to clear it." aria-label="Clear the starting point">🏁</button>'
+    : "";
+  const startMarker = nodeId === studyStartNodeId ? flag + startStatHtml(nodeId, marks) : calculateHtml(nodeId, marks);
   return `<span class="${classes.join(" ")}" data-node-id="${nodeId}"${title}>${escapeHtml(tree.nodes[nodeId].san as string)}${unfetchedMarker}<span class="tree-move-comment-marker"${hasComment ? ' title="Has a comment"' : ""} ${hasComment ? "" : "hidden"} aria-hidden="true"></span></span>${statMarker}${startMarker}`;
 }
 
