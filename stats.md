@@ -37,7 +37,7 @@ study's effective starting node:
 2. On the studied side's turn, follow its sole prepared move. If none of the
    opponent's replies after it is answered, the line ends with that move: use
    its own Explorer W/D/L, as listed in the position before it (if it isn't
-   listed, the weighted results of the replies to it). Only the starting
+   listed, a neutral 0.5: no games to go by). Only the starting
    position with nothing prepared uses the position's overall results; with no
    games, a neutral 0.5 expected score.
 3. On the opponent's turn, weight each Explorer-listed reply by its games

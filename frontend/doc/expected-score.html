@@ -200,8 +200,8 @@
           If the Explorer has no games at all in a position where your opponent is to move, the walk can't go on:
           Explorer values count the position as 50%, the two others take its Stockfish value. If the study's
           starting point has nothing prepared, Explorer values take the Explorer's totals for that position. If
-          your last move is too rare to be listed, Explorer values average the results of your opponent's replies
-          to it.
+          your last move is too rare to be listed, Explorer values have no games to go by and count it as 50%
+          too; the third value takes Stockfish's instead.
         </p>
       </section>
 

@@ -164,8 +164,9 @@ export async function calculateExpectedScore(
       if (leafValue === "stockfish") return stockfishValue(next);
       const { moves } = await explorerData(chess.fen());
       const own = await explorerValue(moves.find((m) => m.san === san), () => stockfishValue(next));
-      // Too rare to be listed: what the opponent's replies to it gave.
-      return own ?? value(childId, next);
+      // Too rare to be listed: no games to go by, so even, like a position
+      // without games (with the Stockfish fallback, Stockfish's value).
+      return own ?? NEUTRAL;
     }
     // The opponent's move: each reply weighted by how often it is played; a
     // reply the tree doesn't answer ends prep there, with that move's results.
