@@ -42,6 +42,7 @@ import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, siblingVariation, type StudyTree } from "./tree";
 
 const FOLD_STORAGE_KEY = "study-fold-branches";
+const AUTO_FOLD_STORAGE_KEY = "study-auto-fold";
 
 interface StudyStats {
   winProbability: number;
@@ -210,6 +211,7 @@ function renderEditor(
                 <button id="start-point-btn" class="btn btn-secondary btn-small" type="button">Set as starting point</button>
                 <button id="comment-btn" class="btn btn-secondary study-icon-btn" type="button" aria-expanded="false" aria-controls="comment-editor" aria-label="Comment on this position" title="Comment on this position"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
                 <button id="fold-btn" class="study-switch" type="button" role="switch" aria-checked="true" title="Put the moves at each branching in folds"><span class="study-switch__track" aria-hidden="true"></span>Fold branches</button>
+                <button id="autofold-btn" class="study-switch" type="button" role="switch" aria-checked="false" title="Close a variation's fold when you move out of it"><span class="study-switch__track" aria-hidden="true"></span>Auto-fold</button>
                 <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
                 <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
               </div>
@@ -276,12 +278,40 @@ function renderEditor(
   foldBtn.addEventListener("click", () => {
     foldBranches = !foldBranches;
     foldBtn.setAttribute("aria-checked", String(foldBranches));
+    autoFoldBtn.disabled = !foldBranches;
     try {
       localStorage.setItem(FOLD_STORAGE_KEY, foldBranches ? "on" : "off");
     } catch {
       // Keep the choice for this page even when browser storage is blocked.
     }
     renderTreeView();
+  });
+
+  // With folding on: moving to another move closes the folds not on the
+  // way to it, so a variation folds up once you leave it. Off unless
+  // switched on in this browser.
+  let autoFold = (() => {
+    try {
+      return localStorage.getItem(AUTO_FOLD_STORAGE_KEY) === "on";
+    } catch {
+      return false;
+    }
+  })();
+  const autoFoldBtn = document.getElementById("autofold-btn") as HTMLButtonElement;
+  autoFoldBtn.setAttribute("aria-checked", String(autoFold));
+  autoFoldBtn.disabled = !foldBranches;
+  autoFoldBtn.addEventListener("click", () => {
+    autoFold = !autoFold;
+    autoFoldBtn.setAttribute("aria-checked", String(autoFold));
+    try {
+      localStorage.setItem(AUTO_FOLD_STORAGE_KEY, autoFold ? "on" : "off");
+    } catch {
+      // Keep the choice for this page even when browser storage is blocked.
+    }
+    if (autoFold) {
+      openFolds.clear();
+      renderTreeView();
+    }
   });
   const commentInputEl = document.getElementById("study-comment") as HTMLTextAreaElement;
   const keyboardHelpButton = document.getElementById("keyboard-help-btn") as HTMLButtonElement;
@@ -976,6 +1006,7 @@ function renderEditor(
     }
 
     if (nodeId !== currentId) commentRequested = false;
+    const previousId = currentId;
     currentId = nodeId;
     const chess = positionAt(tree, currentId);
     updateCommentEditor();
@@ -998,6 +1029,8 @@ function renderEditor(
     });
     renderMaterial();
 
+    // Auto-fold: only the folds on the way to the new move stay open.
+    if (autoFold && nodeId !== previousId) openFolds.clear();
     renderTreeView();
     deleteBtn.disabled = currentId === tree.rootId;
     navBackBtn.disabled = navStartBtn.disabled = currentId === tree.rootId;

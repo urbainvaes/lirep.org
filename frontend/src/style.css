@@ -2213,6 +2213,11 @@ button.study-head__link:disabled:hover {
   color: var(--text);
 }
 
+.study-switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .study-switch__track {
   position: relative;
   width: 26px;
