@@ -2101,9 +2101,17 @@ button.study-head__link:disabled:hover {
     max-width: none;
   }
 
+  /* The board's column: the board, the card's border, its left padding
+     (where the evaluation gauge sits) and a narrower right padding; with
+     a narrower gap, the moves and tools get the space saved. */
   .site-main--board .study-editor--edit .study-grid {
-    grid-template-columns: calc(var(--board-size) + 34px) minmax(0, 1fr);
+    grid-template-columns: calc(var(--board-size) + 24px) minmax(0, 1fr);
+    gap: 12px;
     margin-bottom: 0;
+  }
+
+  .site-main--board .study-editor--edit .study-card--board {
+    padding-right: 6px;
   }
 }
 
