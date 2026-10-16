@@ -1085,6 +1085,42 @@ body {
   --piece-c2: #67bfd8;
 }
 
+/* Diamond shines: a white glint sweeps across it every few seconds, its
+   glow brightening as it passes. Still for those who ask for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .piece-badge.piece-badge--diamond {
+    background-image: linear-gradient(
+      115deg,
+      var(--piece-c2) 0%,
+      var(--piece-c1) 38%,
+      #ffffff 46%,
+      var(--piece-c1) 54%,
+      var(--piece-c2) 100%
+    );
+    background-size: 300% auto;
+    animation: diamond-glint 3.2s ease-in-out infinite;
+  }
+
+  .piece-badge-btn:hover .piece-badge--diamond {
+    animation-duration: 1.4s;
+  }
+}
+
+@keyframes diamond-glint {
+  0%,
+  55% {
+    background-position: 100% center;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  }
+  75% {
+    filter: drop-shadow(0 0 4px rgba(170, 235, 255, 0.9)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  }
+  100% {
+    background-position: 0% center;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  }
+}
+
 .piece-badge--gold {
   --piece-c1: #fff3b0;
   --piece-c2: #c9950c;
