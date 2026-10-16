@@ -228,7 +228,7 @@ function renderEditor(
                   <li><kbd>Delete</kbd> Delete selected move and its branches</li>
                   <li><kbd>C</kbd> Comment on this position</li>
                   <li><kbd>F</kbd> Flip the board</li>
-                  <li><kbd>Z</kbd> Focus mode (<kbd>Esc</kbd> to leave)</li>
+                  <li><kbd>Space</kbd> or <kbd>Z</kbd> Focus mode (<kbd>Esc</kbd> to leave)</li>
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
               </div>
@@ -285,7 +285,7 @@ function renderEditor(
     focusBtn.setAttribute("aria-pressed", String(on));
     const label = on ? "Leave focus mode" : "Focus mode";
     focusBtn.setAttribute("aria-label", label);
-    focusBtn.title = `${label} (${on ? "Z or Esc" : "Z"})`;
+    focusBtn.title = `${label} (${on ? "Space, Z or Esc" : "Space or Z"})`;
     try {
       localStorage.setItem(FOCUS_STORAGE_KEY, on ? "on" : "off");
     } catch {
@@ -1525,6 +1525,13 @@ function renderEditor(
       case "F":
         e.preventDefault();
         flipBoard();
+        break;
+      case " ":
+        // Space keeps pressing a button, link or fold reached with the
+        // keyboard (Tab); one just clicked doesn't keep it.
+        if (target.closest("button, a, summary") && target.matches(":focus-visible")) break;
+        e.preventDefault(); // nor does it scroll the page
+        setFocusMode(!focusMode);
         break;
       case "z":
       case "Z":
