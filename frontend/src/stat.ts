@@ -266,25 +266,33 @@ function sameExplorerSettings(a: CalculationSettings, b: CalculationSettings): b
   return (a.source ?? "lichess") === (b.source ?? "lichess") && a.minRating === b.minRating && sameSpeeds;
 }
 
-// Gamification tiers for the expected score. 50% is breakeven for any
-// opening, so these mark increasingly meaningful practical edges above it.
-// Shown as a colored chess piece (see .piece-badge) rather than a medal.
-type ScoreTier = "gold" | "silver" | "bronze" | "none";
+// Gamification tiers for the expected score, by side: White scores about
+// 52% on average in the Explorer's pools, Black about 48%, so Bronze is the
+// colour's average and Black's thresholds are BLACK_TIER_OFFSET points
+// lower. Shown as a colored chess piece (see .piece-badge), not a medal.
+type ScoreTier = "legendary" | "diamond" | "gold" | "silver" | "bronze" | "none";
+
+const TIERS: { tier: Exclude<ScoreTier, "none">; label: string; white: number }[] = [
+  { tier: "legendary", label: "Legendary", white: 63 },
+  { tier: "diamond", label: "Diamond", white: 60 },
+  { tier: "gold", label: "Gold", white: 57 },
+  { tier: "silver", label: "Silver", white: 54 },
+  { tier: "bronze", label: "Bronze", white: 52 },
+];
+const BLACK_TIER_OFFSET = 4;
 
 const TIER_LABELS: Record<ScoreTier, string> = {
-  gold: "Gold",
-  silver: "Silver",
-  bronze: "Bronze",
-  none: "Below breakeven",
+  ...(Object.fromEntries(TIERS.map((t) => [t.tier, t.label])) as Record<Exclude<ScoreTier, "none">, string>),
+  none: "No tier",
 };
 
-function scoreTier(expectedScore: number | undefined): ScoreTier {
+// The lowest expected score, in percent, for a tier on `side`.
+const tierThreshold = (white: number, side: "white" | "black") => white - (side === "black" ? BLACK_TIER_OFFSET : 0);
+
+function scoreTier(expectedScore: number | undefined, side: "white" | "black"): ScoreTier {
   if (expectedScore === undefined) return "none";
   const pct = expectedScore * 100;
-  if (pct >= 60) return "gold";
-  if (pct >= 55) return "silver";
-  if (pct >= 50) return "bronze";
-  return "none";
+  return TIERS.find((t) => pct >= tierThreshold(t.white, side))?.tier ?? "none";
 }
 
 function pieceBadgeHtml(tier: ScoreTier, size: "" | "sm" = ""): string {
@@ -580,7 +588,7 @@ function renderPage(
     defaultMinRating: explorerDefaults?.defaultMinRating ?? 1400,
     speeds: explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]),
   };
-  const tier = scoreTier(stats?.winProbability);
+  const tier = scoreTier(stats?.winProbability, study.side);
   const startPoint = describeStartPoint(study.tree, study.startNodeId);
   const disabled = hasMoves ? "" : "disabled";
 
@@ -646,11 +654,12 @@ function renderPage(
         <a href="/games.html?id=${study.id}">Games</a>
       </p>
       <div class="piece-legend" id="piece-legend" hidden>
-        <p class="piece-legend__title">Score tiers, by expected score</p>
-        <div class="piece-legend__row">${pieceBadgeHtml("gold", "sm")}<span>Gold — 60% or higher</span></div>
-        <div class="piece-legend__row">${pieceBadgeHtml("silver", "sm")}<span>Silver — 55% or higher</span></div>
-        <div class="piece-legend__row">${pieceBadgeHtml("bronze", "sm")}<span>Bronze — 50% or higher</span></div>
-        <div class="piece-legend__row">${pieceBadgeHtml("none", "sm")}<span>Below 50% — behind on average</span></div>
+        <p class="piece-legend__title">Score tiers for ${sideName}, by expected score</p>
+        ${TIERS.map(
+          (t) => `<div class="piece-legend__row">${pieceBadgeHtml(t.tier, "sm")}<span>${t.label} — ${tierThreshold(t.white, study.side)}% or higher</span></div>`,
+        ).join("")}
+        <div class="piece-legend__row">${pieceBadgeHtml("none", "sm")}<span>No tier — under ${tierThreshold(TIERS[TIERS.length - 1].white, study.side)}%, below ${sideName}'s average</span></div>
+        <p class="piece-legend__note">Bronze is about ${sideName}'s average score in the Explorer; ${study.side === "white" ? "Black's" : "White's"} thresholds are ${BLACK_TIER_OFFSET} points ${study.side === "white" ? "lower" : "higher"}.</p>
       </div>
 
       <section class="calc-settings">

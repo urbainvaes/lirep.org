@@ -1075,6 +1075,16 @@ body {
   font-size: 1.15rem;
 }
 
+.piece-badge--legendary {
+  --piece-c1: #d6a8ff;
+  --piece-c2: #3fc7dd;
+}
+
+.piece-badge--diamond {
+  --piece-c1: #f2fdff;
+  --piece-c2: #67bfd8;
+}
+
 .piece-badge--gold {
   --piece-c1: #fff3b0;
   --piece-c2: #c9950c;
@@ -1112,6 +1122,12 @@ body {
   color: var(--text-strong);
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.piece-legend__note {
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
 }
 
 .piece-legend__row {
