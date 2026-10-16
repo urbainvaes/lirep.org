@@ -223,6 +223,7 @@ function renderEditor(
                   <li><kbd>↑</kbd> / <kbd>↓</kbd> Previous / next variation</li>
                   <li><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
                   <li><kbd>Delete</kbd> Delete selected move and its branches</li>
+                  <li><kbd>C</kbd> Comment on this position</li>
                   <li><kbd>F</kbd> Flip the board</li>
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
@@ -1422,8 +1423,8 @@ function renderEditor(
   // Lichess-style keyboard navigation: Left/Right step through the line
   // you're currently viewing, Up/Down go to the previous/next variation,
   // Shift+Up jumps to the start, Shift+Down to the end, Delete/Backspace removes
-  // the selected move (same as lichess's own study editor), f flips the
-  // board.
+  // the selected move (same as lichess's own study editor), c opens the
+  // comment box, f flips the board.
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "Escape" && !keyboardHelpPanel.hidden) {
@@ -1457,6 +1458,14 @@ function renderEditor(
       case "Backspace":
         e.preventDefault();
         deleteCurrentMove();
+        break;
+      case "c":
+      case "C":
+        // Opens the comment box (or goes back to it) without typing the c.
+        e.preventDefault();
+        commentRequested = true;
+        updateCommentEditor();
+        commentInputEl.focus();
         break;
       case "f":
       case "F":
