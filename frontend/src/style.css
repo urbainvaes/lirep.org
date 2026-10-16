@@ -2125,7 +2125,76 @@ button.study-head__link:disabled:hover {
 
 /* The editor is a work surface: less space above it than on other pages. */
 .site-main--board {
-  padding-top: 20px;
+  padding-top: 8px;
+}
+
+/* The study's line in the editor: a compact bar of its own, centred a
+   little under the site's header, in a smaller font. */
+.study-editor--edit .study-head {
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 10px;
+  padding: 3px 6px 3px 14px;
+  gap: 4px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.study-editor--edit .study-head__title {
+  flex: 0 1 auto;
+  gap: 7px;
+}
+
+.study-editor--edit .study-head__side {
+  font-size: 1.1rem;
+}
+
+.study-editor--edit .study-title {
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.study-editor--edit .study-head__title .study-name-input {
+  padding: 2px 8px;
+  font-size: 0.95rem;
+}
+
+.study-editor--edit .study-head__title .study-color-select {
+  height: 26px;
+}
+
+.study-editor--edit .study-head__title .study-start-badge {
+  height: 22px;
+}
+
+.study-editor--edit .study-head__links {
+  gap: 6px;
+}
+
+.study-editor--edit .study-head__link {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.study-editor--edit .study-head__link svg {
+  width: 14px;
+  height: 14px;
+}
+
+.study-editor--edit .study-menu > summary.btn {
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+/* On a narrow screen it wraps: a rounded box rather than a pill. */
+@media (max-width: 980px) {
+  .study-editor--edit .study-head {
+    width: auto;
+    border-radius: 12px;
+  }
 }
 
 /* Focus mode: only the editor, without the site's header or the study's

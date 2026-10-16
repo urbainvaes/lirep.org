@@ -264,6 +264,7 @@ function renderEditor(
     </div>
   `;
 
+  const studyHeadEl = main.querySelector(".study-head") as HTMLElement;
   const boardEl = document.getElementById("board") as HTMLElement;
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
   const liveScoreEl = document.getElementById("live-score") as HTMLElement;
@@ -342,7 +343,7 @@ function renderEditor(
   }
   // The header and the study's line can change height (wrapping, renaming).
   const editorTopObserver = new ResizeObserver(measureEditorTop);
-  for (const el of [document.querySelector(".site-header"), main.querySelector(".study-head")]) {
+  for (const el of [document.querySelector(".site-header"), studyHeadEl]) {
     if (el) editorTopObserver.observe(el);
   }
   window.addEventListener("resize", measureEditorTop);
