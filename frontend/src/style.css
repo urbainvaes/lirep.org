@@ -2110,13 +2110,14 @@ button.study-head__link:disabled:hover {
   }
 }
 
-/* Scrolled all the way down, the board column (card and navigation) fills
-   the window with a 12px margin above and below, and the header scrolls out
-   of view: scrolling down works as a full-screen mode. The board is
-   --board-size square: the window height minus that margin (24px), the
-   card's padding and border (34px), the two material rows (2 × 26px) and
-   the navigation row (46px), and narrower if the window is too narrow to
-   leave about 610px for the moves and tools. The page widens to fit. */
+/* The board column (card and navigation) fills the window below whatever is
+   above the editor, with a 12px margin below: the editor fits without
+   scrolling. The board is --board-size square: the window height minus
+   --editor-top (the editor's distance from the top of the page, measured
+   by study.ts; 12px by default, as in focus mode), the margin below (12px),
+   the card's padding and border (34px), the two material rows (2 × 26px)
+   and the navigation row (46px), and narrower if the window is too narrow
+   to leave about 610px for the moves and tools. The page widens to fit. */
 .study-editor--edit {
   --material-row: 22px;
   --material-gap: 4px;
@@ -2127,9 +2128,52 @@ button.study-head__link:disabled:hover {
   padding-top: 20px;
 }
 
+/* Focus mode: only the editor, without the site's header or the study's
+   line; the save status moves to the end of the move list's toolbar. */
+.editor-focus .site-header,
+.editor-focus .study-head {
+  display: none;
+}
+
+.editor-focus .site-main--board {
+  padding-top: 12px;
+}
+
+.focus-save-status {
+  display: none;
+}
+
+.editor-focus .focus-save-status {
+  display: inline;
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.editor-focus .focus-save-status.study-save-status--error {
+  color: var(--bad);
+}
+
+/* Its button, under the board: corners pointing out to enter, in to leave. */
+.board-nav .board-focus-btn {
+  flex: 0 0 44px;
+  width: auto;
+  height: 36px;
+}
+
+.board-focus-btn .focus-leave,
+.board-focus-btn[aria-pressed="true"] .focus-enter {
+  display: none;
+}
+
+.board-focus-btn[aria-pressed="true"] .focus-leave {
+  display: inline;
+}
+
 @media (min-width: 981px) {
   .site-main--board {
-    --board-size: max(360px, min(calc(100vh - 156px), calc(100vw - 700px)));
+    --board-size: max(360px, min(calc(100vh - var(--editor-top, 12px) - 144px), calc(100vw - 700px)));
     max-width: calc(var(--board-size) + 700px);
     padding-bottom: 12px;
   }

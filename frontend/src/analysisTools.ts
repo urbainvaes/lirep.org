@@ -181,8 +181,9 @@ export function engineMovesView(
 }
 
 /** The board with the material above and below it, the evaluation gauge and
- * the navigation buttons beneath. */
-export function boardColumnHtml(): string {
+ * the navigation buttons beneath; `focus` adds the focus mode's button
+ * (see the editor). */
+export function boardColumnHtml(options: { focus?: boolean } = {}): string {
   return `
     <div class="study-board-col">
       <div class="study-card study-card--board">
@@ -199,6 +200,7 @@ export function boardColumnHtml(): string {
         <button id="nav-forward" class="board-nav__btn" type="button" title="Next move (→)" aria-label="Next move"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M7 5v14l11-7z"/></svg></button>
         <button id="nav-end" class="board-nav__btn" type="button" title="End of line (Shift+↓)" aria-label="End of line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
         <button id="flip-board-btn" class="board-nav__btn board-flip-btn" type="button" data-icon="&#xe07b;" title="Flip board" aria-label="Flip board"></button>
+        ${options.focus ? `<button id="focus-btn" class="board-nav__btn board-focus-btn" type="button" aria-pressed="false" title="Focus mode (Z)" aria-label="Focus mode"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="focus-enter" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="focus-leave" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>` : ""}
       </div>
     </div>
   `;

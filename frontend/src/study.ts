@@ -44,6 +44,7 @@ import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl
 
 const FOLD_STORAGE_KEY = "study-fold-branches";
 const AUTO_FOLD_STORAGE_KEY = "study-auto-fold";
+const FOCUS_STORAGE_KEY = "study-focus-mode";
 
 interface StudyStats {
   winProbability: number;
@@ -202,7 +203,7 @@ function renderEditor(
       </header>
 
       <div class="study-grid">
-        ${boardColumnHtml()}
+        ${boardColumnHtml({ focus: true })}
 
         <div class="study-side-col">
           <div class="study-side-col__inner">
@@ -214,6 +215,7 @@ function renderEditor(
                 <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
                 <button id="start-point-btn" class="btn btn-secondary study-icon-btn study-start-btn" type="button" aria-label="Set as starting point" title="Set as starting point"><span aria-hidden="true">🏁</span><span class="study-start-btn__cross" aria-hidden="true">✕</span></button>
                 <button id="delete-btn" class="btn btn-secondary study-icon-btn" type="button" data-icon="&#xe04f;" aria-label="Delete this move" title="Delete this move and everything after it (Delete)"></button>
+                <span id="focus-save-status" class="focus-save-status" role="status" aria-live="polite"></span>
                 <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
               </div>
               <div id="keyboard-help" class="study-keyboard-help" role="region" aria-label="Keyboard shortcuts" tabindex="-1" hidden>
@@ -226,6 +228,7 @@ function renderEditor(
                   <li><kbd>Delete</kbd> Delete selected move and its branches</li>
                   <li><kbd>C</kbd> Comment on this position</li>
                   <li><kbd>F</kbd> Flip the board</li>
+                  <li><kbd>Z</kbd> Focus mode (<kbd>Esc</kbd> to leave)</li>
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
               </div>
@@ -264,6 +267,47 @@ function renderEditor(
   const boardEl = document.getElementById("board") as HTMLElement;
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
   const liveScoreEl = document.getElementById("live-score") as HTMLElement;
+  const focusSaveStatusEl = document.getElementById("focus-save-status") as HTMLElement;
+
+  // Focus mode: the site's header and the study's line hide, and the editor
+  // fills the window. Either way, the board is sized to what the window has
+  // left below whatever is above the editor (--editor-top, measured here),
+  // so the editor fits without scrolling. Remembered in this browser.
+  const gridEl = main.querySelector(".study-grid") as HTMLElement;
+  const focusBtn = document.getElementById("focus-btn") as HTMLButtonElement;
+  function measureEditorTop(): void {
+    main.style.setProperty("--editor-top", `${Math.round(gridEl.getBoundingClientRect().top + window.scrollY)}px`);
+  }
+  let focusMode = false;
+  function setFocusMode(on: boolean): void {
+    focusMode = on;
+    document.documentElement.classList.toggle("editor-focus", on);
+    focusBtn.setAttribute("aria-pressed", String(on));
+    const label = on ? "Leave focus mode" : "Focus mode";
+    focusBtn.setAttribute("aria-label", label);
+    focusBtn.title = `${label} (${on ? "Z or Esc" : "Z"})`;
+    try {
+      localStorage.setItem(FOCUS_STORAGE_KEY, on ? "on" : "off");
+    } catch {
+      // Keep the choice for this page even when browser storage is blocked.
+    }
+    if (on) window.scrollTo(0, 0);
+    measureEditorTop();
+  }
+  focusBtn.addEventListener("click", () => setFocusMode(!focusMode));
+  setFocusMode((() => {
+    try {
+      return localStorage.getItem(FOCUS_STORAGE_KEY) === "on";
+    } catch {
+      return false;
+    }
+  })());
+  // The header and the study's line can change height (wrapping, renaming).
+  const editorTopObserver = new ResizeObserver(measureEditorTop);
+  for (const el of [document.querySelector(".site-header"), main.querySelector(".study-head")]) {
+    if (el) editorTopObserver.observe(el);
+  }
+  window.addEventListener("resize", measureEditorTop);
 
   // Experimental: the moves at each branching in folds (see renderFolds in
   // tree.ts), on unless switched off in this browser.
@@ -330,6 +374,7 @@ function renderEditor(
   const renameBtn = document.getElementById("rename-btn") as HTMLButtonElement;
   const colorSelect = document.getElementById("study-color") as HTMLSelectElement | null;
   const saveStatusEl = document.getElementById("study-save-status") as HTMLElement;
+  focusSaveStatusEl.textContent = saveStatusEl.textContent?.trim() ?? "";
   const deleteStudyBtn = document.getElementById("delete-study-btn") as HTMLButtonElement;
   const sharedInput = document.getElementById("study-shared") as HTMLInputElement;
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
@@ -405,8 +450,10 @@ function renderEditor(
   }
 
   function setSaveStatus(message: string, failed = false): void {
-    saveStatusEl.textContent = message;
-    saveStatusEl.classList.toggle("study-save-status--error", failed);
+    for (const el of [saveStatusEl, focusSaveStatusEl]) {
+      el.textContent = message;
+      el.classList.toggle("study-save-status--error", failed);
+    }
   }
 
   /** A blocked-navigation attempt (clicking a nav link with no name set yet —
@@ -1478,6 +1525,17 @@ function renderEditor(
       case "F":
         e.preventDefault();
         flipBoard();
+        break;
+      case "z":
+      case "Z":
+        e.preventDefault();
+        setFocusMode(!focusMode);
+        break;
+      case "Escape":
+        if (focusMode) {
+          e.preventDefault();
+          setFocusMode(false);
+        }
         break;
       case "?":
         e.preventDefault();
