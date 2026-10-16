@@ -2309,16 +2309,16 @@ button.tree-calc:hover {
 }
 
 .tree-variations {
-  margin: 2px 0 4px 18px;
-  padding-left: 9px;
+  margin: 2px 0 4px 8px;
+  padding-left: 7px;
   border-left: 1px solid var(--border);
 }
 
 .tree-variation::before {
   position: absolute;
   top: 15px;
-  left: -10px;
-  width: 7px;
+  left: -8px;
+  width: 5px;
   border-top: 1px solid var(--border);
   content: "";
 }
@@ -2326,15 +2326,15 @@ button.tree-calc:hover {
 /* Experimental: the moves at a branching in folds, each with what follows
    it, indented like a variation; the chevron opens and closes a fold. */
 .tree-folds {
-  margin: 2px 0 4px 6px;
-  padding-left: 9px;
+  margin: 2px 0 4px 2px;
+  padding-left: 4px;
   border-left: 1px solid var(--border);
 }
 
 /* The fold is indented, and its chevron hangs in that indent: the head's
    moves line up with the rows below it. */
 .tree-fold {
-  padding-left: 12px;
+  padding-left: 10px;
 }
 
 .tree-fold__head {
@@ -2352,8 +2352,8 @@ summary.tree-fold__head::-webkit-details-marker {
 
 .tree-fold__head::before {
   display: inline-block;
-  width: 12px;
-  margin-left: -12px;
+  width: 10px;
+  margin-left: -10px;
   color: var(--text-dim);
   content: "";
 }
