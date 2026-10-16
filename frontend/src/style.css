@@ -1717,10 +1717,19 @@ button.study-head__link:disabled:hover {
   padding: 12px 14px;
 }
 
+/* The move list's toolbar: a band across the top of its card, a step
+   lighter than the card and set off by a line, so it reads as a menu bar. */
 .study-editor--edit .study-actions {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  margin: -12px -14px 0;
+  padding: 7px 14px;
+  background: var(--card-nested-bg);
+  border-bottom: 1px solid var(--border);
+  border-radius: inherit;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .study-editor--edit .study-actions .study-icon-btn {
