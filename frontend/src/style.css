@@ -2179,6 +2179,29 @@ button.study-head__link:disabled:hover {
   font-size: 0.8rem;
 }
 
+/* The toolbar's starting-point button: the flag, with a cross over it when
+   the current move is the starting point (clicking then clears it). */
+.study-start-btn {
+  position: relative;
+  font-size: 0.95rem;
+}
+
+.study-start-btn__cross {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--bad);
+  font-size: 1.3rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.study-start-btn--clear .study-start-btn__cross {
+  display: flex;
+}
+
 /* After the starting point's move: clicking the flag clears it. */
 .tree-start-flag {
   margin-left: 4px;
