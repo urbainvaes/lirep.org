@@ -207,6 +207,11 @@ export function boardColumnHtml(): string {
 /** Stockfish's panel and the tool tabs; `settings` adds the gear that opens
  * the Explorer settings (see the editor). The tabs' names give way to their
  * icons on phones. */
+/** A tool's toggle's hover text: what clicking it does. */
+export function toolToggleTitle(tool: "explorer" | "engine", on: boolean): string {
+  return `${on ? "Hide" : "Show"} ${tool === "explorer" ? "the Opening Explorer" : "Stockfish"}`;
+}
+
 export function toolTabsHtml(options: { settings?: boolean } = {}): string {
   return `
     <div id="tool-engine" class="tool-panel tool-panel--engine" hidden>
@@ -214,11 +219,11 @@ export function toolTabsHtml(options: { settings?: boolean } = {}): string {
     </div>
 
     <div class="tool-tabs" role="group" aria-label="Analysis tools">
-      <button id="tab-explorer" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-explorer" title="Opening Explorer">
-        <span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span><span class="tool-tab__name">Opening Explorer</span>
+      <button id="tab-explorer" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-explorer" title="${toolToggleTitle("explorer", false)}">
+        <span class="tool-tab__switch" aria-hidden="true"></span><span class="analysis-label" data-icon="&#xe03b;" aria-hidden="true"></span><span class="tool-tab__name">Opening Explorer</span>
       </button>
-      <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine" title="Stockfish">
-        <span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span><span class="tool-tab__name">Stockfish</span>
+      <button id="tab-engine" class="tool-tab" type="button" aria-pressed="false" aria-controls="tool-engine" title="${toolToggleTitle("engine", false)}">
+        <span class="tool-tab__switch" aria-hidden="true"></span><span class="analysis-label" data-icon="&#xe05f;" aria-hidden="true"></span><span class="tool-tab__name">Stockfish</span>
       </button>
       <span id="engine-depth" class="engine-depth tool-tabs__status" hidden>
         <button id="depth-down" class="engine-depth__btn" type="button" aria-label="Search less deep">‹</button>

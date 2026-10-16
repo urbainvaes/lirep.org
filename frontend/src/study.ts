@@ -18,6 +18,7 @@ import {
   saveEngineDepth,
   saveTools,
   toolTabsHtml,
+  toolToggleTitle,
   type Tool,
 } from "./analysisTools";
 import { Engine, whiteGaugeShare, type EngineAnalysis } from "./engine";
@@ -1079,6 +1080,7 @@ function renderEditor(
   function applyToolsUI(): void {
     for (const name of ["explorer", "engine"] as const) {
       tabButtons[name].setAttribute("aria-pressed", String(shownTools.has(name)));
+      tabButtons[name].title = toolToggleTitle(name, shownTools.has(name));
       tabPanels[name].hidden = settingsShown || !shownTools.has(name);
     }
     settingsPanel.hidden = !settingsShown;

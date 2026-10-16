@@ -16,6 +16,7 @@ import {
   saveTools,
   sanToUci,
   toolTabsHtml,
+  toolToggleTitle,
   type Tool,
 } from "./analysisTools";
 import { createBoard, toColor } from "./board";
@@ -367,6 +368,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   function applyToolsUI(): void {
     for (const name of ["explorer", "engine"] as const) {
       tabButtons[name].setAttribute("aria-pressed", String(shownTools.has(name)));
+      tabButtons[name].title = toolToggleTitle(name, shownTools.has(name));
       tabPanels[name].hidden = !shownTools.has(name);
     }
     gaugeEl.hidden = !shownTools.has("engine");
