@@ -1080,6 +1080,94 @@ body {
   --piece-c2: #3fc7dd;
 }
 
+/* Legendary shines a lot: an iridescent gradient that keeps flowing, a
+   pulsing coloured halo, and two sparkles twinkling at its corners. Still
+   for those who ask for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .piece-badge.piece-badge--legendary {
+    position: relative;
+    overflow: visible;
+    background-image: linear-gradient(
+      115deg,
+      #b57bff,
+      #3fc7dd,
+      #ff8ad8,
+      #ffd76a,
+      #ffffff,
+      #b57bff,
+      #3fc7dd
+    );
+    background-size: 400% auto;
+    animation:
+      legendary-flow 4s linear infinite,
+      legendary-halo 2.4s ease-in-out infinite;
+  }
+
+  .piece-badge--legendary::before,
+  .piece-badge--legendary::after {
+    position: absolute;
+    color: #fff6c9;
+    font-size: 0.42em;
+    line-height: 1;
+    text-shadow: 0 0 4px rgba(255, 230, 150, 0.9);
+    content: "✦";
+    opacity: 0;
+    pointer-events: none;
+    animation: legendary-sparkle 2.6s ease-in-out infinite;
+  }
+
+  .piece-badge--legendary::before {
+    top: -0.15em;
+    right: -0.25em;
+  }
+
+  .piece-badge--legendary::after {
+    bottom: 0.05em;
+    left: -0.3em;
+    font-size: 0.32em;
+    animation-delay: 1.3s;
+  }
+
+  .piece-badge-btn:hover .piece-badge--legendary {
+    animation-duration: 1.6s, 1.2s;
+  }
+}
+
+@keyframes legendary-flow {
+  from {
+    background-position: 0% center;
+  }
+  to {
+    background-position: 100% center;
+  }
+}
+
+@keyframes legendary-halo {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px rgba(181, 123, 255, 0.6)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  }
+  50% {
+    filter: drop-shadow(0 0 7px rgba(63, 199, 221, 0.95)) drop-shadow(0 0 3px rgba(255, 138, 216, 0.8));
+  }
+}
+
+@keyframes legendary-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0deg);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(0.5) rotate(90deg);
+  }
+}
+
 .piece-badge--diamond {
   --piece-c1: #f2fdff;
   --piece-c2: #67bfd8;
