@@ -2189,6 +2189,14 @@ button.study-head__link:disabled:hover {
     grid-template-columns: calc(var(--board-size) + 24px) minmax(0, 1fr);
     gap: 12px;
     margin-bottom: 0;
+    /* As tall as the window allows, even when the board is held back by
+       the window's width (a tall window, as in full screen): the moves and
+       tools then take that whole height, the board column stays on top. */
+    min-height: calc(100vh - var(--editor-top, 12px) - 12px);
+  }
+
+  .site-main--board .study-editor--edit .study-board-col {
+    align-self: start;
   }
 
   .site-main--board .study-editor--edit .study-card--board {
