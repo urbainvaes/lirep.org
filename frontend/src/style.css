@@ -3685,6 +3685,15 @@ details[open] > summary.tree-fold__head::before {
     background: none;
     border: none;
     border-radius: 0;
+    /* The board library sets its row of file letters 24px to the right and
+       as wide as the board: edge to edge, that empty overhang would let the
+       page scroll sideways. */
+    overflow: hidden;
+  }
+
+  /* Nor anything else, on the practice pages: they fit the screen's width. */
+  html:has(.practice-session) {
+    overflow-x: hidden;
   }
 }
 
