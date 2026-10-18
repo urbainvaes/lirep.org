@@ -2337,14 +2337,16 @@ button.study-head__link:disabled:hover {
   }
 }
 
-/* Focus mode: only the editor, without the site's header or the study's
-   line; the save status moves to the end of the move list's toolbar. */
-.editor-focus .site-header,
-.editor-focus .study-head {
+/* Focus mode (focusMode.ts): only the board and what goes with it, without
+   the site's header or the page's heading. In the editor and the viewer,
+   the study's line hides; the editor's save status moves to the end of the
+   move list's toolbar. */
+.focus-mode .site-header,
+.focus-mode .study-head {
   display: none;
 }
 
-.editor-focus .site-main--board {
+.focus-mode .site-main--board {
   padding-top: 12px;
 }
 
@@ -2352,7 +2354,7 @@ button.study-head__link:disabled:hover {
   display: none;
 }
 
-.editor-focus .focus-save-status {
+.focus-mode .focus-save-status {
   display: inline;
   margin-left: auto;
   color: var(--text-dim);
@@ -2360,7 +2362,7 @@ button.study-head__link:disabled:hover {
   white-space: nowrap;
 }
 
-.editor-focus .focus-save-status.study-save-status--error {
+.focus-mode .focus-save-status.study-save-status--error {
   color: var(--bad);
 }
 
@@ -3578,6 +3580,29 @@ details[open] > summary.tree-fold__head::before {
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.practice-session__tools .board-focus-btn {
+  flex: 0 0 34px;
+  height: 34px;
+}
+
+/* Focus mode in practice and bullet: the tools stay, as the way out; the
+   board is as large as the window's height allows, beside the panel. */
+.focus-mode .practice-session__header {
+  display: none;
+}
+
+.focus-mode .site-main:has(> .practice-session) {
+  max-width: 1400px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+@media (min-width: 1001px) {
+  .focus-mode .practice-layout {
+    grid-template-columns: minmax(0, min(calc(100vh - 70px), calc((100% - 20px) * 2 / 3))) minmax(0, 1fr);
+  }
 }
 
 /* Wider than a plain .study-grid — the board is the point here, the side

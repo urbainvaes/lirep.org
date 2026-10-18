@@ -4,6 +4,7 @@ import { Chess } from "chess.js";
 
 import { applyBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
 import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
+import { FOCUS_BUTTON_HTML, setupFocusMode } from "./focusMode";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { lastMoveAt, positionAt, sanPathTo, type StudyTree } from "./tree";
 
@@ -150,6 +151,7 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
       </div>
       <div class="practice-session__tools">
         <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="" title="Flip board (f)" aria-label="Flip board"></button>
+        ${FOCUS_BUTTON_HTML}
         <a id="open-lichess-analysis" class="btn btn-secondary" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer">Open position in Lichess analysis</a>
       </div>
       <div class="practice-layout">
@@ -527,12 +529,15 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
   }
 
   flipBoardBtn.addEventListener("click", flipBoard);
+  const focusMode = setupFocusMode({ main, button: document.getElementById("focus-btn") as HTMLButtonElement });
 
-  // Same "f" shortcut as the Study editor and lichess.org's own analysis board.
+  // Same "f" shortcut as the Study editor and lichess.org's own analysis
+  // board, and the same focus mode (Space, Z, Esc).
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const target = e.target as HTMLElement;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+    if (focusMode.handleKey(e)) return;
     if (e.key === "f" || e.key === "F") {
       e.preventDefault();
       flipBoard();

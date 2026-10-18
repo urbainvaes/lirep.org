@@ -29,6 +29,7 @@ import {
   type ExplorerSettings,
 } from "./explorer";
 import { errorMessage, fetchExplorerData } from "./explorerClient";
+import { FOCUS_SHORTCUT_HTML, setupFocusMode } from "./focusMode";
 import { escapeHtml } from "./layout";
 import { materialBalance, materialHtml } from "./material";
 import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, siblingVariation, type StudyTree } from "./tree";
@@ -76,7 +77,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
       </header>
 
       <div class="study-grid">
-        ${boardColumnHtml()}
+        ${boardColumnHtml({ focus: true })}
 
         <div class="study-side-col">
           <div class="study-side-col__inner">
@@ -93,6 +94,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
                   <li><kbd>↑</kbd> / <kbd>↓</kbd> Previous / next variation</li>
                   <li><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
                   <li><kbd>F</kbd> Flip the board</li>
+                  ${FOCUS_SHORTCUT_HTML}
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
               </div>
@@ -440,6 +442,13 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   applyToolsUI();
   goToStart();
 
+  const focusMode = setupFocusMode({
+    main,
+    button: document.getElementById("focus-btn") as HTMLButtonElement,
+    grid: main.querySelector(".study-grid") as HTMLElement,
+    above: [main.querySelector(".study-head")],
+  });
+
   flipBoardBtn.addEventListener("click", flipBoard);
   navStartBtn.addEventListener("click", goToStart);
   navBackBtn.addEventListener("click", stepBack);
@@ -477,6 +486,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     }
     const target = e.target as HTMLElement;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+    if (focusMode.handleKey(e)) return;
     switch (e.key) {
       case "ArrowLeft":
         e.preventDefault();

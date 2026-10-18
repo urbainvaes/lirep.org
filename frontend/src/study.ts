@@ -22,6 +22,7 @@ import {
   type Tool,
 } from "./analysisTools";
 import { Engine, whiteGaugeShare, type EngineAnalysis } from "./engine";
+import { FOCUS_SHORTCUT_HTML, setupFocusMode } from "./focusMode";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
@@ -44,7 +45,6 @@ import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl
 
 const FOLD_STORAGE_KEY = "study-fold-branches";
 const AUTO_FOLD_STORAGE_KEY = "study-auto-fold";
-const FOCUS_STORAGE_KEY = "study-focus-mode";
 
 interface StudyStats {
   winProbability: number;
@@ -228,7 +228,7 @@ function renderEditor(
                   <li><kbd>Delete</kbd> Delete selected move and its branches</li>
                   <li><kbd>C</kbd> Comment on this position</li>
                   <li><kbd>F</kbd> Flip the board</li>
-                  <li><kbd>Space</kbd> or <kbd>Z</kbd> Focus mode (<kbd>Esc</kbd> to leave)</li>
+                  ${FOCUS_SHORTCUT_HTML}
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
               </div>
@@ -270,83 +270,15 @@ function renderEditor(
   const liveScoreEl = document.getElementById("live-score") as HTMLElement;
   const focusSaveStatusEl = document.getElementById("focus-save-status") as HTMLElement;
 
-  // Focus mode: the site's header and the study's line hide, and the editor
-  // fills the window. Either way, the board is sized to what the window has
-  // left below whatever is above the editor (--editor-top, measured here),
-  // so the editor fits without scrolling. Remembered in this browser.
-  const gridEl = main.querySelector(".study-grid") as HTMLElement;
-  const focusBtn = document.getElementById("focus-btn") as HTMLButtonElement;
-  function measureEditorTop(): void {
-    main.style.setProperty("--editor-top", `${Math.round(gridEl.getBoundingClientRect().top + window.scrollY)}px`);
-  }
-  let focusMode = false;
-  // Whether focus mode came on by itself, with full screen (see below).
-  let autoFocused = false;
-  // `remember`: false when full screen switches it, which shouldn't change
-  // the choice kept for next time.
-  function setFocusMode(on: boolean, remember = true): void {
-    focusMode = on;
-    if (remember) autoFocused = false;
-    document.documentElement.classList.toggle("editor-focus", on);
-    focusBtn.setAttribute("aria-pressed", String(on));
-    const label = on ? "Leave focus mode" : "Focus mode";
-    focusBtn.setAttribute("aria-label", label);
-    focusBtn.title = `${label} (${on ? "Space, Z or Esc" : "Space or Z"})`;
-    if (remember) {
-      try {
-        localStorage.setItem(FOCUS_STORAGE_KEY, on ? "on" : "off");
-      } catch {
-        // Keep the choice for this page even when browser storage is blocked.
-      }
-    }
-    if (on) window.scrollTo(0, 0);
-    measureEditorTop();
-  }
-
-  // Full screen brings focus mode, and takes it away again if it brought
-  // it (and it wasn't switched since). Browsers don't tell a page about
-  // their own full screen (F11): it shows as the page's full screen, the
-  // display-mode media query, or the window covering the whole screen.
-  const fullScreenQuery = window.matchMedia("(display-mode: fullscreen)");
-  const isFullScreen = () =>
-    document.fullscreenElement !== null ||
-    fullScreenQuery.matches ||
-    (window.outerWidth >= screen.width - 1 && window.outerHeight >= screen.height - 1);
-  let fullScreen = isFullScreen();
-  function followFullScreen(): void {
-    const now = isFullScreen();
-    if (now === fullScreen) return;
-    fullScreen = now;
-    if (now && !focusMode) {
-      setFocusMode(true, false);
-      autoFocused = true;
-    } else if (!now && autoFocused) {
-      setFocusMode(false, false);
-      autoFocused = false;
-    }
-  }
-  window.addEventListener("resize", followFullScreen);
-  document.addEventListener("fullscreenchange", followFullScreen);
-  fullScreenQuery.addEventListener("change", followFullScreen);
-  focusBtn.addEventListener("click", () => setFocusMode(!focusMode));
-  setFocusMode((() => {
-    try {
-      return localStorage.getItem(FOCUS_STORAGE_KEY) === "on";
-    } catch {
-      return false;
-    }
-  })());
-  // Opened in full screen: as if it had just been entered.
-  if (fullScreen && !focusMode) {
-    setFocusMode(true, false);
-    autoFocused = true;
-  }
-  // The header and the study's line can change height (wrapping, renaming).
-  const editorTopObserver = new ResizeObserver(measureEditorTop);
-  for (const el of [document.querySelector(".site-header"), studyHeadEl]) {
-    if (el) editorTopObserver.observe(el);
-  }
-  window.addEventListener("resize", measureEditorTop);
+  // Focus mode (see focusMode.ts): the site's header and the study's line
+  // hide. Either way, the board is sized to what the window has left below
+  // whatever is above the editor, so the editor fits without scrolling.
+  const focusMode = setupFocusMode({
+    main,
+    button: document.getElementById("focus-btn") as HTMLButtonElement,
+    grid: main.querySelector(".study-grid") as HTMLElement,
+    above: [studyHeadEl],
+  });
 
   // Experimental: the moves at each branching in folds (see renderFolds in
   // tree.ts), on unless switched off in this browser.
@@ -1527,6 +1459,7 @@ function renderEditor(
     }
     const target = e.target as HTMLElement;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+    if (focusMode.handleKey(e)) return;
 
     switch (e.key) {
       case "ArrowLeft":
@@ -1564,24 +1497,6 @@ function renderEditor(
       case "F":
         e.preventDefault();
         flipBoard();
-        break;
-      case " ":
-        // Space keeps pressing a button, link or fold reached with the
-        // keyboard (Tab); one just clicked doesn't keep it.
-        if (target.closest("button, a, summary") && target.matches(":focus-visible")) break;
-        e.preventDefault(); // nor does it scroll the page
-        setFocusMode(!focusMode);
-        break;
-      case "z":
-      case "Z":
-        e.preventDefault();
-        setFocusMode(!focusMode);
-        break;
-      case "Escape":
-        if (focusMode) {
-          e.preventDefault();
-          setFocusMode(false);
-        }
         break;
       case "?":
         e.preventDefault();
