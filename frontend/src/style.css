@@ -3965,6 +3965,28 @@ details[open] > summary.tree-fold__head::before {
   align-items: start;
 }
 
+/* Outside focus mode too, the board fits the window's height on a laptop:
+   its column is at most the window's height less what is above it (the
+   site's header, the page's padding, the study's title and the tools: the
+   board's card starts 207px down) and a 16px margin below. Bullet's column
+   also holds the start button and the clock, 73px under the board.
+   Measured in Chromium; a study name long enough to wrap pushes the board
+   down by a line. */
+@media (min-width: 1001px) {
+  .practice-layout {
+    grid-template-columns: minmax(0, min(calc(100vh - 225px), calc((100% - 20px) * 2 / 3))) minmax(0, 1fr);
+  }
+
+  .bullet .practice-layout {
+    grid-template-columns: minmax(0, min(calc(100vh - 278px), calc((100% - 20px) * 2 / 3))) minmax(0, 1fr);
+  }
+
+  /* No page scroll for the padding under it. */
+  .site-main:has(> .practice-session) {
+    padding-bottom: 12px;
+  }
+}
+
 .practice-panel {
   display: flex;
   flex-direction: column;
