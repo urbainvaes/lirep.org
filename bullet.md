@@ -21,6 +21,9 @@ A timed run through a study (`frontend/src/bullet.ts`, opened by
   the prepared move shown as an arrow.
 - **Success:** reaching a position with no move after it in the study (the
   end of a line, whoever is to move), before the clock runs out.
+- **After a failure,** the next run replays the computer's replies of the
+  failed one (`replay`), then draws as usual past them; a success ends the
+  replay. The start button says "Retry this line" or "New run".
 - **Stats:** one row per run in `bullet_runs` (owner, study, success, reason
   `finished`/`time`/`wrong`, moves, time used, finish time), recorded by
   `POST /api/studies/{id}/bullet/runs`. `/api/practice/summary` returns each

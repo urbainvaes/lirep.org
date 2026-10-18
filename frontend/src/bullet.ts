@@ -262,7 +262,21 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
   }
 
   // The computer's reply after `nodeId`.
+  // After a failed run, the next one follows the same line: it replays that
+  // run's replies, then picks as usual past them. A success ends the replay.
+  let runReplies: number[] = []; // the computer's replies in this run
+  let replay: number[] = []; // the replies this run replays
+
   function pickReply(nodeId: number): number {
+    const children = tree.nodes[nodeId].children;
+    const replayed = replay[runReplies.length];
+    const reply = replayed !== undefined && children.includes(replayed) ? replayed : drawReply(nodeId);
+    runReplies.push(reply);
+    return reply;
+  }
+
+  // A reply drawn by the Explorer's weights, or uniformly without them.
+  function drawReply(nodeId: number): number {
     const children = tree.nodes[nodeId].children;
     const w = weights.get(nodeId) ?? children.map(() => 1);
     const total = w.reduce((a, b) => a + b, 0);
@@ -379,6 +393,7 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     turnStartedAt = null;
     moves = 0;
     usedMs = 0;
+    runReplies = [];
     hideDone();
     startBtn.hidden = true;
     statusEl.hidden = true;
@@ -417,7 +432,8 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     analysisLink.href = doneAnalysisLink.href = lichessAnalysisUrl(line, line.length);
     analysisLink.hidden = false;
     startBtn.hidden = false;
-    startBtn.innerHTML = `Run again <kbd>Enter</kbd>`;
+    replay = reason === "finished" ? [] : [...runReplies];
+    startBtn.innerHTML = reason === "finished" ? `New run <kbd>Enter</kbd>` : `Retry this line <kbd>Enter</kbd>`;
     if (reason === "finished") showDone(`Reached in ${seconds} s, ${moves} move${moves === 1 ? "" : "s"} played.`);
     else startBtn.focus({ preventScroll: true });
 
