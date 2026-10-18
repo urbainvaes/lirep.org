@@ -103,10 +103,9 @@ function actionHtml(opening: Pick<Opening, "id" | "mine">, signedIn: boolean): s
       : `<a class="btn btn-secondary" href="/auth/login">Sign in to import</a>`;
 }
 
-function openingCellHtml(opening: Pick<Opening, "id" | "mine" | "name" | "side" | "moves" | "lines">): string {
+function openingCellHtml(opening: Pick<Opening, "id" | "mine" | "name" | "moves" | "lines">): string {
   return `
       <td>
-        <span class="side-pawn side-pawn--${opening.side}">${opening.side === "white" ? "♙" : "♟"}</span>
         <a class="opening-link" href="${opening.mine ? `/study.html?id=${opening.id}` : `/opening.html?id=${opening.id}`}"><strong>${escapeHtml(opening.name)}</strong></a>
         <div class="community-sub">${opening.moves} ${opening.moves === 1 ? "move" : "moves"} · ${opening.lines} ${opening.lines === 1 ? "line" : "lines"}</div>
       </td>`;
