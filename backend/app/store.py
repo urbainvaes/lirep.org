@@ -230,6 +230,24 @@ def init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS practice_log_owner ON practice_log (owner, answered_at)")
+
+        # One row per Bullet run (see bullet.md): the Practice page shows
+        # successes out of all runs, and out of the last BULLET_RECENT_RUNS.
+        # Like practice_log, it outlives the study.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bullet_runs (
+                owner TEXT NOT NULL,
+                study_id INTEGER NOT NULL,
+                success INTEGER NOT NULL,
+                reason TEXT NOT NULL,
+                moves INTEGER NOT NULL,
+                time_ms INTEGER NOT NULL,
+                finished_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS bullet_runs_owner ON bullet_runs (owner, study_id, finished_at)")
         if not has_log:
             conn.execute(
                 """
@@ -657,6 +675,31 @@ def practice_totals(owner: str) -> dict[int, dict[str, int]]:
             "SELECT study_id, COUNT(*) AS answers FROM practice_log WHERE owner = ? GROUP BY study_id", (owner,)
         ).fetchall()
     return {row["study_id"]: {"answers": row["answers"]} for row in rows}
+
+
+def log_bullet_run(
+    owner: str, study_id: int, success: bool, reason: str, moves: int, time_ms: int, finished_at: str
+) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO bullet_runs (owner, study_id, success, reason, moves, time_ms, finished_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (owner, study_id, int(success), reason, moves, time_ms, finished_at),
+        )
+
+
+def bullet_outcomes(owner: str) -> dict[int, list[tuple[bool, str]]]:
+    """Per study, whether each Bullet run succeeded and when it finished
+    (ISO, UTC), oldest first."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT study_id, success, finished_at FROM bullet_runs WHERE owner = ? ORDER BY finished_at, rowid",
+            (owner,),
+        ).fetchall()
+    outcomes: dict[int, list[tuple[bool, str]]] = {}
+    for row in rows:
+        outcomes.setdefault(row["study_id"], []).append((bool(row["success"]), row["finished_at"]))
+    return outcomes
 
 
 def list_practice_answers(owner: str, since: str) -> list[dict[str, Any]]:

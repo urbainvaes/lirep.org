@@ -14,7 +14,7 @@ from typing import Literal
 
 import chess
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import store
 from .stats import _get_node, _resolve_start_node_id, _sans_to
@@ -28,6 +28,11 @@ RETENTION_FLOOR = 0.80
 SESSION_SIZE = 20
 # The activity calendar's span: a year, with a day to spare for time zones.
 ACTIVITY_DAYS = 366
+# Bullet: the stats show successes out of all runs and out of this many
+# most recent ones. See bullet.md.
+BULLET_RECENT_RUNS = 30
+# ...and successes in the last this many days, shown by the Bullet page.
+BULLET_MONTH_DAYS = 30
 
 
 def _require_owner(request: Request) -> str:
@@ -102,7 +107,23 @@ def apply_answer(prev: dict | None, correct: bool) -> tuple[int, float]:
     return min(prev["streak"] + 1, 3), prev["tau_days"] * 2.0
 
 
-def _study_summary(owner: str, study: dict) -> dict:
+def bullet_stats(outcomes: list[tuple[bool, str]]) -> dict:
+    """Successes out of all Bullet runs, out of the last BULLET_RECENT_RUNS,
+    and in the last BULLET_MONTH_DAYS. `outcomes`: (success, finished_at),
+    oldest first."""
+    successes = [success for success, _ in outcomes]
+    recent = successes[-BULLET_RECENT_RUNS:]
+    since = (datetime.now(UTC) - timedelta(days=BULLET_MONTH_DAYS)).isoformat()
+    return {
+        "runs": len(successes),
+        "successes": sum(successes),
+        "recentRuns": len(recent),
+        "recentSuccesses": sum(recent),
+        "monthSuccesses": sum(success for success, finished_at in outcomes if finished_at >= since),
+    }
+
+
+def _study_summary(owner: str, study: dict, bullet: list[tuple[bool, str]] | None = None) -> dict:
     start_node_id = _resolve_start_node_id(study)
     items = _drill_item_nodes(study["tree"], start_node_id, study["side"])
     states = store.get_practice_states(owner, study["id"])
@@ -121,13 +142,15 @@ def _study_summary(owner: str, study: dict) -> dict:
         "dueCount": due_count,
         "newCount": new_count,
         "aggregateKnowledge": aggregate,
+        "bullet": bullet_stats(bullet or []),
     }
 
 
 @router.get("/api/practice/summary")
 def practice_summary_all(request: Request) -> dict[str, dict]:
     owner = _require_owner(request)
-    return {str(study["id"]): _study_summary(owner, study) for study in store.list_studies(owner)}
+    bullet = store.bullet_outcomes(owner)
+    return {str(study["id"]): _study_summary(owner, study, bullet.get(study["id"])) for study in store.list_studies(owner)}
 
 
 @router.get("/api/practice/activity")
@@ -232,3 +255,32 @@ def record_attempt(study_id: int, payload: AttemptIn, request: Request) -> dict:
     # right now is exactly streak/3 — no need to round-trip through
     # _retention for a "days since last_seen_at" that's ~0.
     return {"streak": streak, "tauDays": tau_days, "knowledge": streak / 3}
+
+
+class BulletRunIn(BaseModel):
+    """A Bullet run, as the browser played it (see bullet.md): whether it
+    reached the end of the preparation in time, and if not why it ended."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool
+    reason: Literal["finished", "time", "wrong"]
+    moves: int = Field(strict=True, ge=0, le=10_000)
+    timeMs: int = Field(strict=True, ge=0, le=24 * 3600 * 1000)
+
+    @model_validator(mode="after")
+    def _reason_matches(self) -> "BulletRunIn":
+        if self.success != (self.reason == "finished"):
+            raise ValueError("a run succeeds exactly when it finishes")
+        return self
+
+
+@router.post("/api/studies/{study_id}/bullet/runs")
+def record_bullet_run(study_id: int, payload: BulletRunIn, request: Request) -> dict:
+    """Records a run; returns the study's updated Bullet stats."""
+    owner = _require_owner(request)
+    if not store.get_study(owner, study_id):
+        raise HTTPException(status_code=404, detail="not found")
+    now = datetime.now(UTC).isoformat()
+    store.log_bullet_run(owner, study_id, payload.success, payload.reason, payload.moves, payload.timeMs, now)
+    return bullet_stats(store.bullet_outcomes(owner).get(study_id, []))

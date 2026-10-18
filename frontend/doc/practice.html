@@ -59,7 +59,9 @@
         <h2>Practice list</h2>
         <ul>
           <li>One card per study, showing aggregate knowledge (the mean knowledge score across the study's own-side positions), a due count, and a new (never-drilled) count.</li>
-          <li>A Practice button opens a session for that study. Disabled only when the study has no moves of its own to drill; having nothing currently due or new never disables it, since a session then falls back to a voluntary review of whatever isn't already at 100% instead.</li>
+          <li>Each card also shows its Bullet results (see <a href="#bullet">Bullet</a>): runs that reached the end of the preparation, out of all runs and out of the last 30.</li>
+          <li>A Practice button opens a session for that study; clicking anywhere else on the card does the same. A Bullet button opens a Bullet run instead.</li>
+          <li>A card is disabled only when the study has no moves of its own to drill; having nothing currently due or new never disables it, since a session then falls back to a voluntary review of whatever isn't already at 100% instead.</li>
         </ul>
       </section>
 
@@ -88,9 +90,22 @@
         <p>Reaching a rounded 100% knowledge score pauses the otherwise open-ended session with a one-time celebration — a short animation, then an explicit choice between "End session" and "Continue practicing" — rather than silently rolling into another round. It only fires once per tab visit, not on every subsequent correct answer that happens to still be at 100%.</p>
       </section>
 
+      <section id="bullet">
+        <h2>Bullet</h2>
+        <p>A race through the study against a clock: 1 minute, plus 2 seconds for each correct move. From the study's starting point, the computer plays the opponent's moves and you play your prepared ones; a run succeeds when it reaches the end of a line before the clock runs out.</p>
+        <ul>
+          <li><strong>The computer's moves</strong> are only replies your study has, each chosen as often as it is played in the Opening Explorer, with the study's Explorer settings. The Explorer data is what this browser already holds (the Explorer panel and the Stats page load it); where it has none, the computer picks uniformly among the study's replies. The page says for how many positions it knows the frequencies.</li>
+          <li><strong>Your moves</strong> must be the prepared move, the first one in the study at that position. A wrong move ends the run, with the prepared move shown as an arrow.</li>
+          <li><strong>The clock</strong> runs only on your moves, as in a game: the computer's replies don't use your time.</li>
+          <li><strong>Results</strong> are kept per study: successes out of all runs, and out of the last 30. They are apart from the knowledge score: a Bullet run doesn't change it.</li>
+          <li><kbd>Space</kbd> or <kbd>Enter</kbd> starts the next run; <kbd>F</kbd> flips the board.</li>
+        </ul>
+      </section>
+
       <section>
         <h2>Data model</h2>
         <p>Practice state is stored separately from a study's tree — it changes on every attempt, not on every Save — keyed by owner, study, and node ID: streak, stability, and last-attempt timestamp per position. The knowledge score itself is never stored; it is always computed from those three fields plus the current time, so tuning the decay formula later needs no migration.</p>
+        <p>Bullet runs are stored one per row, keyed by owner and study: whether the run succeeded, why it ended (end of the preparation, out of time, or a wrong move), the moves played and the time used. Like the practice log, they outlive the study.</p>
         <p>Deleting a subtree orphans its practice rows harmlessly, since a deleted node ID is never reused. Rebuilding "the same" line afterward gets a new node ID and starts with no practice history — intentional: a rebuilt line is honestly a new thing to learn, not a continuation of a branch that no longer structurally exists.</p>
       </section>
 
@@ -99,7 +114,7 @@
         <ul>
           <li>One study per session; no cross-study "everything due today" dashboard yet.</li>
           <li>No leverage-based queue ordering (the biggest-objective-swing-if-wrong ranking from the Stats page's own machinery) — due-ness only, for now.</li>
-          <li>No sparring/play mode — opponent replies are sampled uniformly from the tree, not weighted by real Explorer frequency, since this mode is about rehearsing branches already chosen to prepare for, not discovering realistic ones.</li>
+          <li>In a Practice session, opponent replies are walked in the tree's order, not weighted by real Explorer frequency, since it is about rehearsing every branch prepared; Bullet is the mode that weights them.</li>
           <li>No knowledge heatmap on the Study editor's move tree yet, though the same move-coloring mechanism the starting-point marker uses would suit one well as a follow-up.</li>
         </ul>
       </section>

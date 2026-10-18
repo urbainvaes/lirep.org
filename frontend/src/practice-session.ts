@@ -4,7 +4,10 @@ import { Chess } from "chess.js";
 
 import { applyBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
 import { Engine, formatScore, RANK_BRUSHES, uciMoveToKeys, type EngineAnalysis } from "./engine";
+import { renderBullet } from "./bullet";
 import { FOCUS_BUTTON_HTML, setupFocusMode } from "./focusMode";
+import type { BulletStats } from "./bulletStats";
+import type { ExplorerSettings } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { lastMoveAt, positionAt, sanPathTo, type StudyTree } from "./tree";
 
@@ -14,6 +17,7 @@ interface Study {
   tree: StudyTree;
   side: "white" | "black";
   startNodeId: number | null;
+  explorerSettings?: ExplorerSettings | null;
 }
 
 interface AttemptResult {
@@ -583,6 +587,32 @@ async function init(): Promise<void> {
   const studyId = getStudyId();
   if (!studyId) {
     main.innerHTML = `<div class="empty-state"><p>Study not found.</p></div>`;
+    return;
+  }
+
+  // ?mode=bullet: Bullet practice instead (see bullet.ts).
+  if (new URLSearchParams(window.location.search).get("mode") === "bullet") {
+    let study: Study | null;
+    let stats: BulletStats | null = null;
+    try {
+      const [loaded, , summaryRes] = await Promise.all([
+        loadStudy(studyId),
+        applyBoardTheme(),
+        fetch("/api/practice/summary", { credentials: "same-origin" }),
+      ]);
+      study = loaded;
+      if (summaryRes.ok) stats = (await summaryRes.json())[String(studyId)]?.bullet ?? null;
+    } catch {
+      main.innerHTML = `<div class="empty-state"><p>Could not load this study. Please try again.</p></div>`;
+      return;
+    }
+    if (!study) {
+      main.innerHTML = `<div class="empty-state"><p>Study not found.</p></div>`;
+      return;
+    }
+    const start = study.startNodeId !== null && study.startNodeId in study.tree.nodes ? study.startNodeId : study.tree.rootId;
+    document.title = `Bullet · ${study.name} · lirep.org`;
+    renderBullet(main, study, start, stats);
     return;
   }
 

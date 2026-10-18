@@ -3364,6 +3364,325 @@ details[open] > summary.tree-fold__head::before {
   opacity: 0.72;
 }
 
+/* A practice card: the whole card starts a session (its Practice link
+   stretches over it), Bullet sits above that. */
+.practice-card {
+  position: relative;
+}
+
+.practice-card__practice::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+
+.practice-card__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: auto;
+}
+
+/* Practice and Bullet: two identical icon buttons. */
+.practice-card__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-nested-bg);
+  color: var(--text);
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+
+.practice-card__action:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.practice-card__bullet {
+  position: relative;
+  z-index: 1;
+}
+
+/* Bullet practice (bullet.ts): above the board its tools and the month's
+   successes, below it the start button and the clock, beside it the info
+   card and the runs; a popup celebrates a run that reaches the end. */
+.bullet-title-tag {
+  margin-left: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #fff;
+  font-size: 0.8rem;
+  vertical-align: middle;
+}
+
+/* The clock, as on Lichess: large digits in a box of their own, lit while
+   it runs, red in the last 10 seconds, with the time left as a thin bar
+   along its bottom. */
+.bullet-clock {
+  position: relative;
+  margin-left: auto;
+  overflow: hidden;
+  padding: 1px 12px 5px;
+  background: var(--card-nested-bg);
+  border-radius: 6px;
+  color: var(--text-dim);
+  transition: background 0.15s, color 0.15s;
+}
+
+.bullet-clock__time {
+  font-family: "Roboto Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font-size: 2.2rem;
+  font-weight: 500;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.bullet-clock__sep {
+  transition: opacity 0.1s;
+}
+
+.bullet-clock__sep--dim {
+  opacity: 0.4;
+}
+
+.bullet-clock__tenths {
+  font-size: 0.6em;
+}
+
+.bullet-clock__bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+}
+
+.bullet-clock__fill {
+  width: 100%;
+  height: 100%;
+  background: var(--text-dim);
+  opacity: 0.5;
+}
+
+.bullet-clock--running {
+  background: color-mix(in srgb, var(--good) 30%, var(--panel-bg));
+  color: var(--text-strong);
+}
+
+.bullet-clock--running .bullet-clock__fill {
+  background: var(--good);
+  opacity: 1;
+}
+
+.bullet-clock--low {
+  background: color-mix(in srgb, var(--bad) 35%, var(--panel-bg));
+  color: var(--text-strong);
+}
+
+.bullet-clock--low .bullet-clock__fill {
+  background: var(--bad);
+  opacity: 1;
+}
+
+/* The rules and how much of the Explorer is known, apart from the run. */
+.bullet-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.bullet-info p {
+  margin: 0;
+}
+
+.bullet-info__btn {
+  align-self: flex-start;
+}
+
+.bullet-board-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.bullet-board-col .practice-session__tools {
+  margin-bottom: 8px;
+}
+
+.bullet-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.bullet-status {
+  margin-top: 8px;
+  font-size: 1rem;
+}
+
+.bullet-side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bullet-side-col .practice-history:empty {
+  display: none;
+}
+
+.bullet-start kbd {
+  margin-left: 6px;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.bullet-stats {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.bullet-stats strong {
+  color: var(--text-strong);
+  font-size: 1rem;
+}
+
+/* The popup at the end of the preparation: confetti falling over the page,
+   the box popping in. */
+.bullet-done {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  animation: bullet-done-fade 0.2s ease-out;
+}
+
+.bullet-done__box {
+  position: relative;
+  z-index: 1;
+  width: min(380px, 100%);
+  padding: 28px 24px 22px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px var(--shadow);
+  text-align: center;
+  animation: bullet-done-pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.bullet-done__title {
+  margin: 0 0 8px;
+  color: var(--good);
+  font-size: 1.6rem;
+}
+
+.bullet-done__detail {
+  margin: 0 0 20px;
+  color: var(--text);
+}
+
+.bullet-done__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bullet-done__confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bullet-done__confetti span {
+  position: absolute;
+  top: -20px;
+  left: var(--x);
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  background: hsl(var(--hue) 85% 60%);
+  animation: bullet-confetti var(--duration) cubic-bezier(0.3, 0.6, 0.6, 1) var(--delay) both;
+}
+
+.bullet-done__confetti span:nth-child(3n) {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+@keyframes bullet-confetti {
+  from {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--drift), 105vh) rotate(var(--spin));
+    opacity: 0;
+  }
+}
+
+@keyframes bullet-done-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes bullet-done-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bullet-done,
+  .bullet-done__box {
+    animation: none;
+  }
+
+  .bullet-done__confetti {
+    display: none;
+  }
+}
+
+/* On a phone the board takes the screen's whole width, edge to edge, as in
+   the Lichess app: no card around it, and out over the page's 16px gutters. */
+@media (max-width: 640px) {
+  .bullet .study-card--board {
+    margin: 0 -16px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+  }
+}
+
 /* The top of the Practice page: the activity calendar, sized and laid out
    like GitHub's contribution graph, and beside it the studies known best
    and practiced most. */
@@ -3629,6 +3948,11 @@ details[open] > summary.tree-fold__head::before {
 @media (min-width: 1001px) {
   .focus-mode .practice-layout {
     grid-template-columns: minmax(0, min(calc(100vh - 70px), calc((100% - 20px) * 2 / 3))) minmax(0, 1fr);
+  }
+
+  /* Bullet: the tools and the clock's row are in the board's column. */
+  .focus-mode .bullet .practice-layout {
+    grid-template-columns: minmax(0, min(calc(100vh - 140px), calc((100% - 20px) * 2 / 3))) minmax(0, 1fr);
   }
 }
 
