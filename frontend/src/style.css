@@ -3526,6 +3526,11 @@ details[open] > summary.tree-fold__head::before {
   margin-top: 10px;
 }
 
+.bullet-analysis-link {
+  align-self: center;
+  font-size: 0.85rem;
+}
+
 .bullet-status {
   margin-top: 8px;
   font-size: 1rem;

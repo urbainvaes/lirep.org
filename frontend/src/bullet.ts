@@ -20,7 +20,7 @@ import type { BulletStats } from "./bulletStats";
 import { cachedExplorerData, errorMessage, fetchExplorerData } from "./explorerClient";
 import { FOCUS_BUTTON_HTML, setupFocusMode } from "./focusMode";
 import { escapeHtml } from "./layout";
-import { lastMoveAt, positionAt, sanPathTo, type StudyTree } from "./tree";
+import { lastMoveAt, lichessAnalysisUrl, positionAt, sanPathTo, type StudyTree } from "./tree";
 
 export interface BulletStudy {
   id: number;
@@ -96,6 +96,7 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
             </div>
           </div>
           <p id="bullet-status" class="practice-prompt bullet-status" hidden></p>
+          <a id="bullet-analysis" class="bullet-analysis-link" target="_blank" rel="noopener noreferrer" hidden>Analyse this run on Lichess</a>
         </div>
         <div class="bullet-side-col">
           <div class="study-card bullet-info" role="note">
@@ -116,6 +117,7 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
           <p id="bullet-done-detail" class="bullet-done__detail"></p>
           <div class="bullet-done__actions">
             <button id="bullet-done-again" class="btn btn-primary" type="button">New run</button>
+            <a id="bullet-done-analysis" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">Analysis</a>
             <a class="btn btn-secondary" href="/practice.html">Back to practice</a>
           </div>
         </div>
@@ -137,6 +139,8 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
   const doneConfettiEl = document.getElementById("bullet-done-confetti") as HTMLElement;
   const doneDetailEl = document.getElementById("bullet-done-detail") as HTMLElement;
   const doneAgainBtn = document.getElementById("bullet-done-again") as HTMLButtonElement;
+  const analysisLink = document.getElementById("bullet-analysis") as HTMLAnchorElement;
+  const doneAnalysisLink = document.getElementById("bullet-done-analysis") as HTMLAnchorElement;
 
   const showStats = () => {
     statsEl.textContent = String(stats?.monthSuccesses ?? 0);
@@ -378,6 +382,7 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     hideDone();
     startBtn.hidden = true;
     statusEl.hidden = true;
+    analysisLink.hidden = true;
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(tick);
     proceed();
@@ -406,6 +411,11 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     statusEl.className = `practice-prompt bullet-status practice-prompt--${reason === "finished" ? "correct" : "incorrect"}`;
     statusEl.textContent = message;
     statusEl.hidden = false;
+    // The run's moves on Lichess's analysis board, up to where it ended (the
+    // wrong move included).
+    const line = [...sanPathTo(tree, nodeId), ...(reason === "wrong" && played ? [played] : [])];
+    analysisLink.href = doneAnalysisLink.href = lichessAnalysisUrl(line, line.length);
+    analysisLink.hidden = false;
     startBtn.hidden = false;
     startBtn.innerHTML = `Run again <kbd>Enter</kbd>`;
     if (reason === "finished") showDone(`Reached in ${seconds} s, ${moves} move${moves === 1 ? "" : "s"} played.`);
