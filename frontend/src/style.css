@@ -2117,6 +2117,29 @@ button.study-head__link:disabled:hover {
 
 /* The editor's Explorer settings, in the tools card in place of the tools
    while the gear is on: the same controls as the Stats page's. */
+.tool-settings__group + .tool-settings__group {
+  margin-top: 14px;
+}
+
+.tool-settings__radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.85rem;
+}
+
+.tool-settings__radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.tool-settings__radio input {
+  margin: 0;
+  accent-color: var(--primary);
+}
+
 .tool-settings__title {
   margin: 0 0 2px;
   font-size: 0.9rem;
@@ -2126,6 +2149,10 @@ button.study-head__link:disabled:hover {
   margin: 0 0 8px;
   color: var(--text-dim);
   font-size: 0.78rem;
+}
+
+.tool-settings__doc {
+  text-decoration: none;
 }
 
 /* The gear sits at the right end of the tabs, after Stockfish's depth

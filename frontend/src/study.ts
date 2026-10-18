@@ -27,6 +27,8 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
   fetchExplorerDefaults,
+  LEAF_VALUE_LABELS,
+  LEAF_VALUE_SHORT_LABELS,
   bindExplorerSettingsForm,
   explorerSettingsFormHtml,
   renderExplorer,
@@ -35,7 +37,16 @@ import {
   type ExplorerDefaults,
   type ExplorerSettings,
   type ExplorerSpeed,
+  type LeafValue,
 } from "./explorer";
+import {
+  EVAL_DEPTH_STORAGE_KEY,
+  EVAL_DEPTHS,
+  evaluatePosition,
+  getSavedEvalDepth,
+  openEvaluationCache,
+  type EvaluationCache,
+} from "./evalCache";
 import { calculateExpectedScore } from "./expectedScore";
 import { cachedExplorerData, errorMessage, fetchExplorerData, hasExplorerData } from "./explorerClient";
 import { materialBalance, materialHtml } from "./material";
@@ -53,6 +64,7 @@ interface StudyStats {
   minRating: number | null;
   nodesEvaluated: number;
   explorerCalls: number;
+  scoreDepth?: number | null; // Stockfish depth, when Stockfish valued lines' ends
 }
 
 interface Study {
@@ -246,14 +258,34 @@ function renderEditor(
               </div>
 
               <div id="tool-settings" class="tool-panel tool-panel--settings" hidden>
-                <h3 class="tool-settings__title">Opening Explorer</h3>
-                <p class="tool-settings__note">Which games the Explorer shows. They are also the ones this study's stats are calculated with.</p>
-                <div id="explorer-settings-form">${explorerSettingsFormHtml(settings, {
-                  lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
-                  ratingBuckets,
-                  defaultMinRating,
-                  speeds: allSpeeds,
-                })}</div>
+                <div class="tool-settings__group">
+                  <h3 class="tool-settings__title">Opening Explorer</h3>
+                  <p class="tool-settings__note">Which games the Explorer shows. They are also the ones this study's stats are calculated with.</p>
+                  <div id="explorer-settings-form">${explorerSettingsFormHtml(settings, {
+                    lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
+                    ratingBuckets,
+                    defaultMinRating,
+                    speeds: allSpeeds,
+                  })}</div>
+                </div>
+                <div class="tool-settings__group">
+                  <h3 class="tool-settings__title">End of preparation</h3>
+                  <p class="tool-settings__note">How the expected score values a line where your preparation ends, in the move list's figures and on the Stats page. <a class="tool-settings__doc" href="/doc/expected-score.html#leaf-values" target="_blank" rel="noopener">How each works</a></p>
+                  <div class="tool-settings__radios" id="leaf-value-radios" role="radiogroup" aria-label="Value at the end of preparation">
+                    ${(Object.keys(LEAF_VALUE_LABELS) as LeafValue[])
+                      .map(
+                        (leaf) => `<label class="tool-settings__radio" title="${LEAF_VALUE_LABELS[leaf]}"><input type="radio" name="leaf-value" value="${leaf}"${(settings.leafValue ?? "explorer") === leaf ? " checked" : ""} />${LEAF_VALUE_SHORT_LABELS[leaf]}</label>`,
+                      )
+                      .join("")}
+                  </div>
+                </div>
+                <div class="tool-settings__group" id="figures-depth-group">
+                  <h3 class="tool-settings__title">Stockfish depth</h3>
+                  <p class="tool-settings__note">How deep Stockfish evaluates the lines' ends it values, here and on the Stats page. Evaluations already made in this browser at that depth are reused; Calculate makes the others.</p>
+                  <div class="tool-settings__radios" id="figures-depth" role="radiogroup" aria-label="Stockfish depth">
+                    ${EVAL_DEPTHS.map((d) => `<label class="tool-settings__radio"><input type="radio" name="figures-depth" value="${d}" />${d} · ${({ 8: "Quick", 12: "Balanced" } as Record<number, string>)[d] ?? "Thorough"}</label>`).join("")}
+                  </div>
+                </div>
               </div>
 
               ${toolTabsHtml({ settings: true })}
@@ -749,6 +781,17 @@ function renderEditor(
   type Missing = { fen: string; nodeId: number };
   let unfetched: ReadonlyMap<number, string> = new Map(); // node id -> position after it
   let missing: readonly Missing[] = [];
+  let missingEvaluations: readonly Missing[] = [];
+
+  // The figures' Stockfish values: from this browser's evaluation cache, the
+  // Stats page's, at the depth chosen in the settings, or else that of the
+  // study's last expected score with Stockfish values, or else the depth
+  // last chosen on a Stats page.
+  let chosenDepth: number | null = null; // chosen in the settings, here
+  const figuresDepth = () => chosenDepth ?? existing?.stats?.scoreDepth ?? getSavedEvalDepth();
+  let evaluationCachePromise: Promise<EvaluationCache> | null = null;
+  const evaluationCache = () =>
+    (evaluationCachePromise ??= fetchMe().then((me) => openEvaluationCache(me.username ?? "")));
   let moveStats: ReadonlyMap<number, Figures> = new Map();
   let otherReplies: ReadonlyMap<number, Figures> = new Map();
   let startStat: { text: string; title: string } | undefined;
@@ -791,6 +834,9 @@ function renderEditor(
       next.move(tree.nodes[nodeId].san as string);
       return next;
     };
+    // With Stockfish values, lines' ends need no Explorer results: only the
+    // positions where the opponent is to move do.
+    const explorerEnds = (settings.leafValue ?? "explorer") !== "stockfish";
     const walk = (nodeId: number, chess: Chess): void => {
       if (chess.isGameOver()) return;
       const children = tree.nodes[nodeId].children;
@@ -798,7 +844,7 @@ function renderEditor(
         const own = children[0];
         // Nothing prepared from the starting point: its own results.
         if (own === undefined) {
-          if (nodeId === start) needed.set(nodeId, chess.fen());
+          if (nodeId === start && explorerEnds) needed.set(nodeId, chess.fen());
           return;
         }
         const next = after(chess, own);
@@ -806,7 +852,7 @@ function renderEditor(
         // tree is answered; otherwise it ends with it, valued here.
         if (!next.isGameOver() && tree.nodes[own].children.some((reply) => tree.nodes[reply].children.length > 0)) {
           walk(own, next);
-        } else if (!next.isGameOver()) {
+        } else if (!next.isGameOver() && explorerEnds) {
           needed.set(nodeId, chess.fen());
         }
         return;
@@ -860,14 +906,17 @@ function renderEditor(
     let unprepared = 0;
     let unpreparedPoints = 0;
     let result;
+    const leaf = settings.leafValue ?? "explorer";
+    const depth = figuresDepth();
     try {
+      const evaluations = leaf === "explorer" ? null : await evaluationCache();
       result = await calculateExpectedScore(
         tree,
         start,
         side,
         (fen) => cachedExplorerData(fen, settings, side),
-        "explorer",
-        undefined,
+        leaf,
+        evaluations ? (fen) => evaluations.get(fen, depth) : undefined,
         (position) => {
           if (position.san !== null) {
             unprepared += position.probability;
@@ -889,6 +938,7 @@ function renderEditor(
     if (run !== liveRun) return;
     liveScoreEl.hidden = true;
     missing = result.missingPositions;
+    missingEvaluations = result.missingEvaluations;
     unfetched = new Map(needed.filter((_, i) => !loaded[i]));
     for (const [id, sum] of others) others.set(id, { probability: sum.probability, score: sum.score / sum.probability });
     const replies = branchReplies(start, side);
@@ -896,13 +946,17 @@ function renderEditor(
     otherReplies = others;
     const buttons = new Set(replies.filter((id) => !stats.has(id)));
     const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
-    if (missing.length) {
+    const valuedWith = leaf === "explorer" ? "Explorer results" : `${LEAF_VALUE_LABELS[leaf]} (Stockfish depth ${depth})`;
+    if (missing.length || missingEvaluations.length) {
       buttons.add(start);
-      startStat = { text: "Expected score:", title: "Load the Opening Explorer data the whole study needs" };
+      startStat = {
+        text: "Expected score:",
+        title: `Load the Opening Explorer data${leaf === "explorer" ? "" : " and the Stockfish evaluations"} the whole study needs`,
+      };
     } else {
       startStat = {
         text: `Expected score: ${pct(result.score)}`,
-        title: `Calculated live, with Explorer results where lines end. Replies you haven't prepared: ${pct(unprepared)} of games${
+        title: `Calculated live; lines' ends valued with ${valuedWith}. Replies you haven't prepared: ${pct(unprepared)} of games${
           unprepared ? `, scoring ${pct(unpreparedPoints / unprepared)}` : ""
         }.`,
       };
@@ -928,10 +982,25 @@ function renderEditor(
       renderTreeView();
     };
     say("Calculating…");
+    let engine: Engine | null = null;
+    const tried = new Set<string>(); // evaluations Stockfish couldn't give stay missing
     try {
       for (let round = 0; round < 100; round++) {
         const needed = [...new Set(missing.filter((m) => concerns(m.nodeId)).map((m) => m.fen))];
-        if (!needed.length) break;
+        const toEvaluate = [...new Set(missingEvaluations.filter((m) => concerns(m.nodeId) && !tried.has(m.fen)).map((m) => m.fen))];
+        if (!needed.length && !toEvaluate.length) break;
+        if (toEvaluate.length) {
+          const evaluations = await evaluationCache();
+          const depth = figuresDepth();
+          engine ??= new Engine();
+          for (const fen of toEvaluate) {
+            tried.add(fen);
+            const cp = await evaluatePosition(engine, new Chess(fen), depth);
+            if (cp !== null) await evaluations.set(fen, depth, cp);
+            loaded += 1;
+            say(`Calculating… ${loaded} position${loaded === 1 ? "" : "s"} done`);
+          }
+        }
         for (const fen of needed) {
           await fetchExplorerData(fen, settings, side, {
             priority: "background",
@@ -939,7 +1008,7 @@ function renderEditor(
               say(`Lichess asked to wait; resuming at ${new Date(resumeAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}…`),
           });
           loaded += 1;
-          say(`Calculating… ${loaded} position${loaded === 1 ? "" : "s"} loaded`);
+          say(`Calculating… ${loaded} position${loaded === 1 ? "" : "s"} done`);
         }
         await checkUnfetched();
       }
@@ -952,6 +1021,8 @@ function renderEditor(
         renderTreeView();
       }, 6000);
       return;
+    } finally {
+      (engine as Engine | null)?.terminate();
     }
     renderTreeView();
   }
@@ -1190,6 +1261,35 @@ function renderEditor(
       scheduleAutoSave();
     },
   );
+
+  // The study's end-of-prep value: saved with its settings, and the
+  // figures follow it. With Stockfish, alone or under 50 games, its depth
+  // shows too.
+  const leafValueRadios = document.getElementById("leaf-value-radios") as HTMLElement;
+  const depthGroup = document.getElementById("figures-depth-group") as HTMLElement;
+  const depthRadios = document.getElementById("figures-depth") as HTMLElement;
+  const showDepth = () => {
+    depthGroup.hidden = (settings.leafValue ?? "explorer") === "explorer";
+    const radio = depthRadios.querySelector<HTMLInputElement>(`input[value="${figuresDepth()}"]`);
+    if (radio) radio.checked = true;
+  };
+  showDepth();
+  leafValueRadios.addEventListener("change", (e) => {
+    settings.leafValue = (e.target as HTMLInputElement).value as LeafValue;
+    showDepth();
+    scheduleAutoSave();
+    void checkUnfetched();
+  });
+  depthRadios.addEventListener("change", (e) => {
+    const value = (e.target as HTMLInputElement).value;
+    chosenDepth = Number(value);
+    try {
+      localStorage.setItem(EVAL_DEPTH_STORAGE_KEY, value);
+    } catch {
+      // Keep the choice for this page even when browser storage is blocked.
+    }
+    void checkUnfetched();
+  });
 
   board = createBoard(boardEl, onMove, boardOrientation);
   board.set({ drawable: { brushes: { ...board.state.drawable.brushes, ...QUALITY_BRUSHES } } });

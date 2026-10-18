@@ -21,6 +21,10 @@ class ExplorerSettings(BaseModel):
     # study saved before this existed — see explorer.py's fallback.
     minRating: int | None = None
     speeds: list[Literal["bullet", "blitz", "rapid", "classical"]] = ["blitz", "rapid", "classical"]
+    # How the expected score values a line where the preparation ends, on
+    # the Stats page and in the editor's figures (see stats.LeafValue; kept
+    # here as a literal to avoid a circular import).
+    leafValue: Literal["explorer", "stockfish", "explorer-stockfish"] = "explorer"
 
     @model_validator(mode="before")
     @classmethod

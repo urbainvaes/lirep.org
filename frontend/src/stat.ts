@@ -1,8 +1,15 @@
 import { Chart } from "chart.js/auto";
 import { Chess } from "chess.js";
 
-import { DEFAULT_SEARCH_DEPTH, Engine, type EngineLine } from "./engine";
-import { openEvaluationCache, type EvaluationCache } from "./evalCache";
+import { DEFAULT_SEARCH_DEPTH, Engine } from "./engine";
+import {
+  EVAL_DEPTH_STORAGE_KEY,
+  EVAL_DEPTHS,
+  evaluatePosition,
+  getSavedEvalDepth,
+  openEvaluationCache,
+  type EvaluationCache,
+} from "./evalCache";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
@@ -21,23 +28,11 @@ import { fetchExplorerData } from "./explorerClient";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { mainLineSans, sanPathTo, type StudyTree } from "./tree";
 
-const EVAL_DEPTHS = [8, 12, DEFAULT_SEARCH_DEPTH] as const;
 // The expected evaluation's method, saved with it (see EVAL_METHOD in
 // backend/app/stats.py): 3 evaluates the same lines' ends as the expected
 // score with Stockfish values, each evaluation capped at ±10 pawns. Older
 // evaluations are out of date.
 const EVAL_METHOD = 3;
-const EVAL_DEPTH_STORAGE_KEY = "stats-evaluation-depth";
-
-function getSavedEvalDepth(): number {
-  try {
-    const depth = Number(localStorage.getItem(EVAL_DEPTH_STORAGE_KEY));
-    return EVAL_DEPTHS.includes(depth as (typeof EVAL_DEPTHS)[number]) ? depth : DEFAULT_SEARCH_DEPTH;
-  } catch {
-    return DEFAULT_SEARCH_DEPTH;
-  }
-}
-
 // The settings a result was calculated with; compared with the current
 // settings to mark the result out of date.
 interface CalculationSettings {
@@ -119,38 +114,6 @@ function formatEval(cp: number): string {
   if (Math.abs(cp) > MATE_SCORE_CP - 1000) return cp > 0 ? "Forced mate" : "Forced mate against";
   const pawns = cp / 100;
   return `${pawns > 0 ? "+" : ""}${pawns.toFixed(2)}`;
-}
-
-// Actual game-over positions on the board — checkmate gets a flat mate cap
-// (no distance), matching the backend's own terminal-position handling.
-// chess.js's isDraw() also covers stalemate, insufficient material,
-// threefold repetition, and the 50-move rule, so all of those are handled
-// here too rather than falling through to the engine.
-function terminalCp(chess: Chess): number | null {
-  if (chess.isCheckmate()) return chess.turn() === "w" ? -MATE_SCORE_CP : MATE_SCORE_CP;
-  if (chess.isDraw()) return 0;
-  return null;
-}
-
-// A "mate in N" reported by the engine (not yet on the board) gets the same
-// distance-sensitive cap used for all position evaluations.
-function mateToCappedCp(mateWhitePov: number): number {
-  const magnitude = MATE_SCORE_CP - Math.abs(mateWhitePov);
-  return mateWhitePov > 0 ? magnitude : -magnitude;
-}
-
-// Centipawns (White's POV), from the engine's best line at this position —
-// same conversion regardless of whether the position is a tree node or an
-// off-tree continuation, since a position's eval doesn't care which.
-async function evaluatePosition(engine: Engine, chess: Chess, depth: number): Promise<number | null> {
-  const terminal = terminalCp(chess);
-  if (terminal !== null) return terminal;
-  const analysis = await engine.analyze(chess.fen(), depth);
-  const best: EngineLine | undefined = analysis.lines[0];
-  const sign = chess.turn() === "w" ? 1 : -1;
-  if (best?.scoreMate != null) return mateToCappedCp(best.scoreMate * sign);
-  if (best?.scoreCp != null) return best.scoreCp * sign;
-  return null;
 }
 
 // Told when a calculation's Explorer requests wait out a Lichess rate-limit
@@ -457,7 +420,15 @@ let formSettings: ExplorerSettings = { ...DEFAULT_EXPLORER_SETTINGS };
 
 function readSettingsFromDom(): ExplorerSettings {
   const { database, source } = formSettings;
-  return { ...formSettings, enabled: true, source: database === "player" ? "lichess" : source, speeds: [...formSettings.speeds] };
+  return {
+    ...formSettings,
+    enabled: true,
+    source: database === "player" ? "lichess" : source,
+    speeds: [...formSettings.speeds],
+    // The study's end-of-prep value, saved with its settings (shared with
+    // the editor's figures).
+    leafValue: readLeafValueFromDom(),
+  };
 }
 
 function readDepthFromDom(): number {
@@ -685,7 +656,7 @@ function renderPage(
               <span>Value</span>
               <select id="leaf-value">
                 ${(Object.keys(LEAF_VALUE_LABELS) as LeafValue[])
-                  .map((leaf) => `<option value="${leaf}" ${(stats?.leafValue ?? "explorer") === leaf ? "selected" : ""}>${LEAF_VALUE_LABELS[leaf]}</option>`)
+                  .map((leaf) => `<option value="${leaf}" ${(settings.leafValue ?? stats?.leafValue ?? "explorer") === leaf ? "selected" : ""}>${LEAF_VALUE_LABELS[leaf]}</option>`)
                   .join("")}
               </select>
             </label>

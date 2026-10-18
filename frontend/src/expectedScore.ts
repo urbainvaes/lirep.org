@@ -30,6 +30,7 @@ interface Value {
   score: number;
   outcome: Outcome | null;
   cp: number | null;
+  missing?: boolean; // a Stockfish value whose evaluation isn't available
 }
 
 const NEUTRAL: Value = { score: 0.5, outcome: [0.5, 0, 0.5], cp: null };
@@ -88,6 +89,8 @@ export interface ExpectedScoreResult {
   // tree each follows: the result is then incomplete, and more may be needed
   // once they are.
   missingPositions: { fen: string; nodeId: number }[];
+  // Likewise, the positions whose Stockfish evaluation wasn't available.
+  missingEvaluations: { fen: string; nodeId: number }[];
 }
 
 // A position the walk values, as reported by calculateExpectedScore: the one
@@ -114,9 +117,10 @@ export async function calculateExpectedScore(
   explorer: (fen: string) => Promise<ExplorerData | undefined>,
   leafValue: LeafValue = "explorer",
   // Stockfish's evaluation in centipawns, from White's point of view; null
-  // when the engine gave none (counted as 0.00). Needed unless leafValue is
-  // "explorer".
-  evaluate?: (fen: string) => Promise<number | null>,
+  // when the engine gave none (counted as 0.00); undefined when it isn't
+  // available (the position then counts as even, and is listed in
+  // missingEvaluations). Needed unless leafValue is "explorer".
+  evaluate?: (fen: string) => Promise<number | null | undefined>,
   // Told of every position the walk values: each move of the tree it goes
   // through, and every line's end.
   onPosition?: (position: PositionValue) => void,
@@ -152,11 +156,19 @@ export async function calculateExpectedScore(
   const lineGoesOn = (nodeId: number, chess: Chess) =>
     tree.nodes[nodeId].children.some((id) => answered(id, after(chess, tree.nodes[id].san as string)));
 
-  async function stockfishValue(chess: Chess): Promise<Value> {
+  // `nodeId`: the move of the tree the position follows.
+  const missingEvaluations = new Map<string, number>();
+  async function stockfishValue(chess: Chess, nodeId: number): Promise<Value> {
     if (!evaluate) throw new Error("Stockfish is needed for these end-of-prep values");
     const fen = chess.fen();
     stockfishLeaves.add(fen);
-    const white = (await evaluate(fen)) ?? 0;
+    const evaluation = await evaluate(fen);
+    if (evaluation === undefined) {
+      missingEvaluations.set(fen, nodeId);
+      misses += 1;
+      return { ...NEUTRAL, outcome: null, missing: true };
+    }
+    const white = evaluation ?? 0;
     const cp = side === "white" ? white : -white;
     return { score: scoreFromCp(cp), outcome: null, cp: capped(cp) };
   }
@@ -178,7 +190,7 @@ export async function calculateExpectedScore(
   const endedAt = new Set<number>(); // tree moves a line ends with
   const lineEnd = (nodeId: number, san: string | null, probability: number, v: Value, complete = true): Value => {
     if (san === null) endedAt.add(nodeId);
-    onPosition?.({ nodeId, san, probability, score: v.score, lineEnd: true, complete });
+    onPosition?.({ nodeId, san, probability, score: v.score, lineEnd: true, complete: complete && !v.missing });
     return v;
   };
 
@@ -204,20 +216,20 @@ export async function calculateExpectedScore(
       if (!node.children.length) {
         // Nothing prepared at all (the starting point itself): the
         // position's overall Explorer results.
-        if (leafValue === "stockfish") return lineEnd(nodeId, null, mass, await stockfishValue(chess));
+        if (leafValue === "stockfish") return lineEnd(nodeId, null, mass, await stockfishValue(chess, nodeId));
         const data = await explorerData(chess.fen(), nodeId);
         if (!data) return lineEnd(nodeId, null, mass, NEUTRAL, false);
-        return lineEnd(nodeId, null, mass, (await explorerValue(data.totals, () => stockfishValue(chess))) ?? NEUTRAL);
+        return lineEnd(nodeId, null, mass, (await explorerValue(data.totals, () => stockfishValue(chess, nodeId))) ?? NEUTRAL);
       }
       const childId = node.children[0];
       const san = tree.nodes[childId].san as string;
       const next = after(chess, san);
       if (finishedGame(next) || lineGoesOn(childId, next)) return value(childId, next, mass);
       // The line ends with this move: its own results, as listed here.
-      if (leafValue === "stockfish") return lineEnd(childId, null, mass, await stockfishValue(next));
+      if (leafValue === "stockfish") return lineEnd(childId, null, mass, await stockfishValue(next, childId));
       const data = await explorerData(chess.fen(), nodeId);
       if (!data) return lineEnd(childId, null, mass, NEUTRAL, false);
-      const own = await explorerValue(data.moves.find((m) => m.san === san), () => stockfishValue(next));
+      const own = await explorerValue(data.moves.find((m) => m.san === san), () => stockfishValue(next, childId));
       // Too rare to be listed: no games to go by, so even, like a position
       // without games (with the Stockfish fallback, Stockfish's value).
       return lineEnd(childId, null, mass, own ?? NEUTRAL);
@@ -228,7 +240,7 @@ export async function calculateExpectedScore(
     if (!data) return lineEnd(nodeId, null, mass, NEUTRAL, false);
     const { moves } = data;
     const total = moves.reduce((n, m) => n + m.white + m.draws + m.black, 0);
-    if (!total) return lineEnd(nodeId, null, mass, leafValue === "explorer" ? NEUTRAL : await stockfishValue(chess));
+    if (!total) return lineEnd(nodeId, null, mass, leafValue === "explorer" ? NEUTRAL : await stockfishValue(chess, nodeId));
     const children = childrenBySan(nodeId);
     let score = 0;
     let outcome: Outcome | null = [0, 0, 0];
@@ -242,8 +254,8 @@ export async function calculateExpectedScore(
       const reply = childId !== undefined && answered(childId, next)
         ? await value(childId, next, replyMass)
         : leafValue === "stockfish"
-          ? await stockfishValue(next)
-          : await explorerValue(move, () => stockfishValue(next));
+          ? await stockfishValue(next, childId ?? nodeId)
+          : await explorerValue(move, () => stockfishValue(next, childId ?? nodeId));
       if (!reply) continue;
       // A reply the tree doesn't answer ends the line: the move of the tree
       // if it has it, else the reply itself, from this position.
@@ -310,5 +322,6 @@ export async function calculateExpectedScore(
     evalCp: leafValue === "stockfish" ? cp : null,
     stockfishPositions: [...stockfishLeaves],
     missingPositions: [...missing].map(([fen, nodeId]) => ({ fen, nodeId })),
+    missingEvaluations: [...missingEvaluations].map(([fen, nodeId]) => ({ fen, nodeId })),
   };
 }

@@ -20,6 +20,10 @@ export interface ExplorerSettings {
    * same as the default bucket. */
   minRating: number | null;
   speeds: ExplorerSpeed[];
+  /** How the expected score values a line where the preparation ends, on
+   * the Stats page and in the editor's figures. Missing on settings saved
+   * before it existed: "explorer". */
+  leafValue?: LeafValue;
 }
 
 export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
@@ -43,6 +47,14 @@ export const LEAF_VALUE_LABELS: Record<LeafValue, string> = {
   explorer: "Explorer results",
   stockfish: "Stockfish",
   "explorer-stockfish": `Explorer, Stockfish under ${MIN_LEAF_GAMES} games`,
+};
+
+/** One word each, for the editor's settings, with the label above as
+ * their title. */
+export const LEAF_VALUE_SHORT_LABELS: Record<LeafValue, string> = {
+  explorer: "Explorer",
+  stockfish: "Stockfish",
+  "explorer-stockfish": "Hybrid",
 };
 
 export interface ExplorerDefaults {
