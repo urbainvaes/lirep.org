@@ -5,11 +5,11 @@
 // 52% on average in the Explorer's pools, Black about 48%, so Bronze is the
 // colour's average and Black's thresholds are BLACK_TIER_OFFSET points
 // lower. Shown as a colored chess piece (see .piece-badge), not a medal.
-export type ScoreTier = "legendary" | "diamond" | "gold" | "silver" | "bronze" | "none";
+export type ScoreTier = "legendary" | "brilliant" | "gold" | "silver" | "bronze" | "none";
 
 export const TIERS: { tier: Exclude<ScoreTier, "none">; label: string; white: number }[] = [
   { tier: "legendary", label: "Legendary", white: 60 },
-  { tier: "diamond", label: "Diamond", white: 59 },
+  { tier: "brilliant", label: "Brilliant", white: 59 },
   { tier: "gold", label: "Gold", white: 57 },
   { tier: "silver", label: "Silver", white: 54 },
   { tier: "bronze", label: "Bronze", white: 52 },

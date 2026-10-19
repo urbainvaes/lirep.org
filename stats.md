@@ -72,7 +72,7 @@ The study detail shows win and loss probabilities; draws are the remainder.
 Expected score is `winProbability = winRate + 0.5 * drawProbability`.
 Study cards on the home page show the expected score, and their Stats
 button opens the study's Stats page, whose legend gives the score tiers
-by side (for White: Legendary at 60%+, Diamond at 59%+, Gold at 57%+,
+by side (for White: Legendary at 60%+, Brilliant at 59%+, Gold at 57%+,
 Silver at 54%+, Bronze at 52%+, about White's average, otherwise no tier;
 Black's thresholds are 4 points lower).
 Calculations are started on the Stats page; the cards have no

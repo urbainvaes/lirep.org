@@ -1067,7 +1067,7 @@ body {
 }
 
 .piece-badge-btn:hover .piece-badge {
-  transform: scale(1.12) rotate(-4deg);
+  transform: scale(1.35) rotate(-5deg);
   background-position: right center;
 }
 
@@ -1098,7 +1098,7 @@ body {
 }
 
 .study-card__trophy:hover .piece-badge {
-  transform: scale(1.25) rotate(-4deg);
+  transform: scale(1.6) rotate(-6deg);
   background-position: right center;
 }
 
@@ -1109,7 +1109,7 @@ body {
 
 /* Legendary shines a lot: an iridescent gradient that keeps flowing, a
    pulsing coloured halo, and two sparkles twinkling at its corners. Still
-   for those who ask for less motion. Seamless, like Diamond's: the
+   for those who ask for less motion. Seamless, like Brilliant's: the
    gradient ends on the colour it starts with, and each cycle shifts it by
    one repeat (400% wide: 133.33%). */
 @media (prefers-reduced-motion: no-preference) {
@@ -1196,17 +1196,17 @@ body {
   }
 }
 
-.piece-badge--diamond {
+.piece-badge--brilliant {
   --piece-c1: #f2fdff;
   --piece-c2: #67bfd8;
 }
 
-/* Diamond shines: a white glint sweeps across it every few seconds, its
+/* Brilliant shines: a white glint sweeps across it every few seconds, its
    glow brightening as it passes. Still for those who ask for less motion.
    Seamless: the gradient starts and ends on the same colour, so it repeats,
    and each cycle shifts it by exactly one repeat (300% wide: 150%). */
 @media (prefers-reduced-motion: no-preference) {
-  .piece-badge.piece-badge--diamond {
+  .piece-badge.piece-badge--brilliant {
     background-image: linear-gradient(
       115deg,
       var(--piece-c2) 0%,
@@ -1216,15 +1216,15 @@ body {
       var(--piece-c2) 100%
     );
     background-size: 300% auto;
-    animation: diamond-glint 3.2s ease-in-out infinite;
+    animation: brilliant-glint 3.2s ease-in-out infinite;
   }
 
-  .piece-badge-btn:hover .piece-badge--diamond {
+  .piece-badge-btn:hover .piece-badge--brilliant {
     animation-duration: 1.4s;
   }
 }
 
-@keyframes diamond-glint {
+@keyframes brilliant-glint {
   0%,
   55% {
     background-position: 150% center;
