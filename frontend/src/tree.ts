@@ -267,6 +267,11 @@ function renderLine(
   return `<div class="tree-line">${html}</div>`;
 }
 
+// The moves after `nodeId`, in all its lines.
+function movesAfter(tree: StudyTree, nodeId: number): number {
+  return tree.nodes[nodeId].children.reduce((count, childId) => count + 1 + movesAfter(tree, childId), 0);
+}
+
 // The moves at a branching, each in a fold with what follows it, in the
 // tree's own order (never reordered by their figures); then the replies the
 // tree doesn't have.
@@ -287,7 +292,10 @@ function renderFolds(
       ? renderFolds(tree, id, depth + 1, currentId, side, studyStartNodeId, marks)
       : renderLine(tree, next[0], depth + 1, currentId, side, studyStartNodeId, marks);
     const open = marks.folding?.open.has(id) ? " open" : "";
-    return `<details class="tree-fold" data-fold-id="${id}"${open}><summary class="tree-fold__head">${head}</summary><div class="tree-fold__body">${body}</div></details>`;
+    // How many moves the fold holds, after its figures; shown while it's closed.
+    const moves = movesAfter(tree, id);
+    const count = `<span class="tree-fold__count" title="${moves} more move${moves === 1 ? "" : "s"} in this line">(${moves})</span>`;
+    return `<details class="tree-fold" data-fold-id="${id}"${open}><summary class="tree-fold__head">${head}${count}</summary><div class="tree-fold__body">${body}</div></details>`;
   });
   const others = marks.folding?.others?.get(parentId);
   const othersRow = others && others.probability > 0

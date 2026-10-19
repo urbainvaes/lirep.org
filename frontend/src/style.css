@@ -2505,6 +2505,17 @@ button.study-head__link:disabled:hover {
 
 /* Experimental: how likely the position after a move is to be reached, and
    its expected score, once the Explorer data for the whole study is loaded. */
+/* A closed fold's number of moves, after the figures. */
+.tree-fold__count {
+  margin-left: 6px;
+  color: var(--text-dim);
+  font-size: 0.8em;
+}
+
+.tree-fold[open] > .tree-fold__head > .tree-fold__count {
+  display: none;
+}
+
 .tree-move-stat {
   margin-left: 6px;
   padding: 0 5px;
