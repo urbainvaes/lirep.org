@@ -243,11 +243,16 @@ def init_db() -> None:
                 reason TEXT NOT NULL,
                 moves INTEGER NOT NULL,
                 time_ms INTEGER NOT NULL,
-                finished_at TEXT NOT NULL
+                finished_at TEXT NOT NULL,
+                selection TEXT NOT NULL DEFAULT 'explorer'
             )
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS bullet_runs_owner ON bullet_runs (owner, study_id, finished_at)")
+        # How the run's line was chosen (explorer, uniform or cycle); runs from
+        # before the choice existed used the Explorer's frequencies.
+        if "selection" not in {row["name"] for row in conn.execute("PRAGMA table_info(bullet_runs)")}:
+            conn.execute("ALTER TABLE bullet_runs ADD COLUMN selection TEXT NOT NULL DEFAULT 'explorer'")
         if not has_log:
             conn.execute(
                 """
@@ -678,13 +683,20 @@ def practice_totals(owner: str) -> dict[int, dict[str, int]]:
 
 
 def log_bullet_run(
-    owner: str, study_id: int, success: bool, reason: str, moves: int, time_ms: int, finished_at: str
+    owner: str,
+    study_id: int,
+    success: bool,
+    reason: str,
+    moves: int,
+    time_ms: int,
+    finished_at: str,
+    selection: str = "explorer",
 ) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO bullet_runs (owner, study_id, success, reason, moves, time_ms, finished_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (owner, study_id, int(success), reason, moves, time_ms, finished_at),
+            "INSERT INTO bullet_runs (owner, study_id, success, reason, moves, time_ms, finished_at, selection)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (owner, study_id, int(success), reason, moves, time_ms, finished_at, selection),
         )
 
 

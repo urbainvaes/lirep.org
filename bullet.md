@@ -2,16 +2,24 @@
 
 A timed run through a study (`frontend/src/bullet.ts`, opened by
 `practice-session.html?id=…&mode=bullet`). User documentation:
-`frontend/doc/practice.html#bullet`.
+`frontend/doc/bullet.html`.
 
 ## How it works now
 
 - **Clock:** 1 minute, plus 2 seconds per correct move. It runs only on the
   player's moves; the computer's replies (after a 250 ms pause) don't use it.
-- **The computer's moves:** only the replies the study has, each weighted by
-  its game count in the Opening Explorer, with the study's Explorer settings.
-  A reply the Explorer doesn't list has weight 0; a position without Explorer
-  data, or whose replies all have 0 games, gets a uniform choice.
+- **The computer's moves:** only the replies the study has, chosen by the
+  line selection (an option, remembered in the browser as
+  `bullet-line-selection`):
+  - `explorer` (default): each weighted by its game count in the Opening
+    Explorer, with the study's Explorer settings. A reply the Explorer
+    doesn't list has weight 0; a position without Explorer data, or whose
+    replies all have 0 games, gets a uniform choice.
+  - `uniform`: each of the study's replies equally often.
+  - `cycle`: a line (identified by the move it ends with) not yet played in
+    the cycle, at random; the computer follows the moves towards it. The
+    lines played are kept per study in the browser (`bullet-cycle-{id}`), a
+    line counting once a run on it succeeds; a new cycle begins when all are.
 - **Explorer data:** only what the browser already holds (its IndexedDB
   cache, see `explorer-cache.md`), read once before the first run with
   `cachedExplorerData`. Nothing is fetched from Lichess, so its rate limit
@@ -23,12 +31,24 @@ A timed run through a study (`frontend/src/bullet.ts`, opened by
   end of a line, whoever is to move), before the clock runs out.
 - **After a failure,** the next run replays the computer's replies of the
   failed one (`replay`), then draws as usual past them; a success ends the
-  replay. The start button says "Retry this line" or "New run".
+  replay. The start button says "Retry this line" or "New run". A retry
+  keeps the cycle's chosen line too.
+- **End of a run:** the final position's Stockfish evaluation (White's point
+  of view) at the Stats page's depth (`getSavedEvalDepth`), from the
+  browser's evaluation cache, or else evaluated then and cached; and the
+  line's last move's own Explorer row (games, White/draws/Black). Shown under
+  the result, and in the success popup. A link opens the run on Lichess's
+  analysis board.
+- **Auto-restart** (an option, `bullet-auto-restart`): after a success, the
+  popup stays 2 s and the next run starts; Esc or a click outside cancels it.
+  Never after a failure.
 - **Stats:** one row per run in `bullet_runs` (owner, study, success, reason
-  `finished`/`time`/`wrong`, moves, time used, finish time), recorded by
-  `POST /api/studies/{id}/bullet/runs`. `/api/practice/summary` returns each
-  study's successes out of all runs and out of the last 30
-  (`BULLET_RECENT_RUNS`). Runs don't touch the spaced-repetition knowledge.
+  `finished`/`time`/`wrong`, moves, time used, finish time, line selection),
+  recorded by `POST /api/studies/{id}/bullet/runs`. `/api/practice/summary`
+  returns each study's successes out of all runs, out of the last 30
+  (`BULLET_RECENT_RUNS`), and in the last month with the month's runs. The
+  Bullet screen shows the month's; the Practice card all-time. Runs don't
+  touch the spaced-repetition knowledge.
 
 ## Possible improvements
 
@@ -39,9 +59,6 @@ A timed run through a study (`frontend/src/bullet.ts`, opened by
   work on any device, and beyond the browser cache's 30 days. The editor's
   live calculation and the Stats page's calculation already read every one
   of these positions and could upload them.
-- **A "Load the missing Explorer data" button** on the Bullet screen, fetching
-  in the background only the positions without data (as Calculate does in
-  the editor), instead of sending the player to the editor.
 - **A floor for rare replies:** a reply the Explorer doesn't list is never
   played now. A small minimum weight would still test it now and then.
 
@@ -62,7 +79,10 @@ A timed run through a study (`frontend/src/bullet.ts`, opened by
 
 ### Stats
 - **Per line:** which line each run went down and where wrong moves happen,
-  to show the weakest lines (and perhaps feed them to spaced repetition).
+  to show the weakest lines (and perhaps feed them to spaced repetition, or
+  to the line selection: a "weakest lines first" choice).
+- **By line selection:** stats apart for each choice (recorded already),
+  since Uniform and Cycle bring up rare lines much more often.
 - **Records:** fastest successful run, longest streak of successes.
 - **History:** a chart of the success rate over time, and Bullet runs in the
   Practice page's activity calendar.
@@ -71,4 +91,3 @@ A timed run through a study (`frontend/src/bullet.ts`, opened by
 ### Interface
 - **Phones:** check the layout of the clock and the board on a narrow screen,
   where the panel goes under the board.
-- **Focus mode** (as in the editor): only the board and the clock.

@@ -9,6 +9,7 @@ export interface BulletStats {
   recentRuns: number;
   recentSuccesses: number;
   monthSuccesses: number;
+  monthRuns: number;
 }
 
 // Kept in step with BULLET_RECENT_RUNS in backend/app/practice.py.

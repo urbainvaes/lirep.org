@@ -3564,6 +3564,98 @@ details[open] > summary.tree-fold__head::before {
   opacity: 0.8;
 }
 
+/* Bullet's options: the gear in the tools' row, like the flip and focus
+   buttons, and its panel under the row. */
+.bullet-options-btn {
+  display: inline-flex;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.bullet-options-btn:hover,
+.bullet-options-btn[aria-expanded="true"] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.bullet-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: var(--card-nested-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bullet-options .study-switch {
+  align-self: flex-start;
+  padding: 0;
+}
+
+.bullet-options__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 0.85rem;
+}
+
+.bullet-options__lines legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.bullet-options__hint {
+  margin-left: 6px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+/* With Cycle: how far through the study's lines. */
+.bullet-cycle {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* After a run: the position's evaluation and the last move's Explorer
+   results, under the result and in the success popup. */
+.bullet-end-info {
+  align-self: center;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.bullet-end-info p {
+  margin: 2px 0;
+}
+
+.bullet-end-info--done {
+  margin: -8px 0 16px;
+}
+
+.bullet-done__restart {
+  margin: 12px 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
 .bullet-stats {
   margin-left: auto;
   color: var(--text-dim);

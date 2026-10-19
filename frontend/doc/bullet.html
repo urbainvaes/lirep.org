@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        document.documentElement.dataset.theme =
+          t === "light" || t === "dark" ? t : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      } catch (e) {}
+    </script>
+    <meta name="description" content="Bullet practice on Lirep.org: a race through your preparation against the clock." />
+    <title>Bullet — Lirep.org Guide</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#e4e1dd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#2e2a24" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="Lirep" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-title" href="/">
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
+          <span class="site-name">lirep<span class="tld">.org</span></span>
+        </a>
+        <nav class="site-nav">
+          <a href="/practice.html">Practice</a>
+          <a href="/community.html">Community</a>
+          <a href="/forum.html">Forum</a>
+          <a href="/tutorial.html">Tutorial</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <div class="site-auth" id="auth-area">
+          <a class="btn btn-primary" href="/auth/login">Sign in</a>
+        </div>
+      </div>
+    </header>
+    <main class="site-main doc-main">
+      <h1 class="page-title">Bullet</h1>
+      <p class="doc-intro">A race through your preparation against the clock: the computer plays the opponent's moves as players do, and you play yours from memory, fast.</p>
+      <nav aria-label="Documentation">
+        <a href="index.html">Overview</a>
+        <a href="studies.html">Studies</a>
+        <a href="stats.html">Stats</a>
+        <a href="practice.html">Practice</a>
+        <a href="bullet.html" aria-current="page">Bullet</a>
+      </nav>
+
+      <section>
+        <h2>A run</h2>
+        <p>Open it with the Bullet button on a study's card in the Practice tab. A run starts at the study's starting point, with <strong>1 minute on your clock, plus 2 seconds for each correct move</strong>. It succeeds when it reaches the end of a line of your study before the clock runs out.</p>
+        <ul>
+          <li><strong>Your moves</strong> must be your prepared move, the first one in the study at that position. Any other move ends the run, and the prepared move is shown as an arrow.</li>
+          <li><strong>The computer's moves</strong> are only replies your study has: a run never leaves your preparation. Which one it plays depends on the line selection (see <a href="#options">Options</a>).</li>
+          <li><strong>The clock</strong> runs only on your moves, as in a game; the computer's replies don't use your time. It turns red under 10 seconds.</li>
+          <li><strong>After a failed run</strong> (a wrong move, or out of time), the next run follows the same line: the computer replays its replies, then chooses as usual once past them. The button says "Retry this line"; after a success it says "New run".</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>At the end of a run</h2>
+        <ul>
+          <li><strong>A success</strong> brings up a popup, with confetti, the time taken and the moves played.</li>
+          <li><strong>Evaluation:</strong> Stockfish's evaluation of the position where the run ended, from White's point of view, at the depth chosen on the Stats page. If this browser has already evaluated that position (on the Stats page, in the editor, or in an earlier run), it is shown at once; otherwise Stockfish evaluates it then, the clock being stopped, and keeps it for next time.</li>
+          <li><strong>Explorer:</strong> the results of the line's last move, as the Opening Explorer lists them in the position before it: its number of games and its share of White wins, draws and Black wins, with the study's Explorer settings. They are the figures the expected score uses for that line's end.</li>
+          <li><strong>Analysis:</strong> a link opens the run's moves on Lichess's analysis board, up to where it ended (a wrong move included).</li>
+        </ul>
+      </section>
+
+      <section id="options">
+        <h2>Options</h2>
+        <p>The gear above the board opens two options, remembered in this browser for all studies.</p>
+        <ul>
+          <li><strong>Auto-restart after a success:</strong> the success popup stays 2 seconds, then the next run starts. <kbd>Esc</kbd>, or a click outside the popup, cancels it. A failure never restarts by itself, to leave time to look at the mistake.</li>
+          <li><strong>After a success, the next line</strong> is chosen by:
+            <ul>
+              <li><strong>Explorer frequencies</strong> (the default): each of the study's replies as often as it is played in the Opening Explorer, with the study's Explorer settings.</li>
+              <li><strong>Uniform frequencies:</strong> each of the study's replies equally often, so rare lines come up as much as the main ones.</li>
+              <li><strong>Cycle:</strong> every line of the study once, in random order, before any comes back. A line counts as played once a run on it succeeds. "Line 4 / 12" above the board shows how far the cycle is; it is kept per study in this browser, and a new one begins when all lines are played.</li>
+            </ul>
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Explorer data</h2>
+        <p>The computer's frequencies come from the Opening Explorer data this browser already holds (the Explorer panel, the editor's figures and the Stats page load it), read before the first run, so that Lichess's rate limit never stops the clock. Where it has none, the computer chooses uniformly among your study's replies. The box beside the board says for how many positions the frequencies are known, and its button loads the missing ones from the Explorer.</p>
+      </section>
+
+      <section>
+        <h2>Stats</h2>
+        <ul>
+          <li>Above the board: <strong>successes in the last month</strong>, out of the runs in the last month (30 days).</li>
+          <li>On the study's card in the Practice tab: its <strong>Bullet score</strong>, successes out of all runs; the last 30 runs in its tooltip.</li>
+          <li>Each run is recorded with how its line was chosen, so that runs with different line selections can be told apart later.</li>
+          <li>Bullet doesn't change the knowledge score of the Practice sessions.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Keyboard</h2>
+        <ul>
+          <li><kbd>Enter</kbd> starts the next run.</li>
+          <li><kbd>F</kbd> flips the board.</li>
+          <li><kbd>Space</kbd> or <kbd>Z</kbd> switches focus mode; <kbd>Esc</kbd> leaves it, or closes the success popup.</li>
+        </ul>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

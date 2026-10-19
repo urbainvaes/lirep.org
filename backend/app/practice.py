@@ -120,6 +120,7 @@ def bullet_stats(outcomes: list[tuple[bool, str]]) -> dict:
         "recentRuns": len(recent),
         "recentSuccesses": sum(recent),
         "monthSuccesses": sum(success for success, finished_at in outcomes if finished_at >= since),
+        "monthRuns": sum(1 for _, finished_at in outcomes if finished_at >= since),
     }
 
 
@@ -267,6 +268,9 @@ class BulletRunIn(BaseModel):
     reason: Literal["finished", "time", "wrong"]
     moves: int = Field(strict=True, ge=0, le=10_000)
     timeMs: int = Field(strict=True, ge=0, le=24 * 3600 * 1000)
+    # How the run's line was chosen (see bullet.md). Missing from pages
+    # loaded before the choice existed: the Explorer's frequencies.
+    selection: Literal["explorer", "uniform", "cycle"] = "explorer"
 
     @model_validator(mode="after")
     def _reason_matches(self) -> "BulletRunIn":
@@ -282,5 +286,7 @@ def record_bullet_run(study_id: int, payload: BulletRunIn, request: Request) -> 
     if not store.get_study(owner, study_id):
         raise HTTPException(status_code=404, detail="not found")
     now = datetime.now(UTC).isoformat()
-    store.log_bullet_run(owner, study_id, payload.success, payload.reason, payload.moves, payload.timeMs, now)
+    store.log_bullet_run(
+        owner, study_id, payload.success, payload.reason, payload.moves, payload.timeMs, now, payload.selection
+    )
     return bullet_stats(store.bullet_outcomes(owner).get(study_id, []))

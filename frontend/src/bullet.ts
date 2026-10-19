@@ -10,17 +10,28 @@
 // explorerClient.ts), read before a run: a position without it gets a
 // uniform choice among the study's replies, until the info box's button
 // fetches what's missing.
+//
+// Options (the gear, remembered in the browser): auto-restart after a
+// success, and how the line is chosen after a success: by the Explorer's
+// frequencies, uniformly among the study's replies, or cycling through the
+// lines (each once, in random order, before any repeats; the cycle is kept
+// per study). A failed run is retried on the same line whatever the choice.
+// See doc/bullet.html.
 
 import type { Api } from "@lichess-org/chessground/api";
 import type { Color, Key } from "@lichess-org/chessground/types";
 
+import { Chess } from "chess.js";
+
 import { computeDests, createBoard, playMoveSound, toColor } from "./board";
+import { Engine } from "./engine";
+import { evaluatePosition, getSavedEvalDepth, openEvaluationCache, type EvaluationCache } from "./evalCache";
 import type { ExplorerData, ExplorerSettings } from "./explorer";
 import type { BulletStats } from "./bulletStats";
 import { cachedExplorerData, errorMessage, fetchExplorerData } from "./explorerClient";
 import { FOCUS_BUTTON_HTML, setupFocusMode } from "./focusMode";
-import { escapeHtml } from "./layout";
-import { lastMoveAt, lichessAnalysisUrl, positionAt, sanPathTo, type StudyTree } from "./tree";
+import { escapeHtml, fetchMe } from "./layout";
+import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, sanPathTo, type StudyTree } from "./tree";
 
 export interface BulletStudy {
   id: number;
@@ -40,13 +51,53 @@ const LOW_TIME_MS = 10_000;
 
 type EndReason = "finished" | "time" | "wrong";
 
-async function recordRun(studyId: number, reason: EndReason, moves: number, timeMs: number): Promise<BulletStats | null> {
+/** How the computer chooses its replies for a new line (see above). */
+type LineSelection = "explorer" | "uniform" | "cycle";
+const SELECTION_LABELS: Record<LineSelection, [string, string]> = {
+  explorer: ["Explorer frequencies", "Each reply as often as it is played in the Explorer."],
+  uniform: ["Uniform frequencies", "Each of your study's replies equally often."],
+  cycle: ["Cycle", "Every line once, in random order, before any comes back."],
+};
+const AUTO_RESTART_KEY = "bullet-auto-restart";
+const SELECTION_KEY = "bullet-line-selection";
+// After a success with auto-restart on, the success screen stays this long.
+const AUTO_RESTART_MS = 2_000;
+
+function readOption(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeOption(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Keep the choice for this page even when browser storage is blocked.
+  }
+}
+
+// Centipawns from White's point of view, as Lichess shows them.
+function formatEvaluation(cp: number): string {
+  if (Math.abs(cp) > 90_000) return cp > 0 ? "White mates" : "Black mates";
+  return `${cp > 0 ? "+" : ""}${(cp / 100).toFixed(2)}`;
+}
+
+async function recordRun(
+  studyId: number,
+  reason: EndReason,
+  moves: number,
+  timeMs: number,
+  selection: LineSelection,
+): Promise<BulletStats | null> {
   try {
     const res = await fetch(`/api/studies/${studyId}/bullet/runs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ success: reason === "finished", reason, moves, timeMs: Math.round(timeMs) }),
+      body: JSON.stringify({ success: reason === "finished", reason, moves, timeMs: Math.round(timeMs), selection }),
     });
     return res.ok ? res.json() : null;
   } catch {
@@ -83,7 +134,20 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
           <div class="practice-session__tools">
             <button id="flip-board-btn" class="board-flip-btn" type="button" data-icon="&#xe07b;" title="Flip board (f)" aria-label="Flip board"></button>
             ${FOCUS_BUTTON_HTML}
-            <span class="bullet-stats">Successes in the last month: <strong id="bullet-stats">—</strong></span>
+            <button id="bullet-options-btn" class="bullet-options-btn" type="button" aria-expanded="false" aria-controls="bullet-options" title="Options" aria-label="Options"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+            <span id="bullet-cycle" class="bullet-cycle" hidden></span>
+            <span class="bullet-stats" title="Runs that reached the end of the preparation, out of all runs, in the last 30 days">Successes in the last month: <strong id="bullet-stats">—</strong></span>
+          </div>
+          <div id="bullet-options" class="bullet-options" hidden>
+            <button id="bullet-auto-restart" class="study-switch" type="button" role="switch" aria-checked="false"><span class="study-switch__track" aria-hidden="true"></span>Auto-restart after a success</button>
+            <fieldset class="bullet-options__lines">
+              <legend>After a success, the next line</legend>
+              ${(Object.keys(SELECTION_LABELS) as LineSelection[])
+                .map(
+                  (key) => `<label class="tool-settings__radio" title="${SELECTION_LABELS[key][1]}"><input type="radio" name="bullet-selection" value="${key}" />${SELECTION_LABELS[key][0]}<span class="bullet-options__hint">${SELECTION_LABELS[key][1]}</span></label>`,
+                )
+                .join("")}
+            </fieldset>
           </div>
           <div class="study-card study-card--board">
             <div id="board" class="study-board"></div>
@@ -96,6 +160,7 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
             </div>
           </div>
           <p id="bullet-status" class="practice-prompt bullet-status" hidden></p>
+          <div id="bullet-end-info" class="bullet-end-info" hidden></div>
           <a id="bullet-analysis" class="bullet-analysis-link" target="_blank" rel="noopener noreferrer" hidden>Analyse this run on Lichess</a>
         </div>
         <div class="bullet-side-col">
@@ -115,6 +180,8 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
         <div class="bullet-done__box">
           <h2 id="bullet-done-title" class="bullet-done__title">End of preparation!</h2>
           <p id="bullet-done-detail" class="bullet-done__detail"></p>
+          <div id="bullet-done-info" class="bullet-end-info bullet-end-info--done"></div>
+          <p id="bullet-done-restart" class="bullet-done__restart" hidden></p>
           <div class="bullet-done__actions">
             <button id="bullet-done-again" class="btn btn-primary" type="button">New run</button>
             <a id="bullet-done-analysis" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">Analysis</a>
@@ -141,9 +208,16 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
   const doneAgainBtn = document.getElementById("bullet-done-again") as HTMLButtonElement;
   const analysisLink = document.getElementById("bullet-analysis") as HTMLAnchorElement;
   const doneAnalysisLink = document.getElementById("bullet-done-analysis") as HTMLAnchorElement;
+  const endInfoEl = document.getElementById("bullet-end-info") as HTMLElement;
+  const doneInfoEl = document.getElementById("bullet-done-info") as HTMLElement;
+  const doneRestartEl = document.getElementById("bullet-done-restart") as HTMLElement;
+  const cycleEl = document.getElementById("bullet-cycle") as HTMLElement;
+  const optionsBtn = document.getElementById("bullet-options-btn") as HTMLButtonElement;
+  const optionsEl = document.getElementById("bullet-options") as HTMLElement;
+  const autoRestartBtn = document.getElementById("bullet-auto-restart") as HTMLButtonElement;
 
   const showStats = () => {
-    statsEl.textContent = String(stats?.monthSuccesses ?? 0);
+    statsEl.textContent = `${stats?.monthSuccesses ?? 0} / ${stats?.monthRuns ?? 0}`;
   };
 
   // A run that reached the end: a popup over the page, with confetti.
@@ -162,12 +236,42 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     }).join("");
     doneEl.hidden = false;
     doneAgainBtn.focus({ preventScroll: true });
+    doneRestartEl.hidden = !autoRestart;
+    if (autoRestart) {
+      doneRestartEl.textContent = "Next run in 2 seconds… (Esc to stay here)";
+      restartTimer = window.setTimeout(() => void startRun(), AUTO_RESTART_MS);
+    }
   }
 
+  let restartTimer = 0;
   function hideDone(): void {
+    window.clearTimeout(restartTimer);
     doneEl.hidden = true;
     doneConfettiEl.innerHTML = "";
   }
+
+  // --- Options ---------------------------------------------------------
+  let autoRestart = readOption(AUTO_RESTART_KEY) === "on";
+  const savedSelection = readOption(SELECTION_KEY);
+  let selection: LineSelection = savedSelection === "uniform" || savedSelection === "cycle" ? savedSelection : "explorer";
+  autoRestartBtn.setAttribute("aria-checked", String(autoRestart));
+  autoRestartBtn.addEventListener("click", () => {
+    autoRestart = !autoRestart;
+    autoRestartBtn.setAttribute("aria-checked", String(autoRestart));
+    writeOption(AUTO_RESTART_KEY, autoRestart ? "on" : "off");
+  });
+  optionsEl.querySelectorAll<HTMLInputElement>('input[name="bullet-selection"]').forEach((input) => {
+    input.checked = input.value === selection;
+    input.addEventListener("change", () => {
+      selection = input.value as LineSelection;
+      writeOption(SELECTION_KEY, selection);
+      showCycle();
+    });
+  });
+  optionsBtn.addEventListener("click", () => {
+    optionsEl.hidden = !optionsEl.hidden;
+    optionsBtn.setAttribute("aria-expanded", String(!optionsEl.hidden));
+  });
   showStats();
 
   // Whose move it is after `nodeId`: yours when the number of moves played
@@ -275,10 +379,13 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     return reply;
   }
 
-  // A reply drawn by the Explorer's weights, or uniformly without them.
+  // A reply for a new line: towards the cycle's chosen line, else drawn by
+  // the Explorer's weights (uniformly without them), or uniformly.
   function drawReply(nodeId: number): number {
     const children = tree.nodes[nodeId].children;
-    const w = weights.get(nodeId) ?? children.map(() => 1);
+    const towards = children.find((id) => targetPath.has(id));
+    if (towards !== undefined) return towards;
+    const w = selection === "uniform" ? children.map(() => 1) : (weights.get(nodeId) ?? children.map(() => 1));
     const total = w.reduce((a, b) => a + b, 0);
     let r = Math.random() * total;
     for (let i = 0; i < children.length; i++) {
@@ -286,6 +393,100 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
       if (r < 0) return children[i];
     }
     return children[children.length - 1];
+  }
+
+  // --- Cycle -------------------------------------------------------------
+  // The study's lines, by the move each ends with: following your prepared
+  // moves and every reply of the computer's.
+  const lineEnds: number[] = [];
+  (function collect(at: number): void {
+    const children = tree.nodes[at].children;
+    if (!children.length) {
+      lineEnds.push(at);
+      return;
+    }
+    for (const child of yourTurn(at) ? children.slice(0, 1) : children) collect(child);
+  })(startNodeId);
+  // The lines played since the cycle began, kept per study in this browser;
+  // lines no longer in the study drop out by themselves.
+  const cycleKey = `bullet-cycle-${study.id}`;
+  let cycleDone: Set<number> = (() => {
+    try {
+      const saved = JSON.parse(readOption(cycleKey) ?? "[]");
+      return new Set((Array.isArray(saved) ? saved : []).filter((id: unknown) => lineEnds.includes(id as number)));
+    } catch {
+      return new Set<number>();
+    }
+  })();
+  let cycleRestarted = false;
+  // The moves on the way to the line chosen for this run (cycle only).
+  let targetPath = new Set<number>();
+
+  function showCycle(): void {
+    cycleEl.hidden = selection !== "cycle";
+    cycleEl.textContent = `Line ${Math.min(cycleDone.size + 1, lineEnds.length)} / ${lineEnds.length}`;
+    cycleEl.title = cycleRestarted ? "All the lines were played: a new cycle began" : "Lines played in this cycle";
+  }
+  showCycle();
+
+  // A line not yet played in this cycle, at random; a new cycle once all were.
+  function chooseCycleLine(): number {
+    let left = lineEnds.filter((id) => !cycleDone.has(id));
+    cycleRestarted = false;
+    if (!left.length) {
+      cycleDone = new Set();
+      left = [...lineEnds];
+      cycleRestarted = true;
+    }
+    return left[Math.floor(Math.random() * left.length)];
+  }
+
+  // --- End of a run: the evaluation and the last move's Explorer results ---
+  let evaluationCache: Promise<EvaluationCache> | null = null;
+  let endInfoRun = 0;
+  async function showEndInfo(at: number, run: number): Promise<void> {
+    const node = tree.nodes[at];
+    const fen = positionAt(tree, at).fen();
+    let explorerLine = "";
+    if (node.san !== null && node.parentId !== null && study.explorerSettings) {
+      let data;
+      try {
+        data = await cachedExplorerData(positionAt(tree, node.parentId).fen(), study.explorerSettings, study.side);
+      } catch {
+        data = undefined;
+      }
+      const row = data?.moves.find((m) => m.san === node.san);
+      if (!data) explorerLine = `${escapeHtml(node.san)}: no Explorer data for this position in this browser`;
+      else if (!row) explorerLine = `${escapeHtml(node.san)}: too rare to be listed in the Explorer`;
+      else {
+        const games = row.white + row.draws + row.black;
+        const pct = (n: number) => `${Math.round((n / games) * 100)}%`;
+        explorerLine = `<strong>${escapeHtml(node.san)}</strong>: ${games.toLocaleString()} games · White ${pct(row.white)} · draws ${pct(row.draws)} · Black ${pct(row.black)}`;
+      }
+    }
+    const depth = getSavedEvalDepth();
+    const render = (evaluation: string) => {
+      if (run !== endInfoRun) return;
+      const html = `<p>Evaluation: ${evaluation}</p>${explorerLine ? `<p>Explorer: ${explorerLine}</p>` : ""}`;
+      endInfoEl.innerHTML = doneInfoEl.innerHTML = html;
+      endInfoEl.hidden = false;
+    };
+    evaluationCache ??= fetchMe().then((me) => openEvaluationCache(me.username ?? ""));
+    const cache = await evaluationCache;
+    const saved = await cache.get(fen, depth);
+    if (saved !== undefined) return render(`<strong>${formatEvaluation(saved)}</strong> (depth ${depth})`);
+    // Not evaluated in this browser yet: Stockfish does it now, the clock
+    // being stopped, and saves it for the editor and the Stats page.
+    render(`Stockfish is evaluating (depth ${depth})…`);
+    const engine = new Engine();
+    try {
+      const cp = await evaluatePosition(engine, new Chess(fen), depth);
+      if (cp === null) return render("Stockfish gave none");
+      await cache.set(fen, depth, cp);
+      render(`<strong>${formatEvaluation(cp)}</strong> (depth ${depth})`);
+    } finally {
+      engine.terminate();
+    }
   }
 
   let board: Api;
@@ -394,6 +595,14 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     moves = 0;
     usedMs = 0;
     runReplies = [];
+    // A new line (not a retry, which keeps its line): the cycle chooses it;
+    // otherwise replies are drawn as they come.
+    if (!replay.length) {
+      targetPath = new Set();
+      if (selection === "cycle") for (const node of pathTo(tree, chooseCycleLine())) targetPath.add(node.id);
+    }
+    endInfoRun += 1;
+    endInfoEl.hidden = true;
     hideDone();
     startBtn.hidden = true;
     statusEl.hidden = true;
@@ -433,6 +642,12 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     analysisLink.hidden = false;
     startBtn.hidden = false;
     replay = reason === "finished" ? [] : [...runReplies];
+    if (reason === "finished" && selection === "cycle") {
+      cycleDone.add(nodeId);
+      writeOption(cycleKey, JSON.stringify([...cycleDone]));
+    }
+    showCycle();
+    void showEndInfo(nodeId, endInfoRun);
     startBtn.innerHTML = reason === "finished" ? `New run <kbd>Enter</kbd>` : `Retry this line <kbd>Enter</kbd>`;
     if (reason === "finished") showDone(`Reached in ${seconds} s, ${moves} move${moves === 1 ? "" : "s"} played.`);
     else startBtn.focus({ preventScroll: true });
@@ -442,7 +657,7 @@ export function renderBullet(main: HTMLElement, study: BulletStudy, startNodeId:
     item.textContent = message;
     historyEl.prepend(item);
 
-    void recordRun(study.id, reason, moves, usedMs).then((updated) => {
+    void recordRun(study.id, reason, moves, usedMs, selection).then((updated) => {
       if (updated) {
         stats = updated;
         showStats();
