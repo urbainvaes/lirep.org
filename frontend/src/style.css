@@ -1109,7 +1109,9 @@ body {
 
 /* Legendary shines a lot: an iridescent gradient that keeps flowing, a
    pulsing coloured halo, and two sparkles twinkling at its corners. Still
-   for those who ask for less motion. */
+   for those who ask for less motion. Seamless, like Diamond's: the
+   gradient ends on the colour it starts with, and each cycle shifts it by
+   one repeat (400% wide: 133.33%). */
 @media (prefers-reduced-motion: no-preference) {
   .piece-badge.piece-badge--legendary {
     position: relative;
@@ -1121,8 +1123,7 @@ body {
       #ff8ad8,
       #ffd76a,
       #ffffff,
-      #b57bff,
-      #3fc7dd
+      #b57bff
     );
     background-size: 400% auto;
     animation:
@@ -1165,7 +1166,7 @@ body {
     background-position: 0% center;
   }
   to {
-    background-position: 100% center;
+    background-position: 133.333% center;
   }
 }
 
@@ -1201,7 +1202,9 @@ body {
 }
 
 /* Diamond shines: a white glint sweeps across it every few seconds, its
-   glow brightening as it passes. Still for those who ask for less motion. */
+   glow brightening as it passes. Still for those who ask for less motion.
+   Seamless: the gradient starts and ends on the same colour, so it repeats,
+   and each cycle shifts it by exactly one repeat (300% wide: 150%). */
 @media (prefers-reduced-motion: no-preference) {
   .piece-badge.piece-badge--diamond {
     background-image: linear-gradient(
@@ -1224,7 +1227,7 @@ body {
 @keyframes diamond-glint {
   0%,
   55% {
-    background-position: 100% center;
+    background-position: 150% center;
     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
   }
   75% {
