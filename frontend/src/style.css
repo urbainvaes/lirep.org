@@ -5066,6 +5066,176 @@ details[open] > summary.tree-fold__head::before {
   border-color: var(--primary);
 }
 
+/* The Tutorial: a contents list by tab, then per tab a short text and a
+   screenshot whose numbered markers (an SVG over the image, see
+   tutorial.html) the legend under it explains. */
+.tut-page {
+  max-width: 980px;
+}
+
+/* Links as in the documentation; the contents' pills keep their own. */
+.tut-page a {
+  color: var(--primary-hover);
+}
+
+.tut-intro {
+  margin: -8px 0 16px;
+  color: var(--text-dim);
+}
+
+.tut-toc ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  counter-reset: tut-toc;
+}
+
+.tut-toc li {
+  counter-increment: tut-toc;
+}
+
+.tut-toc a {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.tut-toc a::before {
+  margin-right: 6px;
+  color: var(--text-dim);
+  content: counter(tut-toc) ".";
+}
+
+.tut-toc a:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tut-section {
+  margin-top: 40px;
+  scroll-margin-top: 16px;
+}
+
+.tut-section h2 {
+  margin: 0 0 6px;
+}
+
+.tut-section > p {
+  margin: 0 0 14px;
+}
+
+.tut-figure {
+  margin: 0;
+}
+
+.tut-shot {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: zoom-in;
+}
+
+.tut-shot:hover .landing__shot,
+.tut-shot:focus-visible .landing__shot {
+  border-color: var(--primary);
+}
+
+.tut-marks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Orange, with a white edge, to stand out on both themes' screenshots. */
+/* Stroke widths and the numbers' size are set on each marker, scaled to
+   its screenshot (see tutorial.html). */
+.tut-mark__halo {
+  fill: none;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tut-mark__arrow {
+  fill: none;
+  stroke: #f76707;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tut-mark__dot {
+  fill: #f76707;
+  stroke: #fff;
+}
+
+.tut-mark__n {
+  fill: #fff;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.tut-legend {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: tut-mark;
+}
+
+.tut-legend li {
+  position: relative;
+  margin: 6px 0;
+  padding-left: 32px;
+  counter-increment: tut-mark;
+}
+
+.tut-legend li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f76707;
+  color: #fff;
+  font: 700 12px system-ui, sans-serif;
+  content: counter(tut-mark);
+}
+
+.tut-more {
+  margin-top: 40px;
+  color: var(--text-dim);
+}
+
+/* Enlarged, the markers come along. */
+.tut-shot--zoomed {
+  width: min(100%, 1600px);
+  margin: auto;
+  cursor: zoom-out;
+}
+
+.landing__lightbox .tut-shot--zoomed img {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+}
+
 /* The zoomed screenshot, as large as fits in the window. */
 .landing__lightbox {
   max-width: 100vw;
