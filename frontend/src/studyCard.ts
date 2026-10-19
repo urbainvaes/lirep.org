@@ -1,5 +1,6 @@
 import { escapeHtml } from "./layout";
 import { sanPathTo, type StudyTree } from "./tree";
+import { pieceBadgeHtml, scoreTier, TIER_LABELS } from "./scoreTiers";
 
 export interface StudyCardData {
   id: number;
@@ -96,14 +97,24 @@ function gamesBadgeHtml(study: StudyCardData): string {
     </a>`;
 }
 
+// The study's tier, as on its Stats page, linking there: the king in the
+// tier's colour (grey when not calculated yet), at the top right of the card.
+function trophyLinkHtml(study: StudyCardData): string {
+  const score = study.stats?.winProbability;
+  const tier = scoreTier(score, study.side);
+  const title = score === undefined
+    ? "Expected score not calculated yet — click to see the stats"
+    : `${TIER_LABELS[tier]} · expected score ${(score * 100).toFixed(1)}% — click to see the stats`;
+  return `<a class="study-card__trophy" href="/stat.html?id=${study.id}" title="${title}" aria-label="${title}">${pieceBadgeHtml(tier, "sm")}</a>`;
+}
+
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
     <article class="study-card study-card--summary">
-      ${renderStudyCardContent(study, gamesBadgeHtml(study))}
+      ${renderStudyCardContent(study, `<span class="study-card__header-end">${gamesBadgeHtml(study)}${trophyLinkHtml(study)}</span>`)}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
         <a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>
-        <a class="btn btn-secondary" href="/stat.html?id=${study.id}">Stats</a>
         ${deleteButtonHtml(study)}
       </div>
     </article>

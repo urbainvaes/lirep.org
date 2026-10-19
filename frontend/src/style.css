@@ -605,7 +605,7 @@ body {
 
 .study-card__actions {
   display: grid;
-  grid-template-columns: auto auto auto 1fr;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: 4px;
   /* Grid rows stretch every .study-card in a row to the tallest one's
@@ -1073,6 +1073,33 @@ body {
 
 .piece-badge--sm {
   font-size: 1.15rem;
+}
+
+/* On a study's card on the home page: its tier, linking to its Stats page.
+   The king grows and tilts on hover, as the Stats page's does. */
+/* The header's right end: the games badge, if any, then the trophy. */
+.study-card__header-end {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.study-card__trophy {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  margin: -4px -2px -4px 0;
+  text-decoration: none;
+}
+
+.study-card__trophy .piece-badge {
+  font-size: 1.6rem;
+}
+
+.study-card__trophy:hover .piece-badge {
+  transform: scale(1.25) rotate(-4deg);
+  background-position: right center;
 }
 
 .piece-badge--legendary {
