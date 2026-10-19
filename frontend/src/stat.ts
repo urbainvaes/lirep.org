@@ -236,8 +236,8 @@ function sameExplorerSettings(a: CalculationSettings, b: CalculationSettings): b
 type ScoreTier = "legendary" | "diamond" | "gold" | "silver" | "bronze" | "none";
 
 const TIERS: { tier: Exclude<ScoreTier, "none">; label: string; white: number }[] = [
-  { tier: "legendary", label: "Legendary", white: 63 },
-  { tier: "diamond", label: "Diamond", white: 60 },
+  { tier: "legendary", label: "Legendary", white: 60 },
+  { tier: "diamond", label: "Diamond", white: 59 },
   { tier: "gold", label: "Gold", white: 57 },
   { tier: "silver", label: "Silver", white: 54 },
   { tier: "bronze", label: "Bronze", white: 52 },
