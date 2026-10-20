@@ -31,6 +31,11 @@ budget between the replies (a knapsack over the replies, weighted by how
 often each is played). To keep the search finite, only your most played
 moves are candidates, and lines reached by few games, or too deep, end there.
 
+--greedy instead adds one move at a time, each time the one raising the
+value most, printing the value after each: much faster (only the positions
+next to the repertoire are needed) and step by step, but not always
+optimal: a move worth little alone, but much with the next one, is missed.
+
 All the parameters, with their defaults and what they mean, are in the
 PARAMETERS block below; each can be changed on the command line.
 
@@ -52,13 +57,18 @@ position, the best value found there for each number of moves.
 
 Needs python-chess and, for the evaluation, Stockfish.
 
-Examples, for the Alapin (1.e4 c5 2.c3) as White (with
-export LICHESS_TOKEN=lip_...):
+Examples, mostly for the Alapin (1.e4 c5 2.c3) as White (with
+export LICHESS_TOKEN=lip_..., or the token in ~/.config/lirep/lichess-token):
   # The best repertoire by expected score with at most 20 memorized moves:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --moves-budget 20
   # The same by expected Stockfish evaluation (Stockfish from Guix):
   guix shell stockfish -- tools/optimal_repertoire.py --moves "e4 c5 c3" \\
       --side white --moves-budget 20 --objective evaluation
+  # Moves added one at a time to a study until it reaches 59%, with Lirep's
+  # Hybrid values:
+  guix shell stockfish -- tools/optimal_repertoire.py --moves "e4 e5 Nc3" \\
+      --side white --base vienna.lirep.json --objective hybrid --greedy \\
+      --target 0.59 --out vienna-59.lirep.json
   # The smallest repertoire reaching 56%, written as a Lirep study file:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --target 0.56 \\
       --out alapin.lirep.json
@@ -632,6 +642,218 @@ class HybridSearch(Search):
         return self.evaluator.get(board)["best"][: self.a.engine_candidates]
 
 
+# ---- Greedy -----------------------------------------------------------------
+
+
+class Greedy:
+    """Adds your moves one at a time, each time the one that raises the
+    expected value most, printing the value after each, until the target
+    (or the number of moves) is reached. Not always optimal, unlike the
+    search above, but it needs only the positions next to the repertoire,
+    and has an answer after every move.
+
+    The repertoire is a tree {san: subtree} from the start. An addition is
+    one of your moves answering an opponent reply the tree leaves
+    unanswered: after one of your moves inside a line, or after a line's
+    last move (extending it). Values are Lirep's, as in Search: a line ends
+    with its last answered move, and an unanswered reply counts with its
+    own results."""
+
+    def __init__(self, search: Search, board: chess.Board, side: chess.Color, tree: dict, a: argparse.Namespace):
+        self.s, self.board, self.side, self.tree, self.a = search, board, side, tree, a
+        self.upper = a.mate_cap if isinstance(search, EvaluationSearch) else 1.0  # the best value possible
+        self.options: dict[str, list[tuple[float, str]]] = {}  # FEN -> your candidates' values, best first
+
+    # -- Values ---------------------------------------------------------------
+
+    def listed(self, board: chess.Board) -> tuple[dict, list[dict]]:
+        data = self.s.explorer.get(board)
+        return data, [m for m in data["moves"] if games_of(m) > 0]
+
+    def unanswered(self, board: chess.Board, row: dict) -> float:
+        """An opponent's move left unanswered (`board`: after it)."""
+        return self.s.value(board, row["white"], row["draws"], row["black"])
+
+    def end_value(self, row: dict | None, after: chess.Board) -> float:
+        """A line ending with your move (`row`: its explorer row, `after`:
+        the position it leads to)."""
+        if isinstance(self.s, HybridSearch):
+            return self.s.end_value(row, Node(after, False))
+        if isinstance(self.s, EvaluationSearch) or not (row and games_of(row)):
+            return self.opponent(after, {})
+        return self.s.end_value(row, Node(after, False))
+
+    def opponent(self, board: chess.Board, sub: dict) -> float:
+        """The opponent to move, with the tree's replies `sub`."""
+        data, moves = self.listed(board)
+        total = sum(games_of(m) for m in moves)
+        if not total:
+            return self.s.value(board, data["white"], data["draws"], data["black"])
+        value = 0.0
+        for m in moves:
+            after = board.copy()
+            after.push_uci(m["uci"])
+            child = sub.get(m["san"])
+            value += games_of(m) / total * (self.own(after, child) if child else self.unanswered(after, m))
+        return value
+
+    def own(self, board: chess.Board, sub: dict) -> float:
+        """Your move, the tree's being the first key of `sub`."""
+        san = next(iter(sub))
+        after = board.copy()
+        after.push_san(san)
+        if self.goes_on(sub[san]):
+            return self.opponent(after, sub[san])
+        _, moves = self.listed(board)
+        return self.end_value(next((m for m in moves if m["san"] == san), None), after)
+
+    @staticmethod
+    def goes_on(sub: dict) -> bool:
+        """After your move: one of the opponent's replies is answered."""
+        return any(child for child in sub.values())
+
+    def total(self) -> float:
+        if self.board.turn == self.side:
+            if self.tree:
+                return self.own(self.board, self.tree)
+            data = self.s.explorer.get(self.board)
+            return self.s.value(self.board, data["white"], data["draws"], data["black"])
+        return self.opponent(self.board, self.tree)
+
+    # -- The additions --------------------------------------------------------
+
+    def positions(self):
+        """The opponent's turns in the tree: (board, its replies in the tree
+        (the dict itself, to add to), share of the games reaching it, the
+        value of the line ending before it if no reply is answered, else
+        None). At the start, the opponent's turn always counts."""
+        out = []
+
+        def opp(board, sub, reach, ended):
+            out.append((board, sub, reach, ended))
+            _, moves = self.listed(board)
+            total = sum(games_of(m) for m in moves)
+            for m in moves:
+                child = sub.get(m["san"])
+                if child:
+                    after = board.copy()
+                    after.push_uci(m["uci"])
+                    own(after, child, reach * games_of(m) / total)
+
+        def own(board, sub, reach):
+            san = next(iter(sub))
+            after = board.copy()
+            after.push_san(san)
+            ended = None
+            if not self.goes_on(sub[san]):
+                _, moves = self.listed(board)
+                ended = self.end_value(next((m for m in moves if m["san"] == san), None), after)
+            opp(after, sub[san], reach, ended)
+
+        if self.board.turn == self.side:
+            if self.tree:
+                own(self.board, self.tree, 1.0)
+        else:
+            opp(self.board, self.tree, 1.0, None)
+        return out
+
+    def candidates(self, board: chess.Board) -> list[tuple[float, str]]:
+        """Your candidate moves at `board`, with the value of a line ending
+        with each, best first."""
+        fen = board.fen()
+        if fen not in self.options:
+            _, moves = self.listed(board)
+            played = sorted((m for m in moves if games_of(m) >= self.a.min_games), key=lambda m: -games_of(m))
+            ucis = [m["uci"] for m in played[: self.a.candidates]]
+            ucis += [u for u in self.s.extra_candidates(board) if u not in ucis]
+            rows = {m["uci"]: m for m in moves}
+            values = []
+            for uci in ucis:
+                after = board.copy()
+                after.push_uci(uci)
+                values.append((self.end_value(rows.get(uci), after), board.san(chess.Move.from_uci(uci))))
+            self.options[fen] = sorted(values, reverse=True)
+        return self.options[fen]
+
+    def best_addition(self):
+        """The addition raising the value most: (gain, position's replies
+        dict, reply's san, your move's san, board after your move), and how
+        many replies were examined out of how many. The replies are looked
+        at by their best possible gain, stopping when it can't beat the best
+        found (only those need explorer data)."""
+        frontier = []
+        for board, sub, reach, ended in self.positions():
+            _, moves = self.listed(board)
+            total = sum(games_of(m) for m in moves)
+            if not total:
+                continue
+            values, ps = {}, {}
+            for m in moves:
+                after = board.copy()
+                after.push_uci(m["uci"])
+                child = sub.get(m["san"])
+                values[m["san"]] = self.own(after, child) if child else self.unanswered(after, m)
+                ps[m["san"]] = games_of(m) / total
+            now = sum(ps[s] * values[s] for s in values)
+            for m in moves:
+                if sub.get(m["san"]):
+                    continue  # answered already
+                p = ps[m["san"]]
+                if reach * p < self.a.min_reach:
+                    continue
+                # Answering m changes this position's value by p * (yours - m's).
+                # A line ended before it: it goes on, worth this position.
+                base = now - p * values[m["san"]]
+                old = now if ended is None else ended
+                frontier.append((reach * (base + p * self.upper - old), reach, p, base, old, board, sub, m))
+        frontier.sort(key=lambda f: -f[0])
+        best, ranked, examined = None, [], 0
+        for bound, reach, p, base, old, board, sub, m in frontier:
+            if best and bound <= best[0]:
+                break
+            examined += 1
+            after = board.copy()
+            after.push_uci(m["uci"])
+            for value, san in self.candidates(after)[:1]:
+                gain = reach * (base + p * value - old)
+                done = after.copy()
+                done.push_san(san)
+                ranked.append((gain, done))
+                if best is None or gain > best[0]:
+                    best = (gain, sub, m["san"], san, done)
+        ranked.sort(key=lambda r: -r[0])
+        return best, ranked[:3], examined, len(frontier)
+
+    def change(self, g: float) -> str:
+        """A change of the value: in points for a score, in pawns for an evaluation."""
+        return f"{g:+.2f} pawns" if isinstance(self.s, EvaluationSearch) else f"{100 * g:+.2f} points"
+
+    def run(self, fmt, target: float | None, budget: int) -> int:
+        value = self.total()
+        log(f"start: expected {fmt(value)} with the base repertoire"
+            + (f"; target {fmt(target)}" if target is not None else f"; adding up to {budget} moves"))
+        added = 0
+        while (target is None or value < target - 1e-12) and added < budget:
+            best, ranked, examined, size = self.best_addition()
+            if best is None or best[0] <= 1e-12:
+                log("no addition raises the value any more: stopping")
+                break
+            gain, sub, reply, san, done = best
+            sub[reply] = {san: {}}
+            added += 1
+            new = self.total()
+            log(f"move {added}: {line_of(done)}  ->  expected {fmt(new)} ({self.change(new - value)}; "
+                f"{examined} of {size} unanswered replies examined)")
+            if len(ranked) > 1:
+                log("         next best: " + "; ".join(f"{line_of(b)} {self.change(g)}" for g, b in ranked[1:]))
+            if abs(new - value - gain) > 1e-9:
+                log(f"         (the gain was expected to be {self.change(gain)})")
+            value = new
+        if target is not None and value >= target - 1e-12:
+            log(f"target reached: {fmt(value)} with {added} new moves")
+        return added
+
+
 # ---- The solution -----------------------------------------------------------
 
 
@@ -776,6 +998,11 @@ def common_parser(description: str, objective: str, target_help: str) -> argpars
                         help="A Lirep study file to build on: its moves are kept, at no cost, and the budget is "
                              "for new moves. It must start with --moves.")
     parser.add_argument("--out", help="Write the repertoire as a Lirep study file.")
+    parser.add_argument("--greedy", action="store_true",
+                        help="Add one move at a time, the one raising the value most, printing the value after "
+                             "each, until --target or --moves-budget: fast and step by step, but not always "
+                             "optimal. Candidates are as in the search (--candidates, Stockfish's best); "
+                             "replies reached by fewer than --min-reach of the games are left out.")
     return parser
 
 
@@ -846,6 +1073,18 @@ def _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, 
         print(f"  base:       {a.base}, {count_own(base, board.turn == side)} of your moves, kept and free")
     search = make_search(explorer, side)
     search.root_ply = board.ply()
+    if a.greedy:
+        tree = json.loads(json.dumps(base)) if base else {}
+        print("\nGreedy: one move at a time, each the one raising the value most.\n", flush=True)
+        added = Greedy(search, board, side, tree, a).run(fmt, a.target, a.max_moves)
+        explorer.save()
+        print(f"\n{added} moves added: {explorer.queries:,} explorer requests, {explorer.from_cache:,} answers "
+              f"from the cache, in {time.monotonic() - START:.0f} s.\n")
+        _, moves = Greedy(search, board, side, tree, a).listed(board) if board.turn != side else (None, [])
+        total = sum(games_of(m) for m in moves)
+        finish(a, tree, board, side, base, prefix, {m["san"]: games_of(m) / total for m in moves} if total else {},
+               f"greedy, {added} new moves")
+        return
     print("\nThe search: '>' enters a position, '<' leaves it with the best value found there for each number of "
           "your moves (only where it improves).\n", flush=True)
     root = search.node(board, 1.0, len(prefix), base)
@@ -874,23 +1113,36 @@ def _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, 
         name = f"{a.moves or 'Repertoire'}, smallest for {objective} {fmt(a.target)}"
     tree = solution(root, size)
     replies = {san: p for san, p, _ in root.replies} if not root.own else {}
+    finish(a, tree, board, side, base, prefix, replies, name)
+
+
+def finish(a, tree: dict, board: chess.Board, side: chess.Color, base: dict | None, prefix: list[str],
+           replies: dict[str, float], name: str) -> None:
+    """Prints the repertoire, and writes it as a study file with --out: the
+    base file's own, with these moves, if there is one."""
+    own = board.turn == side
     print_tree(tree, board, 0, replies, base, side)
-    total = count_own(tree, root.own)
+    total = count_own(tree, own)
     if base is None:
         print(f"\n({total} of your moves in this tree.)")
     else:
-        print(f"\n({total} of your moves in this tree, {count_new(tree, base, root.own)} of them new.)")
+        print(f"\n({total} of your moves in this tree, {count_new(tree, base, own)} of them new.)")
 
     if a.out:
-        study = {
-            "format": "lirep-study",
-            "version": 1,
-            "name": name,
-            "side": a.side,
-            "explorerSettings": {"source": "lirep", "database": "lichess",
-                                 "minRating": int(a.ratings.split(",")[0]), "speeds": a.speeds.split(",")},
-            "moves": study_moves(prefix, tree),
-        }
+        if a.base:
+            study = json.loads(a.base.read_text())
+            study["name"] = f"{study.get('name', 'Repertoire')} ({name})"
+        else:
+            local = urllib.parse.urlparse(a.explorer).hostname in ("127.0.0.1", "localhost")
+            study = {
+                "format": "lirep-study",
+                "version": 1,
+                "name": name,
+                "side": a.side,
+                "explorerSettings": {"source": "lirep" if local else "lichess", "database": "lichess",
+                                     "minRating": int(a.ratings.split(",")[0]), "speeds": a.speeds.split(",")},
+            }
+        study["moves"] = study_moves(prefix, tree)
         with open(a.out, "w") as f:
             json.dump(study, f, indent=2)
             f.write("\n")
