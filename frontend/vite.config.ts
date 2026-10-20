@@ -23,6 +23,7 @@ export default defineConfig({
         stats: resolve(__dirname, "stats.html"),
         stat: resolve(__dirname, "stat.html"),
         about: resolve(__dirname, "about.html"),
+        changelog: resolve(__dirname, "changelog.html"),
         tutorial: resolve(__dirname, "tutorial.html"),
         practice: resolve(__dirname, "practice.html"),
         community: resolve(__dirname, "community.html"),

@@ -112,6 +112,31 @@ input,
   margin-left: 0;
 }
 
+/* The branch icon before the theme toggle: the Changelog page, with the
+   source code and a button to open an issue. */
+.source-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.source-link:hover,
+.source-link[aria-current="page"] {
+  border-color: var(--primary);
+  color: var(--text-strong);
+}
+
+.source-link + .theme-toggle {
+  margin-left: -16px;
+}
+
 
 * {
   box-sizing: border-box;
@@ -4652,6 +4677,10 @@ details[open] > summary.tree-fold__head::before {
     margin-left: auto;
   }
 
+  .source-link + .theme-toggle {
+    margin-left: -4px;
+  }
+
   /* A person icon instead of the name; the name stays in the tooltip and the
      accessible label. */
   .username {
@@ -6237,4 +6266,405 @@ details[open] > summary.tree-fold__head::before {
 
 .about-arrows {
   max-width: 760px;
+}
+
+/* The Changelog page: the source code on GitHub, then the changes by day,
+   each a <details> whose summary opens its details and figure. */
+.changelog-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+}
+
+.changelog-source__icon {
+  flex-shrink: 0;
+  color: var(--lirep);
+}
+
+.changelog-source__text {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-dim);
+}
+
+.doc-main .changelog-source__repo {
+  color: var(--text-strong);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.doc-main .changelog-source__repo:hover {
+  color: var(--primary-hover);
+}
+
+.changelog-source__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.doc-main .changelog-source__actions .btn-primary {
+  color: #fff;
+}
+
+.doc-main .changelog-source__actions .btn-secondary {
+  color: var(--text-strong);
+}
+
+.changelog {
+  margin-top: 28px;
+}
+
+.changelog__hint {
+  margin: -4px 0 8px;
+  color: var(--text-dim);
+}
+
+.changelog-day__date {
+  margin: 22px 0 8px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.changelog-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.changelog-list > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.changelog-item > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.changelog-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.changelog-item > summary::before {
+  content: "▸";
+  flex-shrink: 0;
+  width: 0.8em;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+}
+
+.changelog-item[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.changelog-item > summary:hover {
+  background: var(--card-nested-bg);
+}
+
+.changelog-item[open] > summary {
+  background: var(--card-nested-bg);
+}
+
+.changelog-item__area {
+  flex-shrink: 0;
+  min-width: 84px;
+  color: var(--lirep);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.changelog-item__summary {
+  flex: 1;
+  color: var(--text-strong);
+}
+
+.changelog-item__has-figure {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.changelog-item__body {
+  padding: 4px 20px 16px 50px;
+  line-height: 1.65;
+}
+
+.changelog-item__body p {
+  margin: 10px 0;
+}
+
+.changelog-item__body ul {
+  padding-left: 22px;
+}
+
+.changelog-kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--card-nested-bg);
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: 0.85em;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.changelog-figure {
+  margin: 16px 0 4px;
+  padding: 18px;
+  background: var(--page-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.changelog-figure figcaption {
+  margin-top: 12px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.changelog-tiers {
+  margin: 0 auto;
+  border-collapse: collapse;
+}
+
+.changelog-tiers th,
+.changelog-tiers td {
+  padding: 6px 16px;
+  text-align: right;
+}
+
+.changelog-tiers th:first-child,
+.changelog-tiers td:first-child {
+  text-align: left;
+}
+
+.changelog-tiers th {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.changelog-tiers td {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog-tiers .piece-badge {
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* Small pictures of the site's own pieces, for the figures. */
+.changelog-mock-card {
+  max-width: 300px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.changelog-mock-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.changelog-mock-card__title {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.changelog-mock-card__meta {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.changelog-mock-card__trophy {
+  font-size: 1.3rem;
+}
+
+.changelog-mock-card__actions,
+.changelog-mock-bullet__buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.changelog-mock-card__actions span,
+.changelog-mock-bullet__buttons span {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-strong);
+  font-size: 0.85rem;
+}
+
+.changelog-mock-bullet__buttons span.is-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.changelog-mock-bullet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.changelog-mock-bullet__clock {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 18px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.changelog-mock-bullet__clock span {
+  color: var(--text-strong);
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.changelog-mock-bullet__clock small {
+  color: var(--text-dim);
+}
+
+.changelog-mock-bullet__options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.changelog-mock-bullet__options span {
+  padding: 6px 12px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.changelog-mock-bullet__options span + span {
+  border-left: 1px solid var(--border);
+}
+
+.changelog-mock-bullet__options span.is-on {
+  background: var(--primary);
+  color: #fff;
+}
+
+.changelog-mock-bullet__buttons {
+  margin-top: 0;
+}
+
+.changelog-mock-moves {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 10px 14px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-strong);
+  line-height: 1.9;
+}
+
+.changelog-mock-moves b {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.changelog-mock-moves__fold {
+  padding-left: 16px;
+}
+
+.changelog-mock-moves__stat {
+  margin-left: 8px;
+  color: var(--info);
+  font-size: 0.85em;
+}
+
+.changelog-mock-moves__count {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--lirep) 22%, transparent);
+  color: var(--text-strong);
+  font-size: 0.85em;
+}
+
+.changelog-mock-keys {
+  display: grid;
+  gap: 8px;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+.changelog-mock-keys > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.changelog-mock-keys span {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 600px) {
+  .changelog-item > summary {
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    padding: 12px;
+  }
+
+  .changelog-item__area {
+    min-width: 0;
+  }
+
+  .changelog-item__summary {
+    flex-basis: 100%;
+    padding-left: calc(0.8em + 10px);
+  }
+
+  .changelog-item__has-figure {
+    display: none;
+  }
+
+  .changelog-item__body {
+    padding: 4px 14px 14px;
+  }
+
+  .changelog-figure {
+    padding: 14px 10px;
+  }
 }
