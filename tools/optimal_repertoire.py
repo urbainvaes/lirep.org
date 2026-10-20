@@ -49,11 +49,13 @@ cache file for 30 days (--explorer-cache), so a second run, or a run with a
 bigger budget, asks only for the positions it hasn't seen. --explorer
 http://127.0.0.1:9002 uses the local explorer instead (explorer/start-server.sh).
 
-As it goes, it prints what it does (--quiet: only the requests): each
+It prints the parameters, the result and, with --greedy, the value after
+each added move; while it works, a line counts the explorer requests and
+Stockfish evaluations so far. --verbose prints everything it does: each
 position it enters, with the line leading to it, the share of the starting
 games that reach it and why its lines go on or stop there; each explorer
-request (fetched or from the cache, the wait before it); and, leaving a
-position, the best value found there for each number of moves.
+request and Stockfish evaluation; and, leaving a position, the best value
+found there for each number of moves.
 
 Needs python-chess and, for the evaluation, Stockfish.
 
@@ -80,6 +82,7 @@ import argparse
 import json
 import math
 import os
+import shutil
 import sys
 import time
 import urllib.error
@@ -170,9 +173,57 @@ NEG = float("-inf")
 START = time.monotonic()
 
 
+VERBOSE = False  # --verbose: detail() prints too
+_status = False  # a progress line is showing (to be cleared)
+
+
 def log(message: str) -> None:
-    """One line of the trace, after the time since the start."""
+    """One line of output, after the time since the start."""
+    global _status
+    if _status and sys.stdout.isatty():
+        print("\r\033[K", end="")
+    _status = False
     print(f"[{time.monotonic() - START:7.1f}s] {message}", flush=True)
+
+
+def detail(message: str) -> None:
+    """A line printed only with --verbose."""
+    if VERBOSE:
+        log(message)
+
+
+COUNTS = {"requests": 0, "evaluations": 0}
+_doing = ""  # what it is doing, for the status line
+
+
+def _show() -> None:
+    global _status
+    text = f"[{time.monotonic() - START:7.1f}s] {_doing}"
+    if COUNTS["requests"] or COUNTS["evaluations"]:
+        text += f"  ({COUNTS['requests']:,} explorer requests, {COUNTS['evaluations']:,} Stockfish evaluations)"
+    width = shutil.get_terminal_size().columns
+    print(f"\r\033[K{text[: width - 1]}", end="", flush=True)
+    _status = True
+
+
+def doing(message: str, milestone: bool = False) -> None:
+    """What it is doing now: without --verbose, one status line that keeps
+    being rewritten (in a terminal; elsewhere, only `milestone`s print)."""
+    global _doing
+    _doing = message
+    if VERBOSE:
+        return
+    if sys.stdout.isatty():
+        _show()
+    elif milestone:
+        print(f"[{time.monotonic() - START:7.1f}s] {message}", flush=True)
+
+
+def progress(kind: str) -> None:
+    """Counts a request or an evaluation, on the status line."""
+    COUNTS[kind] += 1
+    if not VERBOSE and sys.stdout.isatty() and _doing:
+        _show()
 
 
 def line_of(board: chess.Board) -> str:
@@ -209,7 +260,7 @@ class Explorer:
         if entry and time.time() - entry["t"] < self.max_age:
             self.from_cache += 1
             data = entry["data"]
-            log(f"explorer: {line_of(board)}: {games_of(data):,} games, {len(data['moves'])} moves "
+            detail(f"explorer: {line_of(board)}: {games_of(data):,} games, {len(data['moves'])} moves "
                 f"(cache, {(time.time() - entry['t']) / 86400:.0f} days old)")
         else:
             data = self._fetch(board, fen)
@@ -257,7 +308,8 @@ class Explorer:
             log(f"explorer: {problem}, trying again in {pause} s")
             time.sleep(pause)
         self.queries += 1
-        log(f"explorer: {line_of(board)}: {games_of(data):,} games, {len(data['moves'])} moves "
+        progress("requests")
+        detail(f"explorer: {line_of(board)}: {games_of(data):,} games, {len(data['moves'])} moves "
             f"(request {self.queries}, {time.monotonic() - self.last:.1f} s)")
         return data
 
@@ -349,7 +401,7 @@ class Search:
 
     def say(self, board: chess.Board, message: str) -> None:
         """A line of the trace, indented by the position's depth."""
-        if not self.a.quiet:
+        if VERBOSE:
             log("  " * (board.ply() - self.root_ply) + message)
 
     def curve(self, values: list[float]) -> str:
@@ -385,6 +437,7 @@ class Search:
         that led here, its worth if left unanswered (without it, at the
         start: the position's own results)."""
         self.positions += 1
+        doing(f"Searching: position {self.positions:,}, {line_of(board)}")
         whose = "your move" if board.turn == self.side else "their move"
         self.say(board, f"> {line_of(board)}: {whose}, reached by {reach:.2%} of the games"
                  + (" (in the base)" if base else "") + f" [position {self.positions}]")
@@ -568,7 +621,8 @@ class Evaluator:
             self.cache[key] = entry
             self.computed += 1
             best = ", ".join(board.san(chess.Move.from_uci(u)) for u in entry["best"]) or "none"
-            log(f"stockfish: {line_of(board)}: {entry['cp'] / 100:+.2f} (White's view), best {best} "
+            progress("evaluations")
+            detail(f"stockfish: {line_of(board)}: {entry['cp'] / 100:+.2f} (White's view), best {best} "
                 f"(depth {self.depth}, evaluation {self.computed})")
             if self.computed % 200 == 0:
                 self.save()
@@ -663,6 +717,7 @@ class Greedy:
         self.s, self.board, self.side, self.tree, self.a = search, board, side, tree, a
         self.upper = a.mate_cap if isinstance(search, EvaluationSearch) else 1.0  # the best value possible
         self.options: dict[str, list[tuple[float, str]]] = {}  # FEN -> your candidates' values, best first
+        self.name = "expected evaluation" if isinstance(search, EvaluationSearch) else "expected score"
 
     # -- Values ---------------------------------------------------------------
 
@@ -730,6 +785,7 @@ class Greedy:
         out = []
 
         def opp(board, sub, reach, ended):
+            doing(f"Looking for the next move: valuing the repertoire's position {line_of(board)}")
             out.append((board, sub, reach, ended))
             _, moves = self.listed(board)
             total = sum(games_of(m) for m in moves)
@@ -807,6 +863,7 @@ class Greedy:
                 old = now if ended is None else ended
                 frontier.append((reach * (base + p * self.upper - old), reach, p, base, old, board, sub, m))
         frontier.sort(key=lambda f: -f[0])
+        doing(f"Looking for the next move: {len(frontier)} unanswered replies, most promising first")
         best, ranked, examined = None, [], 0
         for bound, reach, p, base, old, board, sub, m in frontier:
             if best and bound <= best[0]:
@@ -814,6 +871,8 @@ class Greedy:
             examined += 1
             after = board.copy()
             after.push_uci(m["uci"])
+            doing(f"Looking for the next move: trying answers to {line_of(after)} "
+                  f"(reply {examined} of at most {len(frontier)})")
             for value, san in self.candidates(after)[:1]:
                 gain = reach * (base + p * value - old)
                 done = after.copy()
@@ -829,11 +888,13 @@ class Greedy:
         return f"{g:+.2f} pawns" if isinstance(self.s, EvaluationSearch) else f"{100 * g:+.2f} points"
 
     def run(self, fmt, target: float | None, budget: int) -> int:
+        doing("Valuing the base repertoire: reading the explorer for each of its positions", milestone=True)
         value = self.total()
-        log(f"start: expected {fmt(value)} with the base repertoire"
+        log(f"start: {self.name} {fmt(value)}"
             + (f"; target {fmt(target)}" if target is not None else f"; adding up to {budget} moves"))
         added = 0
         while (target is None or value < target - 1e-12) and added < budget:
+            doing(f"Looking for move {added + 1}: listing the replies the repertoire leaves unanswered", milestone=True)
             best, ranked, examined, size = self.best_addition()
             if best is None or best[0] <= 1e-12:
                 log("no addition raises the value any more: stopping")
@@ -842,10 +903,9 @@ class Greedy:
             sub[reply] = {san: {}}
             added += 1
             new = self.total()
-            log(f"move {added}: {line_of(done)}  ->  expected {fmt(new)} ({self.change(new - value)}; "
-                f"{examined} of {size} unanswered replies examined)")
+            log(f"move {added}: {line_of(done)}  ->  {self.name} {fmt(new)} ({self.change(new - value)})")
             if len(ranked) > 1:
-                log("         next best: " + "; ".join(f"{line_of(b)} {self.change(g)}" for g, b in ranked[1:]))
+                detail("         next best: " + "; ".join(f"{line_of(b)} {self.change(g)}" for g, b in ranked[1:]))
             if abs(new - value - gain) > 1e-9:
                 log(f"         (the gain was expected to be {self.change(gain)})")
             value = new
@@ -983,8 +1043,8 @@ def common_parser(description: str, objective: str, target_help: str) -> argpars
     parser.add_argument("--cache-days", type=float, default=CACHE_DAYS,
                         help=f"Explorer answers older than this are asked again (default {CACHE_DAYS}).")
     parser.add_argument("--no-explorer-cache", action="store_true", help="Ask the explorer for everything.")
-    parser.add_argument("--quiet", action="store_true",
-                        help="Don't trace the search position by position: only the requests and the result.")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Print everything it does: each position, explorer request and Stockfish evaluation.")
     parser.add_argument("--speeds", default=SPEEDS)
     pool = parser.add_mutually_exclusive_group()
     pool.add_argument("--min-rating", type=int,
@@ -1078,6 +1138,7 @@ def _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, 
         print("\nGreedy: one move at a time, each the one raising the value most.\n", flush=True)
         added = Greedy(search, board, side, tree, a).run(fmt, a.target, a.max_moves)
         explorer.save()
+        log("done")
         print(f"\n{added} moves added: {explorer.queries:,} explorer requests, {explorer.from_cache:,} answers "
               f"from the cache, in {time.monotonic() - START:.0f} s.\n")
         _, moves = Greedy(search, board, side, tree, a).listed(board) if board.turn != side else (None, [])
@@ -1085,10 +1146,14 @@ def _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, 
         finish(a, tree, board, side, base, prefix, {m["san"]: games_of(m) / total for m in moves} if total else {},
                f"greedy, {added} new moves")
         return
-    print("\nThe search: '>' enters a position, '<' leaves it with the best value found there for each number of "
-          "your moves (only where it improves).\n", flush=True)
+    if VERBOSE:
+        print("\nThe search: '>' enters a position, '<' leaves it with the best value found there for each number of "
+              "your moves (only where it improves).\n", flush=True)
+    doing("Searching every repertoire within the limits (the whole tree first, then the best for each size)",
+          milestone=True)
     root = search.node(board, 1.0, len(prefix), base)
     explorer.save()
+    log("search done")
     print(f"\n{search.positions:,} positions searched: {explorer.queries:,} explorer requests, "
           f"{explorer.from_cache:,} answers from the cache, in {time.monotonic() - START:.0f} s.\n")
     print(f"Best {objective} by number of memorized moves (after the opening's own moves"
@@ -1176,6 +1241,8 @@ def main() -> None:
     engine.add_argument("--mate-cap", type=float, default=MATE_CAP, help="Cap evaluations at +/- this many pawns.")
     engine.add_argument("--cache", type=Path, default=CACHE)
     a = parser.parse_args()
+    global VERBOSE
+    VERBOSE = a.verbose
     resolve_common(parser, a)
     evaluation = a.objective == "evaluation"
     hybrid = a.objective == "hybrid"
