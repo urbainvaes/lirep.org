@@ -154,13 +154,9 @@ function renderProfile(
 
     <section class="profile-section profile-delete">
       <div class="profile-section__heading">
-        <div>
-          <h2>Delete account</h2>
-          <p class="profile-subtitle">Deletes your studies, their games and your practice history, and signs you out.
-            Your forum posts are deleted too; a topic you started that others replied to stays for their replies,
-            without your name. This cannot be undone. Export any study you want to keep first.</p>
-        </div>
+        <h2>Account</h2>
       </div>
+      <a class="btn btn-secondary" href="/auth/logout">Log out</a>
       <button id="delete-account-btn" class="btn btn-danger" type="button">Delete account</button>
       <span id="delete-account-status" class="profile-subtitle" role="status"></span>
     </section>
@@ -173,7 +169,8 @@ function bindDeleteAccount(username: string): void {
   if (!button || !status) return;
   button.addEventListener("click", async () => {
     const typed = window.prompt(
-      `This permanently deletes your Lirep account and all your studies.\n\nType your username (${username}) to confirm:`,
+      `This permanently deletes your Lirep account: your studies, their games, your practice history and your forum posts. ` +
+        `It cannot be undone; export any study you want to keep first.\n\nType your username (${username}) to confirm:`,
     );
     if (typed === null) return;
     if (typed.trim().toLowerCase() !== username.toLowerCase()) {

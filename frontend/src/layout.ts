@@ -51,11 +51,6 @@ export function renderAuthArea(data: MeResponse): void {
   const authArea = document.getElementById("auth-area");
   if (!authArea) return;
 
-  // On narrow screens "Log out" lives in the hamburger menu instead of the
-  // header (see the media query in style.css), so the menu gets its own link.
-  const nav = document.querySelector(".site-nav");
-  nav?.querySelector(".site-nav__logout")?.remove();
-
   if (data.authenticated && data.username) {
     const name = data.displayName ?? data.username;
     authArea.innerHTML = `
@@ -63,9 +58,7 @@ export function renderAuthArea(data: MeResponse): void {
         <span class="username__name">${escapeHtml(name)}</span>
         <svg class="username__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
       </a>
-      <a class="btn btn-secondary site-auth__logout" href="/auth/logout">Log out</a>
     `;
-    nav?.insertAdjacentHTML("beforeend", `<a class="site-nav__logout" href="/auth/logout">Log out</a>`);
   } else {
     authArea.innerHTML = `<a class="btn btn-primary" href="/auth/login">Sign in</a>`;
   }
