@@ -17,6 +17,11 @@ explorer, and the value where preparation ends is:
               your side's point of view. Stockfish's own best moves are then
               candidates at your turn too, played or not, and evaluations are
               cached in a file, so a second run on the same opening is fast.
+  hybrid      the explorer's score where the move has at least 50 games
+              (MIN_LEAF_GAMES), Stockfish's evaluation as an expected score
+              where it has fewer (Lirep's "Hybrid" end-of-prep value). As a
+              percentage. Stockfish's best moves are candidates too, as
+              with the evaluation.
 
 Both the cost and the value add up over the tree's branches, so the problem
 is solved exactly, from the leaves up: for every position, the best value
@@ -33,7 +38,8 @@ The data comes from Lichess's opening explorer (explorer.lichess.org), one
 request at a time, at least --delay seconds apart; after a 429 (rate
 limited) it waits a minute and tries again. Lichess's explorer needs a
 token: create one (no scope needed) at https://lichess.org/account/oauth/token
-and put it in the LICHESS_TOKEN environment variable. Answers are kept in a
+and put it in the LICHESS_TOKEN environment variable, or in the file
+~/.config/lirep/lichess-token. Answers are kept in a
 cache file for 30 days (--explorer-cache), so a second run, or a run with a
 bigger budget, asks only for the positions it hasn't seen. --explorer
 http://127.0.0.1:9002 uses the local explorer instead (explorer/start-server.sh).
@@ -62,6 +68,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -78,8 +85,10 @@ import chess.engine
 # PARAMETERS: the defaults; each can be changed on the command line (--help).
 # =============================================================================
 
-OBJECTIVE = "score"   # --objective: "score" (the explorer's) or "evaluation"
-                      # (Stockfish's); see the top of this file
+OBJECTIVE = "score"   # --objective: "score" (the explorer's), "evaluation"
+                      # (Stockfish's) or "hybrid"; see the top of this file
+MIN_LEAF_GAMES = 50   # hybrid: fewer games than this, and Stockfish values a
+                      # line's end (also the candidates' minimum, by default)
 
 # ---- The data ---------------------------------------------------------------
 EXPLORER = "https://explorer.lichess.org"  # --explorer: Lichess's explorer, or
@@ -91,6 +100,8 @@ RETRIES = 5                         # other failures (timeouts, 5xx): tries, wit
                                     # waits doubling from 5 s
 EXPLORER_CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "lirep" / "explorer.json"
                                     # --explorer-cache: answers kept between runs
+TOKEN_FILE = Path.home() / ".config" / "lirep" / "lichess-token"  # the token, if
+                                    # LICHESS_TOKEN isn't set
 CACHE_DAYS = 30                     # --cache-days: how long an answer is kept
 SPEEDS = "blitz,rapid,classical"    # --speeds: time controls counted
 MIN_RATING = 1800                   # --min-rating: the player pool, by rating. A
@@ -221,7 +232,7 @@ class Explorer:
                     time.sleep(RATE_LIMIT_PAUSE)
                     continue
                 if err.code == 401:
-                    sys.exit("The explorer answered 401 (unauthorized): set LICHESS_TOKEN to a Lichess token, "
+                    sys.exit(f"The explorer answered 401 (unauthorized): put a Lichess token in LICHESS_TOKEN or {TOKEN_FILE}, "
                              "created at https://lichess.org/account/oauth/token (no scope needed).")
                 if err.code < 500:
                     raise
@@ -248,6 +259,12 @@ class Explorer:
         tmp.write_text(json.dumps(self.disk))
         tmp.replace(self.cache_path)
         self.unsaved = 0
+
+
+def score_from_cp(cp: float) -> float:
+    """Centipawns (your side's point of view) as an expected score, on the
+    curve Lichess uses for its winning chances (as Lirep does)."""
+    return 1 / (1 + math.exp(-0.00368208 * cp))
 
 
 def score(white: int, draws: int, black: int, side: chess.Color, prior: float) -> float:
@@ -584,6 +601,37 @@ class EvaluationSearch(Search):
         return self.evaluator.get(board)["best"][: self.a.engine_candidates]
 
 
+class HybridSearch(Search):
+    """Maximizes the expected score, valuing a line's end by the explorer's
+    results where they count at least MIN_LEAF_GAMES games, by Stockfish's
+    evaluation (as an expected score) where they count fewer."""
+
+    def __init__(self, explorer: Explorer, side: chess.Color, args: argparse.Namespace, evaluator: Evaluator):
+        super().__init__(explorer, side, args)
+        self.evaluator = evaluator
+
+    def stockfish(self, board: chess.Board) -> float:
+        cp = self.evaluator.get(board)["cp"]
+        return score_from_cp(cp if self.side == chess.WHITE else -cp)
+
+    def value(self, board: chess.Board, white: int, draws: int, black: int) -> float:
+        if white + draws + black >= MIN_LEAF_GAMES:
+            return score(white, draws, black, self.side, self.a.prior_games)
+        return self.stockfish(board)
+
+    def end_value(self, row: dict | None, child: Node) -> float:
+        """A line ending with your move: its own results, or, under
+        MIN_LEAF_GAMES games (or not listed), Stockfish's value after it."""
+        if row and games_of(row) >= MIN_LEAF_GAMES:
+            return score(row["white"], row["draws"], row["black"], self.side, self.a.prior_games)
+        return self.stockfish(child.board)
+
+    def extra_candidates(self, board: chess.Board) -> list[str]:
+        if self.a.engine_candidates <= 0:
+            return []
+        return self.evaluator.get(board)["best"][: self.a.engine_candidates]
+
+
 # ---- The solution -----------------------------------------------------------
 
 
@@ -768,8 +816,10 @@ def run(a: argparse.Namespace, make_search, objective: str, fmt, extra_parameter
     local = urllib.parse.urlparse(a.explorer).hostname in ("127.0.0.1", "localhost")
     delay = a.delay if a.delay is not None else (0.0 if local else DELAY)
     token = os.environ.get("LICHESS_TOKEN")
+    if not token and TOKEN_FILE.exists():
+        token = TOKEN_FILE.read_text().strip()
     if not local and not token:
-        print("Note: LICHESS_TOKEN isn't set; Lichess's explorer may refuse the requests (401). Create a token "
+        print(f"Note: neither LICHESS_TOKEN nor {TOKEN_FILE} is set; Lichess's explorer may refuse the requests (401). Create a token "
               "at https://lichess.org/account/oauth/token (no scope needed).", flush=True)
     explorer = Explorer(a.explorer, a.speeds, a.ratings, delay, token,
                         None if a.no_explorer_cache else a.explorer_cache, a.cache_days)
@@ -854,8 +904,9 @@ def main() -> None:
         "Find the fewest memorized moves reaching this value: an expected score (0 to 1) or, "
         "with --objective evaluation, an expected evaluation in pawns (e.g. 0.5).",
     )
-    parser.add_argument("--objective", choices=["score", "evaluation"], default=OBJECTIVE,
-                        help=f"The explorer's expected score, or Stockfish's expected evaluation (default {OBJECTIVE}).")
+    parser.add_argument("--objective", choices=["score", "evaluation", "hybrid"], default=OBJECTIVE,
+                        help=f"The explorer's expected score, Stockfish's expected evaluation, or the expected "
+                             f"score with Stockfish under {MIN_LEAF_GAMES} games (default {OBJECTIVE}).")
     safety = parser.add_argument_group("safeguards against small samples")
     safety.add_argument("--min-games", type=int,
                         help=f"Games one of your played moves needs to be a candidate "
@@ -875,12 +926,14 @@ def main() -> None:
     a = parser.parse_args()
     resolve_common(parser, a)
     evaluation = a.objective == "evaluation"
+    hybrid = a.objective == "hybrid"
     if a.min_games is None:
-        a.min_games = 1 if a.no_safeguards else (MIN_GAMES_EVALUATION if evaluation else MIN_GAMES)
+        a.min_games = 1 if a.no_safeguards else (
+            MIN_GAMES_EVALUATION if evaluation else MIN_LEAF_GAMES if hybrid else MIN_GAMES)
     if a.prior_games is None:
         a.prior_games = 0 if a.no_safeguards or evaluation else PRIOR_GAMES
 
-    if not evaluation:
+    if not evaluation and not hybrid:
         run(
             a,
             lambda explorer, side: Search(explorer, side, a),
@@ -892,6 +945,18 @@ def main() -> None:
         return
     evaluator = Evaluator(a.stockfish, a.depth, a.engine_candidates, a.cache)
     try:
+        if hybrid:
+            run(
+                a,
+                lambda explorer, side: HybridSearch(explorer, side, a, evaluator),
+                "expected score",
+                lambda v: f"{v:.2%}",
+                [f"leaves:     explorer results, Stockfish (depth {a.depth}) under {MIN_LEAF_GAMES} games; "
+                 f"{a.engine_candidates} engine candidates per position",
+                 f"safeguards: {a.min_games} games per played candidate move, scores shrunk by "
+                 f"{a.prior_games:g} games"],
+            )
+            return
         run(
             a,
             lambda explorer, side: EvaluationSearch(explorer, side, a, evaluator),
