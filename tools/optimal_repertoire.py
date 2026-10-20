@@ -29,10 +29,25 @@ moves are candidates, and lines reached by few games, or too deep, end there.
 All the parameters, with their defaults and what they mean, are in the
 PARAMETERS block below; each can be changed on the command line.
 
-Needs python-chess, an explorer speaking the Lichess explorer API (the local
-one: explorer/start-server.sh) and, for the evaluation, Stockfish.
+The data comes from Lichess's opening explorer (explorer.lichess.org), one
+request at a time, at least --delay seconds apart; after a 429 (rate
+limited) it waits a minute and tries again. Lichess's explorer needs a
+token: create one (no scope needed) at https://lichess.org/account/oauth/token
+and put it in the LICHESS_TOKEN environment variable. Answers are kept in a
+cache file for 30 days (--explorer-cache), so a second run, or a run with a
+bigger budget, asks only for the positions it hasn't seen. --explorer
+http://127.0.0.1:9002 uses the local explorer instead (explorer/start-server.sh).
 
-Examples, for the Alapin (1.e4 c5 2.c3) as White:
+As it goes, it prints what it does (--quiet: only the requests): each
+position it enters, with the line leading to it, the share of the starting
+games that reach it and why its lines go on or stop there; each explorer
+request (fetched or from the cache, the wait before it); and, leaving a
+position, the best value found there for each number of moves.
+
+Needs python-chess and, for the evaluation, Stockfish.
+
+Examples, for the Alapin (1.e4 c5 2.c3) as White (with
+export LICHESS_TOKEN=lip_...):
   # The best repertoire by expected score with at most 20 memorized moves:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --moves-budget 20
   # The same by expected Stockfish evaluation (Stockfish from Guix):
@@ -49,6 +64,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -65,7 +82,16 @@ OBJECTIVE = "score"   # --objective: "score" (the explorer's) or "evaluation"
                       # (Stockfish's); see the top of this file
 
 # ---- The data ---------------------------------------------------------------
-EXPLORER = "http://127.0.0.1:9002"  # --explorer: the local explorer (Lichess API)
+EXPLORER = "https://explorer.lichess.org"  # --explorer: Lichess's explorer, or
+                                    # the local one (http://127.0.0.1:9002)
+DELAY = 1.0                         # --delay: seconds between two requests to
+                                    # Lichess (Lirep's browser client waits 0.5)
+RATE_LIMIT_PAUSE = 60               # after a 429, seconds before trying again
+RETRIES = 5                         # other failures (timeouts, 5xx): tries, with
+                                    # waits doubling from 5 s
+EXPLORER_CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "lirep" / "explorer.json"
+                                    # --explorer-cache: answers kept between runs
+CACHE_DAYS = 30                     # --cache-days: how long an answer is kept
 SPEEDS = "blitz,rapid,classical"    # --speeds: time controls counted
 MIN_RATING = 1800                   # --min-rating: the player pool, by rating. A
                                     # game belongs to a rating group by the
@@ -120,20 +146,108 @@ NEG = float("-inf")
 # ---- Explorer ---------------------------------------------------------------
 
 
+START = time.monotonic()
+
+
+def log(message: str) -> None:
+    """One line of the trace, after the time since the start."""
+    print(f"[{time.monotonic() - START:7.1f}s] {message}", flush=True)
+
+
+def line_of(board: chess.Board) -> str:
+    """The moves leading to `board`, numbered, e.g. '1. e4 c5 2. c3'."""
+    return chess.Board().variation_san(board.move_stack) if board.move_stack else "(start)"
+
+
+def games_of(row: dict) -> int:
+    return row["white"] + row["draws"] + row["black"]
+
+
 class Explorer:
-    def __init__(self, url: str, speeds: str, ratings: str):
+    """Lichess's opening explorer (or another speaking its API), one request
+    at a time, `delay` seconds apart, with its answers kept in a file."""
+
+    def __init__(self, url: str, speeds: str, ratings: str, delay: float, token: str | None,
+                 cache_path: Path | None, cache_days: float):
         self.url, self.speeds, self.ratings = url.rstrip("/"), speeds, ratings
-        self.cache: dict[str, dict] = {}
-        self.queries = 0
+        self.delay, self.token = delay, token
+        self.cache_path, self.max_age = cache_path, cache_days * 86400
+        self.disk: dict[str, dict] = {}
+        if cache_path and cache_path.exists():
+            self.disk = json.loads(cache_path.read_text())
+        self.memo: dict[str, dict] = {}
+        self.queries = self.from_cache = self.unsaved = 0
+        self.last = 0.0  # time.monotonic() of the last request
 
     def get(self, board: chess.Board) -> dict:
         fen = board.fen()
-        if fen not in self.cache:
-            query = urllib.parse.urlencode({"fen": fen, "speeds": self.speeds, "ratings": self.ratings})
-            with urllib.request.urlopen(f"{self.url}/lichess?{query}", timeout=60) as resp:
-                self.cache[fen] = json.load(resp)
-            self.queries += 1
-        return self.cache[fen]
+        if fen in self.memo:  # already seen in this run: no request, nothing to say
+            return self.memo[fen]
+        key = f"{self.url}|{self.speeds}|{self.ratings}|{fen}"
+        entry = self.disk.get(key)
+        if entry and time.time() - entry["t"] < self.max_age:
+            self.from_cache += 1
+            data = entry["data"]
+            log(f"explorer: {line_of(board)}: {games_of(data):,} games, {len(data['moves'])} moves "
+                f"(cache, {(time.time() - entry['t']) / 86400:.0f} days old)")
+        else:
+            data = self._fetch(board, fen)
+            self.disk[key] = {"t": time.time(), "data": data}
+            self.unsaved += 1
+            if self.unsaved >= 20:
+                self.save()
+        self.memo[fen] = data
+        return data
+
+    def _fetch(self, board: chess.Board, fen: str) -> dict:
+        params = {"fen": fen, "speeds": self.speeds, "ratings": self.ratings, "topGames": 0, "recentGames": 0}
+        request = urllib.request.Request(f"{self.url}/lichess?{urllib.parse.urlencode(params)}",
+                                         headers={"User-Agent": "lirep optimal_repertoire.py"})
+        if self.token:
+            request.add_header("Authorization", f"Bearer {self.token}")
+        failures = 0
+        while True:
+            wait = self.last + self.delay - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            self.last = time.monotonic()
+            try:
+                with urllib.request.urlopen(request, timeout=60) as resp:
+                    data = json.load(resp)
+                break
+            except urllib.error.HTTPError as err:
+                if err.code == 429:
+                    log(f"explorer: rate limited (429), waiting {RATE_LIMIT_PAUSE} s")
+                    time.sleep(RATE_LIMIT_PAUSE)
+                    continue
+                if err.code == 401:
+                    sys.exit("The explorer answered 401 (unauthorized): set LICHESS_TOKEN to a Lichess token, "
+                             "created at https://lichess.org/account/oauth/token (no scope needed).")
+                if err.code < 500:
+                    raise
+                problem = f"HTTP {err.code}"
+            except (urllib.error.URLError, TimeoutError) as err:
+                problem = str(getattr(err, "reason", err))
+            failures += 1
+            if failures >= RETRIES:
+                sys.exit(f"The explorer failed {failures} times in a row ({problem}); giving up. "
+                         "What was fetched is in the cache: run again to go on from there.")
+            pause = 5 * 2 ** (failures - 1)
+            log(f"explorer: {problem}, trying again in {pause} s")
+            time.sleep(pause)
+        self.queries += 1
+        log(f"explorer: {line_of(board)}: {games_of(data):,} games, {len(data['moves'])} moves "
+            f"(request {self.queries}, {time.monotonic() - self.last:.1f} s)")
+        return data
+
+    def save(self) -> None:
+        if not self.cache_path or not self.unsaved:
+            return
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.cache_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.disk))
+        tmp.replace(self.cache_path)
+        self.unsaved = 0
 
 
 def score(white: int, draws: int, black: int, side: chess.Color, prior: float) -> float:
@@ -200,6 +314,25 @@ class Search:
     def __init__(self, explorer: Explorer, side: chess.Color, args: argparse.Namespace):
         self.explorer, self.side, self.a = explorer, side, args
         self.budget = args.max_moves
+        self.root_ply = 0  # the trace's indentation counts plies from here
+        self.positions = 0
+
+    def fmt(self, v: float) -> str:
+        return f"{v:.2%}" if v > NEG else "none"
+
+    def say(self, board: chess.Board, message: str) -> None:
+        """A line of the trace, indented by the position's depth."""
+        if not self.a.quiet:
+            log("  " * (board.ply() - self.root_ply) + message)
+
+    def curve(self, values: list[float]) -> str:
+        """The best value by number of moves, where it improves: '0: 52%, 1: 53%'."""
+        parts, last = [], NEG
+        for c, v in enumerate(_prefix_max(values)[0]):
+            if v > last + 1e-12:
+                parts.append(f"{c}: {self.fmt(v)}")
+                last = v
+        return ", ".join(parts) or "none"
 
     def value(self, board: chess.Board, white: int, draws: int, black: int) -> float:
         """An unanswered move's worth, from its white/draws/black results."""
@@ -224,11 +357,31 @@ class Search:
         however deep or rare. `games`: the results of the opponent's move
         that led here, its worth if left unanswered (without it, at the
         start: the position's own results)."""
+        self.positions += 1
+        whose = "your move" if board.turn == self.side else "their move"
+        self.say(board, f"> {line_of(board)}: {whose}, reached by {reach:.2%} of the games"
+                 + (" (in the base)" if base else "") + f" [position {self.positions}]")
+        if board.turn == self.side and games and not base and (
+                reach < self.a.min_reach or plies >= self.a.max_plies):
+            # The line ends here, worth the opponent's move's own results:
+            # the position's explorer data wouldn't be used, so isn't asked for.
+            node = Node(board, True, stop=self.value(board, *games))
+            node.answered, node.best = [NEG] * (self.budget + 1), [node.stop] * (self.budget + 1)
+            self.say(board, "  stops here: " + (f"fewer than {self.a.min_reach:.1%} of the games reach it"
+                                                if reach < self.a.min_reach else f"{self.a.max_plies} plies deep")
+                     + f"; left unanswered {self.fmt(node.stop)} (no request needed)")
+            return node
         data = self.explorer.get(board)
         listed = [m for m in data["moves"] if m["white"] + m["draws"] + m["black"] > 0]
         if board.turn == self.side:
-            return self._own(board, reach, plies, base, games or (data["white"], data["draws"], data["black"]), listed)
-        return self._opponent(board, reach, plies, base, data, listed)
+            node = self._own(board, reach, plies, base, games or (data["white"], data["draws"], data["black"]), listed)
+            self.say(board, f"< {line_of(board)}: left unanswered {self.fmt(node.stop)}; "
+                            f"best by moves {self.curve(node.best)}")
+        else:
+            node = self._opponent(board, reach, plies, base, data, listed)
+            self.say(board, f"< {line_of(board)}: with no reply answered {self.fmt(node.none)}; "
+                            f"best by moves {self.curve(node.best)}")
+        return node
 
     def _own(self, board, reach, plies, base, games, listed) -> Node:
         B = self.budget
@@ -238,6 +391,7 @@ class Search:
             san = next(iter(base))  # one move of yours per position
             child_board = board.copy()
             child_board.push_san(san)
+            self.say(board, f"  base move {san}: kept, free")
             child = self._child(child_board, reach, plies + 1, base[san])
             node.moves.append((san, rows.get(san), child))
             node.forced = True
@@ -261,13 +415,23 @@ class Search:
             candidates = sorted(listed, key=lambda m: -(m["white"] + m["draws"] + m["black"]))
             candidates = [m for m in candidates if m["white"] + m["draws"] + m["black"] >= self.a.min_games]
             ucis = [m["uci"] for m in candidates[: self.a.candidates]]
-            ucis += [u for u in self.extra_candidates(board) if u not in ucis]
+            extra = [u for u in self.extra_candidates(board) if u not in ucis]
+            ucis += extra
+            rare = sum(1 for m in listed if games_of(m) < self.a.min_games)
+            self.say(board, "  candidates: "
+                     + (", ".join(f"{m['san']} ({games_of(m):,} games)" for m in candidates[: self.a.candidates])
+                        or "none")
+                     + "".join(f", {board.san(chess.Move.from_uci(u))} (Stockfish)" for u in extra)
+                     + (f"; {rare} moves left out, under {self.a.min_games} games" if rare else ""))
             for uci in ucis:
                 move = chess.Move.from_uci(uci)
                 san = board.san(move)
                 child_board = board.copy()
                 child_board.push(move)
                 node.moves.append((san, rows.get(san), self._child(child_board, reach, plies + 1, None)))
+        else:
+            self.say(board, "  stops here: " + (f"fewer than {self.a.min_reach:.1%} of the games reach it"
+                                                if reach < self.a.min_reach else f"{self.a.max_plies} plies deep"))
         answered, choice = [NEG] * (B + 1), [None] * (B + 1)
         for i, (_, row, child) in enumerate(node.moves):
             end = self.end_value(row, child)
@@ -290,12 +454,24 @@ class Search:
         node = Node(board, False)
         total = sum(m["white"] + m["draws"] + m["black"] for m in listed)
         if not total:  # no games here: the position's worth, whatever follows
+            self.say(board, "  no games here: worth the position's own value, whatever follows")
             node.none = self.value(board, data["white"], data["draws"], data["black"])
             node.going = [node.none] * (B + 1)
             node.best = list(node.going)
             node.kept = {s: t for s, t in (base or {}).items() if t}
             return node
         deep = reach < self.a.min_reach or plies >= self.a.max_plies
+        notes = []
+        for m in listed:
+            p = games_of(m) / total
+            if (base or {}).get(m["san"]):
+                notes.append(f"{m['san']} {p:.1%} (base)")
+            elif deep or reach * p < self.a.min_reach:
+                notes.append(f"{m['san']} {p:.1%} (ends: " + (f"{self.a.max_plies} plies" if plies >= self.a.max_plies
+                             else f"{reach * p:.2%} of the games") + ")")
+            else:
+                notes.append(f"{m['san']} {p:.1%}")
+        self.say(board, f"  {total:,} games, replies: " + ", ".join(notes))
         for m in listed:
             p = (m["white"] + m["draws"] + m["black"]) / total
             child = board.copy()
@@ -364,8 +540,10 @@ class Evaluator:
                 }
             self.cache[key] = entry
             self.computed += 1
+            best = ", ".join(board.san(chess.Move.from_uci(u)) for u in entry["best"]) or "none"
+            log(f"stockfish: {line_of(board)}: {entry['cp'] / 100:+.2f} (White's view), best {best} "
+                f"(depth {self.depth}, evaluation {self.computed})")
             if self.computed % 200 == 0:
-                print(f"  {self.computed} positions evaluated…", file=sys.stderr, flush=True)
                 self.save()
         return entry
 
@@ -386,6 +564,9 @@ class EvaluationSearch(Search):
     def __init__(self, explorer: Explorer, side: chess.Color, args: argparse.Namespace, evaluator: Evaluator):
         super().__init__(explorer, side, args)
         self.evaluator = evaluator
+
+    def fmt(self, v: float) -> str:
+        return f"{v:+.2f}" if v > NEG else "none"
 
     def value(self, board: chess.Board, white: int, draws: int, black: int) -> float:
         cp = self.evaluator.get(board)["cp"]
@@ -523,7 +704,17 @@ def common_parser(description: str, objective: str, target_help: str) -> argpars
     goal.add_argument("--moves-budget", type=int, metavar="N",
                       help=f"Maximize the {objective} with at most N memorized moves.")
     goal.add_argument("--target", type=float, help=target_help)
-    parser.add_argument("--explorer", default=EXPLORER)
+    parser.add_argument("--explorer", default=EXPLORER,
+                        help=f"The explorer's URL (default {EXPLORER}; the local one: http://127.0.0.1:9002).")
+    parser.add_argument("--delay", type=float,
+                        help=f"Seconds between two explorer requests (default {DELAY:g}; 0 for a local explorer).")
+    parser.add_argument("--explorer-cache", type=Path, default=EXPLORER_CACHE,
+                        help=f"Where explorer answers are kept between runs (default {EXPLORER_CACHE}).")
+    parser.add_argument("--cache-days", type=float, default=CACHE_DAYS,
+                        help=f"Explorer answers older than this are asked again (default {CACHE_DAYS}).")
+    parser.add_argument("--no-explorer-cache", action="store_true", help="Ask the explorer for everything.")
+    parser.add_argument("--quiet", action="store_true",
+                        help="Don't trace the search position by position: only the requests and the result.")
     parser.add_argument("--speeds", default=SPEEDS)
     pool = parser.add_mutually_exclusive_group()
     pool.add_argument("--min-rating", type=int,
@@ -574,11 +765,28 @@ def run(a: argparse.Namespace, make_search, objective: str, fmt, extra_parameter
             if san not in base:
                 sys.exit(f"{a.base} doesn't start with {a.moves}")
             base = base[san]
-    explorer = Explorer(a.explorer, a.speeds, a.ratings)
+    local = urllib.parse.urlparse(a.explorer).hostname in ("127.0.0.1", "localhost")
+    delay = a.delay if a.delay is not None else (0.0 if local else DELAY)
+    token = os.environ.get("LICHESS_TOKEN")
+    if not local and not token:
+        print("Note: LICHESS_TOKEN isn't set; Lichess's explorer may refuse the requests (401). Create a token "
+              "at https://lichess.org/account/oauth/token (no scope needed).", flush=True)
+    explorer = Explorer(a.explorer, a.speeds, a.ratings, delay, token,
+                        None if a.no_explorer_cache else a.explorer_cache, a.cache_days)
+    try:
+        _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, own_prefix, base, explorer)
+    finally:
+        explorer.save()
+
+
+def _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, own_prefix, base, explorer) -> None:
     start = explorer.get(board)
     print("Parameters:")
     print(f"  data:       {a.explorer}, speeds {a.speeds}, {a.pool}: "
           f"{start['white'] + start['draws'] + start['black']:,} games at the start")
+    print(f"  requests:   {explorer.delay:g} s apart; cache "
+          + ("off" if explorer.cache_path is None else f"{explorer.cache_path} ({len(explorer.disk):,} answers, "
+             f"kept {a.cache_days:g} days)"))
     print(f"  search:     {a.candidates} candidates per position, lines down to {a.min_reach:.1%} of games, "
           f"{a.max_plies} plies deep")
     for line in extra_parameters:
@@ -586,8 +794,14 @@ def run(a: argparse.Namespace, make_search, objective: str, fmt, extra_parameter
     sys.stdout.flush()
     if base is not None:
         print(f"  base:       {a.base}, {count_own(base, board.turn == side)} of your moves, kept and free")
-    root = make_search(explorer, side).node(board, 1.0, len(prefix), base)
-    print(f"\n{explorer.queries} explorer positions searched.\n")
+    search = make_search(explorer, side)
+    search.root_ply = board.ply()
+    print("\nThe search: '>' enters a position, '<' leaves it with the best value found there for each number of "
+          "your moves (only where it improves).\n", flush=True)
+    root = search.node(board, 1.0, len(prefix), base)
+    explorer.save()
+    print(f"\n{search.positions:,} positions searched: {explorer.queries:,} explorer requests, "
+          f"{explorer.from_cache:,} answers from the cache, in {time.monotonic() - START:.0f} s.\n")
     print(f"Best {objective} by number of memorized moves (after the opening's own moves"
           + (", new moves only" if base is not None else "") + "):")
     shown = [c for c in range(len(root.best)) if c <= 10 or c % 5 == 0 or c == len(root.best) - 1]
