@@ -215,6 +215,8 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   // Stockfish's top lines for the last position analysed, reused when only
   // the Explorer is turned on or off.
   let topLines: { fen: string; depth: number; analysis: EngineAnalysis } | null = null;
+  // The position the arrows and chips on show are for.
+  let shownFen: string | null = null;
 
   async function updateEngine(chess: Chess): Promise<void> {
     const analysisId = ++engineAnalysisId;
@@ -231,6 +233,13 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
 
     if (!engine) engine = new Engine();
     const fen = chess.fen();
+    // Another position's arrows would point at the wrong squares while this
+    // one is analysed: they go, and only come back for this position.
+    if (shownFen !== fen) {
+      shownFen = null;
+      board.set({ drawable: { autoShapes: [] } });
+      enginePanelEl.innerHTML = "";
+    }
     const explorerRequest =
       shownTools.has("explorer") && signedIn ? explorerData(fen).catch(() => null) : Promise.resolve(null);
 
@@ -259,6 +268,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
 
     const { shapes, chipsHtml } = engineMovesView(chess, lines, shares, "Evaluation of");
     board.set({ drawable: { autoShapes: shapes } });
+    shownFen = fen;
     engineStatusEl.textContent = `depth ${depth}`;
     engineStatusEl.title = "Stockfish's search depth, in this browser";
     enginePanelEl.innerHTML = chipsHtml;

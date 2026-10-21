@@ -752,6 +752,8 @@ function renderEditor(
   // Stockfish's top lines for the last position analysed, reused when only
   // the Explorer side changes (turned on or off, other settings).
   let topLines: { fen: string; depth: number; analysis: EngineAnalysis } | null = null;
+  // The position the arrows and chips on show are for.
+  let shownFen: string | null = null;
 
   async function updateEngine(chess: Chess): Promise<void> {
     const analysisId = ++engineAnalysisId;
@@ -768,6 +770,13 @@ function renderEditor(
 
     if (!engine) engine = new Engine();
     const fen = chess.fen();
+    // Another position's arrows would point at the wrong squares while this
+    // one is analysed: they go, and only come back for this position.
+    if (shownFen !== fen) {
+      shownFen = null;
+      board.set({ drawable: { autoShapes: [] } });
+      enginePanelEl.innerHTML = "";
+    }
     const sideToMoveIsWhite = chess.turn() === "w";
     // Fetched alongside the analysis; deduplicated with the Explorer panel's
     // own request and served from the browser cache when it can be.
@@ -800,6 +809,7 @@ function renderEditor(
 
     const { shapes, chipsHtml } = engineMovesView(chess, lines, shares, "Play");
     board.set({ drawable: { autoShapes: shapes } });
+    shownFen = fen;
     engineStatusEl.textContent = `depth ${depth}`;
     engineStatusEl.title = "Stockfish's search depth, in this browser";
     enginePanelEl.innerHTML = chipsHtml;
