@@ -2116,9 +2116,9 @@ button.study-head__link:disabled:hover {
   border-radius: 50%;
 }
 
+/* Stockfish's depth control, right after its toggle. */
 .tool-tabs__status {
   align-self: center;
-  margin-left: auto;
   font-size: 0.75rem;
 }
 
@@ -2210,21 +2210,124 @@ button.study-head__link:disabled:hover {
   text-decoration: none;
 }
 
-/* The gear sits at the right end of the tabs, after Stockfish's depth
-   control when that shows. */
-/* The gear is a plain icon button, not a toggle: highlighted while the
-   settings show. */
-.tool-tab--settings {
-  margin-left: auto;
+/* The bulb (suggested moves) and the gear (settings) sit at the right end
+   of the tabs. They are plain icon buttons, not toggles: highlighted while
+   their window shows. */
+.tool-tab--icon {
   padding-inline: 8px;
 }
 
-.tool-tab--settings[aria-pressed="true"] {
+.tool-tab--suggest,
+.tool-tab--settings {
+  margin-left: auto;
+}
+
+.tool-tab--suggest + .tool-tab--settings {
+  margin-left: 0;
+}
+
+.tool-tab--icon[aria-pressed="true"] {
   color: var(--primary);
 }
 
-.tool-tabs__status:not([hidden]) + .tool-tab--settings {
-  margin-left: 4px;
+.tool-tab__emoji {
+  font-size: 1rem;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.75;
+}
+
+.tool-tab--suggest:hover .tool-tab__emoji,
+.tool-tab--suggest[aria-pressed="true"] .tool-tab__emoji {
+  filter: none;
+  opacity: 1;
+}
+
+/* The suggested moves' window. */
+.suggest-goal {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.suggest-goal + .suggest-goal {
+  margin-top: 8px;
+}
+
+.suggest-goal input[type="number"],
+.suggest-advanced input[type="number"],
+.suggest-advanced select {
+  width: 4.5em;
+  margin: 0 4px;
+}
+
+.suggest-advanced {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.suggest-advanced summary {
+  cursor: pointer;
+}
+
+.suggest-advanced label {
+  display: block;
+  margin-top: 6px;
+}
+
+.suggest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.suggest-status {
+  margin: 8px 0 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.suggest-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.suggest-row__line {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.suggest-row__line:hover {
+  color: var(--text-strong);
+}
+
+.suggest-row__score {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.suggest-row--added .suggest-row__line {
+  color: var(--text-dim);
 }
 
 @media (max-width: 600px) {

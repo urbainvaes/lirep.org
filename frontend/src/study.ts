@@ -2,7 +2,7 @@ import type { Api } from "@lichess-org/chessground/api";
 import type { Key } from "@lichess-org/chessground/types";
 import { Chess } from "chess.js";
 
-import { applyLichessBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "./board";
+import { applyLichessBoardTheme, computeDests, createBoard, formatMoves, playMoveSound, toColor } from "./board";
 import {
   boardColumnHtml,
   describeStartPoint,
@@ -48,6 +48,7 @@ import {
   type EvaluationCache,
 } from "./evalCache";
 import { calculateExpectedScore } from "./expectedScore";
+import { Suggester, type Suggestion } from "./suggest";
 import { cachedExplorerData, errorMessage, fetchExplorerData, hasExplorerData } from "./explorerClient";
 import { materialBalance, materialHtml } from "./material";
 import { downloadStudyFile } from "./studyFile";
@@ -288,6 +289,44 @@ function renderEditor(
                 </div>
               </div>
 
+              <div id="tool-suggest" class="tool-panel tool-panel--settings" hidden>
+                <div class="tool-settings__group">
+                  <h3 class="tool-settings__title">Suggest moves</h3>
+                  <p class="tool-settings__note">Adds your moves one at a time, each the one raising the expected score most, with the end-of-prep value set in the settings (<span id="suggest-valued"></span>). Nothing goes into the study until you add it. Fast, but not always the best: a move worth little alone, but much with the next one, is missed.</p>
+                  <div class="suggest-goal" role="radiogroup" aria-label="How many moves">
+                    <label class="tool-settings__radio"><input type="radio" name="suggest-goal" value="moves" checked />Add<input id="suggest-moves" type="number" min="1" max="200" value="5" aria-label="Number of moves" />moves</label>
+                    <label class="tool-settings__radio"><input type="radio" name="suggest-goal" value="target" />Until the expected score reaches<input id="suggest-target" type="number" min="1" max="100" step="0.5" value="55" aria-label="Target expected score, in percent" />%</label>
+                  </div>
+                  <div class="suggest-goal" role="radiogroup" aria-label="Where">
+                    <label class="tool-settings__radio"><input type="radio" name="suggest-scope" value="study" checked />In the whole study (from its starting point)</label>
+                    <label class="tool-settings__radio"><input type="radio" name="suggest-scope" value="here" />After the selected move only</label>
+                  </div>
+                  <details class="suggest-advanced">
+                    <summary>Advanced</summary>
+                    <label>Your most played moves considered in a position<input id="suggest-candidates" type="number" min="1" max="10" value="4" /></label>
+                    <label>Games a move needs to be considered<input id="suggest-min-games" type="number" min="1" value="100" /></label>
+                    <label>Replies left out below this share of games (%)<input id="suggest-min-reach" type="number" min="0" max="100" step="0.1" value="0.2" /></label>
+                    <label title="Leaves out the moves losing more winning chances than this against Stockfish's best, as the arrows' colours grade them; Stockfish then evaluates the moves tried, at the depth in the settings">Moves allowed
+                      <select id="suggest-max-loss">
+                        <option value="" selected>Any, unsound ones included</option>
+                        <option value="0.2">Up to inaccuracies</option>
+                        <option value="0.1">Good moves only</option>
+                        <option value="0.02">Stockfish's best only</option>
+                      </select>
+                    </label>
+                  </details>
+                  <div class="suggest-actions">
+                    <button id="suggest-one-btn" class="btn btn-secondary btn-small" type="button">Suggest one move</button>
+                    <button id="suggest-run-btn" class="btn btn-primary btn-small" type="button">Run</button>
+                    <button id="suggest-stop-btn" class="btn btn-secondary btn-small" type="button" hidden>Stop</button>
+                    <button id="suggest-add-all-btn" class="btn btn-secondary btn-small" type="button" hidden>Add all</button>
+                    <button id="suggest-clear-btn" class="btn btn-secondary btn-small" type="button" hidden>Clear</button>
+                  </div>
+                  <p id="suggest-status" class="suggest-status" aria-live="polite"></p>
+                  <ol id="suggest-list" class="suggest-list"></ol>
+                </div>
+              </div>
+
               ${toolTabsHtml({ settings: true })}
             </div>
           </div>
@@ -404,9 +443,17 @@ function renderEditor(
     explorer: document.getElementById("tool-explorer") as HTMLElement,
     engine: document.getElementById("tool-engine") as HTMLElement,
   };
-  const settingsPanel = document.getElementById("tool-settings") as HTMLElement;
-  const settingsTab = document.getElementById("tab-settings") as HTMLButtonElement;
-  let settingsShown = false;
+  // The gear's settings and the bulb's suggested moves take the tools'
+  // place in their card while shown.
+  const windowPanels = {
+    settings: document.getElementById("tool-settings") as HTMLElement,
+    suggest: document.getElementById("tool-suggest") as HTMLElement,
+  };
+  const windowTabs = {
+    settings: document.getElementById("tab-settings") as HTMLButtonElement,
+    suggest: document.getElementById("tab-suggest") as HTMLButtonElement,
+  };
+  let shownWindow: "settings" | "suggest" | null = null;
 
   const tree: StudyTree = existing?.tree ?? createEmptyTree();
   let studyId = existing?.id ?? null;
@@ -1170,17 +1217,19 @@ function renderEditor(
     for (const name of ["explorer", "engine"] as const) {
       tabButtons[name].setAttribute("aria-pressed", String(shownTools.has(name)));
       tabButtons[name].title = toolToggleTitle(name, shownTools.has(name));
-      tabPanels[name].hidden = settingsShown || !shownTools.has(name);
+      tabPanels[name].hidden = shownWindow !== null || !shownTools.has(name);
     }
-    settingsPanel.hidden = !settingsShown;
-    settingsTab.setAttribute("aria-pressed", String(settingsShown));
+    for (const name of ["settings", "suggest"] as const) {
+      windowPanels[name].hidden = shownWindow !== name;
+      windowTabs[name].setAttribute("aria-pressed", String(shownWindow === name));
+    }
     gaugeEl.hidden = !shownTools.has("engine");
     engineDepthEl.hidden = !shownTools.has("engine");
     // The tools card takes only the room its open tools need; the tree has the rest.
     const toolsCard = document.querySelector(".study-card--tools");
     toolsCard?.classList.toggle("study-card--tools-both", shownTools.size === 2);
-    toolsCard?.classList.toggle("study-card--tools-explorer", settingsShown || shownTools.has("explorer"));
-    toolsCard?.classList.toggle("study-card--tools-none", !settingsShown && shownTools.size === 0);
+    toolsCard?.classList.toggle("study-card--tools-explorer", shownWindow !== null || shownTools.has("explorer"));
+    toolsCard?.classList.toggle("study-card--tools-none", shownWindow === null && shownTools.size === 0);
   }
 
   // The Explorer panel, and Stockfish's arrow widths, which follow the
@@ -1192,9 +1241,10 @@ function renderEditor(
   }
 
   function toggleTool(tool: Tool): void {
-    // From the settings, a tool's tab goes back to the tools, with it on.
-    if (settingsShown) {
-      settingsShown = false;
+    // From the settings or the suggestions, a tool's tab goes back to the
+    // tools, with it on.
+    if (shownWindow !== null) {
+      shownWindow = null;
       if (shownTools.has(tool)) return applyToolsUI();
       shownTools.add(tool);
     } else if (shownTools.has(tool)) shownTools.delete(tool);
@@ -1246,11 +1296,15 @@ function renderEditor(
   tabButtons.explorer.addEventListener("click", () => toggleTool("explorer"));
   tabButtons.engine.addEventListener("click", () => toggleTool("engine"));
 
-  // The gear swaps the card's tools for the Explorer settings, and back.
-  settingsTab.addEventListener("click", () => {
-    settingsShown = !settingsShown;
-    applyToolsUI();
-  });
+  // The gear swaps the card's tools for the Explorer settings, and back;
+  // the bulb likewise for the suggested moves.
+  for (const name of ["settings", "suggest"] as const) {
+    windowTabs[name].addEventListener("click", () => {
+      shownWindow = shownWindow === name ? null : name;
+      if (name === "suggest") updateSuggestValued();
+      applyToolsUI();
+    });
+  }
 
   bindExplorerSettingsForm(
     document.getElementById("explorer-settings-form") as HTMLElement,
@@ -1289,6 +1343,212 @@ function renderEditor(
       // Keep the choice for this page even when browser storage is blocked.
     }
     void checkUnfetched();
+  });
+
+  // The bulb's suggested moves (see suggest.ts). They are worked out on a
+  // copy of the study, which holds the earlier suggestions not added yet,
+  // and go into the study only when added.
+  const suggestValuedEl = document.getElementById("suggest-valued") as HTMLElement;
+  const suggestStatusEl = document.getElementById("suggest-status") as HTMLElement;
+  const suggestListEl = document.getElementById("suggest-list") as HTMLOListElement;
+  const suggestOneBtn = document.getElementById("suggest-one-btn") as HTMLButtonElement;
+  const suggestRunBtn = document.getElementById("suggest-run-btn") as HTMLButtonElement;
+  const suggestStopBtn = document.getElementById("suggest-stop-btn") as HTMLButtonElement;
+  const suggestAddAllBtn = document.getElementById("suggest-add-all-btn") as HTMLButtonElement;
+  const suggestClearBtn = document.getElementById("suggest-clear-btn") as HTMLButtonElement;
+  const suggestNumber = (id: string) => Number((document.getElementById(id) as HTMLInputElement).value);
+  let suggestions: Suggestion[] = [];
+  let suggestRunning = false;
+  let suggestStop = false;
+
+  function updateSuggestValued(): void {
+    const leaf = settings.leafValue ?? "explorer";
+    suggestValuedEl.textContent = leaf === "explorer" ? LEAF_VALUE_LABELS[leaf] : `${LEAF_VALUE_LABELS[leaf]}, depth ${figuresDepth()}`;
+  }
+
+  /** Adds `line` (SAN from the initial position) to `target`, move by move;
+   * the id of its last move, or null if one of your moves conflicts with
+   * another you already have there. */
+  function addLine(target: StudyTree, line: string[]): number | null {
+    let nodeId = target.rootId;
+    const chess = new Chess();
+    for (const san of line) {
+      const yours = (chess.turn() === "w") === (currentSide() === "white");
+      const children = target.nodes[nodeId].children;
+      const existing = children.find((id) => target.nodes[id].san === san);
+      if (existing === undefined && yours && children.length) return null;
+      nodeId = existing ?? addMove(target, nodeId, san);
+      chess.move(san);
+    }
+    return nodeId;
+  }
+
+  /** The node at the end of `line` in the study, if it's there. */
+  function nodeOfLine(line: string[]): number | undefined {
+    let nodeId = tree.rootId;
+    for (const san of line) {
+      const next = tree.nodes[nodeId].children.find((id) => tree.nodes[id].san === san);
+      if (next === undefined) return undefined;
+      nodeId = next;
+    }
+    return nodeId;
+  }
+
+  // A move with its number, from its ply (0: White's first move).
+  const numbered = (ply: number, san: string) => `${Math.floor(ply / 2) + 1}.${ply % 2 ? ".." : ""} ${san}`;
+
+  function renderSuggestions(): void {
+    const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
+    suggestListEl.innerHTML = suggestions
+      .map((s, i) => {
+        const added = nodeOfLine(s.line) !== undefined;
+        // "after 2... d5: 3. d3": the reply, then your move, numbered.
+        const reply = s.line.length > 1 ? `after ${numbered(s.line.length - 2, s.reply)}: ` : "";
+        const own = numbered(s.line.length - 1, s.move);
+        return `<li class="suggest-row${added ? " suggest-row--added" : ""}">
+          <button class="suggest-row__line" type="button" data-index="${i}" title="${escapeHtml(formatMoves(s.line))}">${escapeHtml(reply)}<strong>${escapeHtml(own)}</strong></button>
+          <span class="suggest-row__score" title="The expected score with this move and the ones above">${pct(s.score)} (+${(s.gain * 100).toFixed(2)})</span>
+          ${added ? `<span class="suggest-row__score">added</span>` : `<button class="btn btn-secondary btn-small" type="button" data-add="${i}" title="Add this line to the study, with the moves above it leads through">Add</button>`}
+        </li>`;
+      })
+      .join("");
+    const pending = suggestions.some((s) => nodeOfLine(s.line) === undefined);
+    suggestAddAllBtn.hidden = suggestRunning || !pending;
+    suggestClearBtn.hidden = suggestRunning || !suggestions.length;
+    suggestOneBtn.disabled = suggestRunBtn.disabled = suggestRunning;
+    suggestStopBtn.hidden = !suggestRunning;
+  }
+
+  async function suggest(oneOnly: boolean): Promise<void> {
+    if (suggestRunning) return;
+    const side = currentSide();
+    const scope = (document.querySelector('input[name="suggest-scope"]:checked') as HTMLInputElement).value;
+    const goal = (document.querySelector('input[name="suggest-goal"]:checked') as HTMLInputElement).value;
+    const start = scope === "here" ? currentId : effectiveStart();
+    const leaf = settings.leafValue ?? "explorer";
+    const depth = figuresDepth();
+    const maxLoss = (document.getElementById("suggest-max-loss") as HTMLSelectElement).value;
+    let engine: Engine | null = null;
+    const status = (text: string) => (suggestStatusEl.textContent = text);
+    const suggester = new Suggester(tree, {
+      side,
+      startNodeId: start,
+      leafValue: leaf,
+      candidates: Math.max(1, suggestNumber("suggest-candidates") || 4),
+      minGames: Math.max(1, suggestNumber("suggest-min-games") || 1),
+      minReach: Math.max(0, suggestNumber("suggest-min-reach") || 0) / 100,
+      maxLoss: maxLoss ? Number(maxLoss) : null,
+      explorer: (fen) =>
+        fetchExplorerData(fen, settings, side, {
+          priority: "background",
+          onRateLimited: (resumeAt) =>
+            status(`Lichess asked to wait; resuming at ${new Date(resumeAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}…`),
+        }),
+      evaluate: async (fen) => {
+        const evaluations = await evaluationCache();
+        const saved = await evaluations.get(fen, depth);
+        if (saved !== undefined) return saved;
+        engine ??= new Engine();
+        const cp = await evaluatePosition(engine, new Chess(fen), depth);
+        if (cp !== null) await evaluations.set(fen, depth, cp);
+        return cp;
+      },
+      onStatus: status,
+    });
+    // The earlier suggestions not added yet stay in the copy, so the next
+    // ones build on them.
+    for (const s of suggestions) if (nodeOfLine(s.line) === undefined) addLine(suggester.tree, s.line);
+    suggestRunning = true;
+    suggestStop = false;
+    renderSuggestions();
+    const target = suggestNumber("suggest-target") / 100;
+    const limit = oneOnly ? 1 : goal === "moves" ? Math.max(1, suggestNumber("suggest-moves") || 1) : 200;
+    let added = 0;
+    let message = "";
+    try {
+      let score = (await suggester.total()).score;
+      if (!oneOnly && goal === "target" && score >= target) {
+        message = `The expected score is already ${(score * 100).toFixed(2)}%.`;
+      }
+      while (!message && added < limit && !suggestStop) {
+        const next = await suggester.next(() => suggestStop);
+        if (!next) {
+          if (!suggestStop) message = "No move raises the expected score any more (within the limits under Advanced).";
+          break;
+        }
+        suggestions.push(next);
+        added += 1;
+        score = next.score;
+        renderSuggestions();
+        if (!oneOnly && goal === "target" && score >= target) message = `Reached ${(score * 100).toFixed(2)}%.`;
+      }
+      status(message || (suggestStop ? "Stopped." : `${added} move${added === 1 ? "" : "s"} suggested: expected score ${(score * 100).toFixed(2)}%.`));
+    } catch (err) {
+      status(errorMessage(err) ?? "Couldn't read the Explorer data.");
+    } finally {
+      (engine as Engine | null)?.terminate();
+      suggestRunning = false;
+      renderSuggestions();
+    }
+  }
+
+  function addSuggestion(index: number): boolean {
+    const nodeId = addLine(tree, suggestions[index].line);
+    if (nodeId === null) {
+      suggestStatusEl.textContent = "That line passes through a position where you already have another move.";
+      return false;
+    }
+    return true;
+  }
+
+  suggestOneBtn.addEventListener("click", () => void suggest(true));
+  suggestRunBtn.addEventListener("click", () => void suggest(false));
+  suggestStopBtn.addEventListener("click", () => {
+    suggestStop = true;
+    suggestStatusEl.textContent = "Stopping…";
+  });
+  suggestClearBtn.addEventListener("click", () => {
+    suggestions = [];
+    suggestStatusEl.textContent = "";
+    renderSuggestions();
+  });
+  suggestAddAllBtn.addEventListener("click", () => {
+    let last: number | undefined;
+    suggestions.forEach((s, i) => {
+      if (nodeOfLine(s.line) === undefined && addSuggestion(i)) last = nodeOfLine(s.line);
+    });
+    if (last !== undefined) {
+      goTo(last);
+      scheduleAutoSave();
+    }
+    renderSuggestions();
+  });
+  suggestListEl.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+    const add = target.closest<HTMLElement>("[data-add]");
+    if (add) {
+      const index = Number(add.dataset.add);
+      if (addSuggestion(index)) {
+        goTo(nodeOfLine(suggestions[index].line)!);
+        scheduleAutoSave();
+      }
+      renderSuggestions();
+      return;
+    }
+    const row = target.closest<HTMLElement>("[data-index]");
+    if (!row) return;
+    const line = suggestions[Number(row.dataset.index)].line;
+    const nodeId = nodeOfLine(line);
+    if (nodeId !== undefined) return goTo(nodeId);
+    // Not in the study: shown on the board until you move on, with no
+    // moves possible there.
+    const chess = new Chess();
+    let lastMove: Key[] = [];
+    for (const san of line) {
+      const move = chess.move(san);
+      lastMove = [move.from as Key, move.to as Key];
+    }
+    board.set({ fen: chess.fen(), turnColor: toColor(chess), lastMove, movable: { color: undefined, dests: new Map() } });
   });
 
   board = createBoard(boardEl, onMove, boardOrientation);
