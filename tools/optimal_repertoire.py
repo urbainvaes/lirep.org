@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""The best repertoire for a number of memorized moves.
+"""The best repertoire for a number of memorized moves, one move at a time.
 
 Given an opening (moves from the initial position), the side it is for and
-an opening explorer, finds the repertoire tree with the best value for at
-most a given number of your own moves to memorize (--moves-budget), or the
-fewest moves reaching a target value (--target). A memorized move is one of
-your moves in the tree.
+an opening explorer, builds a repertoire by adding your moves one at a time,
+each time the one raising the value most, printing the value after each,
+until it has added a given number of moves (--moves-budget) or reaches a
+target value (--target). A memorized move is one of your moves in the tree.
 
-Two objectives (--objective), both as on Lirep's Stats page. Walking the
+Three objectives (--objective), as on Lirep's Stats page. Walking the
 tree, the opponent's replies are weighted by how often they are played in the
 explorer, and the value where preparation ends is:
   score       the explorer's score (the default): where preparation stops on
@@ -23,18 +23,14 @@ explorer, and the value where preparation ends is:
               percentage. Stockfish's best moves are candidates too, as
               with the evaluation.
 
-Both the cost and the value add up over the tree's branches, so the problem
-is solved exactly, from the leaves up: for every position, the best value
-reachable with 0, 1, 2, ... memorized moves. At your turn: stop, or play one
-of the candidate moves (costing one move). At the opponent's turn: split the
-budget between the replies (a knapsack over the replies, weighted by how
-often each is played). To keep the search finite, only your most played
-moves are candidates, and lines reached by few games, or too deep, end there.
-
---greedy instead adds one move at a time, each time the one raising the
-value most, printing the value after each: much faster (only the positions
-next to the repertoire are needed) and step by step, but not always
-optimal: a move worth little alone, but much with the next one, is missed.
+Each added move answers an opponent reply the repertoire leaves unanswered:
+after one of your moves inside a line, or after a line's last move
+(extending it). Your candidates there are your most played moves (and
+Stockfish's best, with the evaluation or the hybrid); replies reached by few
+games are left out. --max-loss leaves out your moves that Stockfish finds
+unsound: losing more winning chances than a given level against its best. Only the positions next to the repertoire are needed, so
+it is fast, but not always optimal: a move worth little alone, but much with
+the next one, is missed.
 
 All the parameters, with their defaults and what they mean, are in the
 PARAMETERS block below; each can be changed on the command line.
@@ -49,19 +45,16 @@ cache file for 30 days (--explorer-cache), so a second run, or a run with a
 bigger budget, asks only for the positions it hasn't seen. --explorer
 http://127.0.0.1:9002 uses the local explorer instead (explorer/start-server.sh).
 
-It prints the parameters, the result and, with --greedy, the value after
-each added move; while it works, a line counts the explorer requests and
-Stockfish evaluations so far. --verbose prints everything it does: each
-position it enters, with the line leading to it, the share of the starting
-games that reach it and why its lines go on or stop there; each explorer
-request and Stockfish evaluation; and, leaving a position, the best value
-found there for each number of moves.
+It prints the parameters, the value after each added move and the
+repertoire; while it works, a line counts the explorer requests and
+Stockfish evaluations so far. --verbose prints each explorer request and
+Stockfish evaluation, and the next best moves after each added one.
 
 Needs python-chess and, for the evaluation, Stockfish.
 
 Examples, mostly for the Alapin (1.e4 c5 2.c3) as White (with
 export LICHESS_TOKEN=lip_..., or the token in ~/.config/lirep/lichess-token):
-  # The best repertoire by expected score with at most 20 memorized moves:
+  # A repertoire by expected score with 20 memorized moves:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --moves-budget 20
   # The same by expected Stockfish evaluation (Stockfish from Guix):
   guix shell stockfish -- tools/optimal_repertoire.py --moves "e4 c5 c3" \\
@@ -69,9 +62,12 @@ export LICHESS_TOKEN=lip_..., or the token in ~/.config/lirep/lichess-token):
   # Moves added one at a time to a study until it reaches 59%, with Lirep's
   # Hybrid values:
   guix shell stockfish -- tools/optimal_repertoire.py --moves "e4 e5 Nc3" \\
-      --side white --base vienna.lirep.json --objective hybrid --greedy \\
+      --side white --base vienna.lirep.json --objective hybrid \\
       --target 0.59 --out vienna-59.lirep.json
-  # The smallest repertoire reaching 56%, written as a Lirep study file:
+  # 20 moves, none worse than an inaccuracy for Stockfish:
+  guix shell stockfish -- tools/optimal_repertoire.py --moves "e4 c5 c3" \\
+      --side white --moves-budget 20 --max-loss inaccuracy
+  # Moves added until the repertoire reaches 56%, written as a Lirep study file:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --target 0.56 \\
       --out alapin.lirep.json
 """
@@ -88,7 +84,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import chess
@@ -127,12 +122,17 @@ MIN_RATING = 1800                   # --min-rating: the player pool, by rating. 
 RATING_GROUPS = (0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500)
 # (--ratings "1800,2000" picks exact groups instead: here 1800-2199.)
 
-# ---- The search (what keeps it finite) --------------------------------------
+# ---- The candidates ---------------------------------------------------------
 CANDIDATES = 4      # --candidates: your most played moves considered in a position
-MIN_REACH = 0.002   # --min-reach: a line reached by fewer than this share of the
-                    # games at the start ends there (0.002 = 0.2%)
-MAX_PLIES = 20      # --max-plies: deepest position searched, in plies from move 1
-MAX_MOVES = 150     # --max-moves: with --target, the largest repertoire considered
+MIN_REACH = 0.002   # --min-reach: a reply reached by fewer than this share of the
+                    # games at the start isn't answered (0.002 = 0.2%)
+MAX_MOVES = 150     # --max-moves: with --target, the most moves added
+MAX_LOSS = None     # --max-loss: leave out your moves losing more winning
+                    # chances (-1 to 1, Lichess's curve) than this against
+                    # Stockfish's best, as Lirep's arrows grade them:
+                    # "best" 0.02, "good" 0.1, "inaccuracy" 0.2; None: any
+                    # move (Stockfish then runs whatever the objective)
+LOSS_LEVELS = {"best": 0.02, "good": 0.1, "inaccuracy": 0.2}
 
 # ---- Safeguards against small samples ---------------------------------------
 # An explorer score from N games is uncertain by roughly +/-(50 / sqrt N)
@@ -163,8 +163,6 @@ MATE_CAP = 10.0           # --mate-cap: evaluations are capped at +/- this many
                           # as +/-1000 pawns)
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "lirep" / "stockfish-evals.json"
                           # --cache: where evaluations are kept between runs
-
-NEG = float("-inf")
 
 
 # ---- Explorer ---------------------------------------------------------------
@@ -336,262 +334,51 @@ def score(white: int, draws: int, black: int, side: chess.Color, prior: float) -
     return (points + prior / 2) / (n + prior) if n + prior else 0.5
 
 
-# ---- The search -------------------------------------------------------------
+# ---- The objectives ---------------------------------------------------------
 
 
-@dataclass
-class Node:
-    """A position in the search. Values are for budgets c = 0..B: the best
-    value with at most c of your moves memorized from here on.
+class Objective:
+    """The expected explorer score, with Lirep's definition: a line ends with
+    its last answered move and counts with that move's own results, as listed
+    in the position before it; an opponent move without a prepared answer
+    counts with its own results. A subclass can replace value() (what an
+    unanswered reply, or a position without games, is worth), end_value()
+    (what a line ending with one of your moves is worth) and
+    extra_candidates()."""
 
-    Your turn (own): `stop` if the opponent's move that led here stays
-    unanswered (worth that move's own results), `answered[c]` if you answer it
-    with one of your moves (NEG if impossible), `best[c]` the better of the two
-    (or `answered` alone when the base repertoire answers it).
+    name = "expected score"
 
-    The opponent's turn: `none` if none of the replies is answered (each worth
-    its own results), `going[c]` if at least one is, `best[c]` the better.
-    """
-
-    board: chess.Board
-    own: bool
-    stop: float = NEG
-    best: list[float] = field(default_factory=list)
-    answered: list[float] = field(default_factory=list)
-    # Your turn: candidates (san, explorer row or None, child), and for each
-    # budget the chosen (candidate index, "end" or "go", budget for the child).
-    moves: list[tuple[str, dict | None, "Node"]] = field(default_factory=list)
-    choice: list[tuple[int, str, int] | None] = field(default_factory=list)
-    forced: bool = False  # the base repertoire answers here (kept, free)
-    # The opponent's turn.
-    none: float = NEG
-    going: list[float] = field(default_factory=list)
-    replies: list[tuple[str, float, "Node"]] = field(default_factory=list)
-    # For each reply, for each budget: (budget given to it, previous state
-    # "none"/"some", the reply "ans"/"unans").
-    steps: list[list[tuple[int, str, str] | None]] = field(default_factory=list)
-    kept: dict | None = None  # base lines under a position without games
-
-
-def _prefix_max(values: list[float]) -> tuple[list[float], list[int]]:
-    """Best with at most c moves, and which c achieves it."""
-    out, arg = list(values), list(range(len(values)))
-    for c in range(1, len(values)):
-        if out[c - 1] > out[c]:
-            out[c], arg[c] = out[c - 1], arg[c - 1]
-    return out, arg
-
-
-class Search:
-    """Maximizes the expected explorer score, with Lirep's definition: a line
-    ends with its last answered move and counts with that move's own results,
-    as listed in the position before it; an opponent move without a prepared
-    answer is ignored. A subclass can replace value() (what an unanswered
-    reply, or a position without games, is worth), end_value() (what a line
-    ending with one of your moves is worth) and extra_candidates()."""
-
-    def __init__(self, explorer: Explorer, side: chess.Color, args: argparse.Namespace):
-        self.explorer, self.side, self.a = explorer, side, args
-        self.budget = args.max_moves
-        self.root_ply = 0  # the trace's indentation counts plies from here
-        self.positions = 0
+    def __init__(self, explorer: Explorer, side: chess.Color, args: argparse.Namespace,
+                 evaluator: Evaluator | None = None):
+        self.explorer, self.side, self.a, self.evaluator = explorer, side, args, evaluator
 
     def fmt(self, v: float) -> str:
-        return f"{v:.2%}" if v > NEG else "none"
+        return f"{v:.2%}"
 
-    def say(self, board: chess.Board, message: str) -> None:
-        """A line of the trace, indented by the position's depth."""
-        if VERBOSE:
-            log("  " * (board.ply() - self.root_ply) + message)
-
-    def curve(self, values: list[float]) -> str:
-        """The best value by number of moves, where it improves: '0: 52%, 1: 53%'."""
-        parts, last = [], NEG
-        for c, v in enumerate(_prefix_max(values)[0]):
-            if v > last + 1e-12:
-                parts.append(f"{c}: {self.fmt(v)}")
-                last = v
-        return ", ".join(parts) or "none"
+    def change(self, g: float) -> str:
+        """A change of the value."""
+        return f"{100 * g:+.2f} points"
 
     def value(self, board: chess.Board, white: int, draws: int, black: int) -> float:
         """An unanswered move's worth, from its white/draws/black results."""
         return score(white, draws, black, self.side, self.a.prior_games)
 
-    def end_value(self, row: dict | None, child: Node) -> float:
+    def end_value(self, row: dict | None, after: chess.Board) -> float | None:
         """A line ending with your move: that move's own results (`row`, from
-        the position before it); if too rare to be listed, what the
-        opponent's replies to it gave."""
-        if row and row["white"] + row["draws"] + row["black"]:
+        the position before it). None: what the opponent's replies at `after`
+        give (here, when the move is too rare to be listed)."""
+        if row and games_of(row):
             return score(row["white"], row["draws"], row["black"], self.side, self.a.prior_games)
-        return child.none
+        return None
 
     def extra_candidates(self, board: chess.Board) -> list[str]:
         """Moves (UCI) to consider at your turn besides the most played."""
         return []
 
-    def node(self, board: chess.Board, reach: float, plies: int, base: dict | None = None,
-             games: tuple[int, int, int] | None = None) -> Node:
-        """`base`: the base repertoire from here ({san: subtree}), if any:
-        its moves of yours are kept, at no cost, and its lines are followed
-        however deep or rare. `games`: the results of the opponent's move
-        that led here, its worth if left unanswered (without it, at the
-        start: the position's own results)."""
-        self.positions += 1
-        doing(f"Searching: position {self.positions:,}, {line_of(board)}")
-        whose = "your move" if board.turn == self.side else "their move"
-        self.say(board, f"> {line_of(board)}: {whose}, reached by {reach:.2%} of the games"
-                 + (" (in the base)" if base else "") + f" [position {self.positions}]")
-        if board.turn == self.side and games and not base and (
-                reach < self.a.min_reach or plies >= self.a.max_plies):
-            # The line ends here, worth the opponent's move's own results:
-            # the position's explorer data wouldn't be used, so isn't asked for.
-            node = Node(board, True, stop=self.value(board, *games))
-            node.answered, node.best = [NEG] * (self.budget + 1), [node.stop] * (self.budget + 1)
-            self.say(board, "  stops here: " + (f"fewer than {self.a.min_reach:.1%} of the games reach it"
-                                                if reach < self.a.min_reach else f"{self.a.max_plies} plies deep")
-                     + f"; left unanswered {self.fmt(node.stop)} (no request needed)")
-            return node
-        data = self.explorer.get(board)
-        listed = [m for m in data["moves"] if m["white"] + m["draws"] + m["black"] > 0]
-        if board.turn == self.side:
-            node = self._own(board, reach, plies, base, games or (data["white"], data["draws"], data["black"]), listed)
-            self.say(board, f"< {line_of(board)}: left unanswered {self.fmt(node.stop)}; "
-                            f"best by moves {self.curve(node.best)}")
-        else:
-            node = self._opponent(board, reach, plies, base, data, listed)
-            self.say(board, f"< {line_of(board)}: with no reply answered {self.fmt(node.none)}; "
-                            f"best by moves {self.curve(node.best)}")
-        return node
-
-    def _own(self, board, reach, plies, base, games, listed) -> Node:
-        B = self.budget
-        node = Node(board, True, stop=self.value(board, *games))
-        rows = {m["san"]: m for m in listed}
-        if base:
-            san = next(iter(base))  # one move of yours per position
-            child_board = board.copy()
-            child_board.push_san(san)
-            self.say(board, f"  base move {san}: kept, free")
-            child = self._child(child_board, reach, plies + 1, base[san])
-            node.moves.append((san, rows.get(san), child))
-            node.forced = True
-            goes_on = child.kept is not None or any(r.forced for _, _, r in child.replies)
-            end = self.end_value(rows.get(san), child)
-            going = _prefix_max(child.going)[0]
-            values, node.choice = [], []
-            for c in range(B + 1):
-                if goes_on or going[c] > end:
-                    values.append(going[c])
-                    node.choice.append((0, "go", c))
-                else:
-                    values.append(end)
-                    node.choice.append((0, "end", 0))
-            node.answered = values
-            node.best = list(values)
-            return node
-
-        deep = reach < self.a.min_reach or plies >= self.a.max_plies
-        if not deep:
-            candidates = sorted(listed, key=lambda m: -(m["white"] + m["draws"] + m["black"]))
-            candidates = [m for m in candidates if m["white"] + m["draws"] + m["black"] >= self.a.min_games]
-            ucis = [m["uci"] for m in candidates[: self.a.candidates]]
-            extra = [u for u in self.extra_candidates(board) if u not in ucis]
-            ucis += extra
-            rare = sum(1 for m in listed if games_of(m) < self.a.min_games)
-            self.say(board, "  candidates: "
-                     + (", ".join(f"{m['san']} ({games_of(m):,} games)" for m in candidates[: self.a.candidates])
-                        or "none")
-                     + "".join(f", {board.san(chess.Move.from_uci(u))} (Stockfish)" for u in extra)
-                     + (f"; {rare} moves left out, under {self.a.min_games} games" if rare else ""))
-            for uci in ucis:
-                move = chess.Move.from_uci(uci)
-                san = board.san(move)
-                child_board = board.copy()
-                child_board.push(move)
-                node.moves.append((san, rows.get(san), self._child(child_board, reach, plies + 1, None)))
-        else:
-            self.say(board, "  stops here: " + (f"fewer than {self.a.min_reach:.1%} of the games reach it"
-                                                if reach < self.a.min_reach else f"{self.a.max_plies} plies deep"))
-        answered, choice = [NEG] * (B + 1), [None] * (B + 1)
-        for i, (_, row, child) in enumerate(node.moves):
-            end = self.end_value(row, child)
-            going = _prefix_max(child.going)[0]
-            for c in range(1, B + 1):
-                if end > answered[c]:
-                    answered[c], choice[c] = end, (i, "end", 0)
-                if going[c - 1] > answered[c]:
-                    answered[c], choice[c] = going[c - 1], (i, "go", c - 1)
-        node.answered, node.choice = answered, choice
-        node.best = [max(node.stop, a) for a in answered]
-        return node
-
-    def _child(self, board, reach, plies, base) -> Node:
-        """The opponent's turn after one of your moves."""
-        return self.node(board, reach, plies, base)
-
-    def _opponent(self, board, reach, plies, base, data, listed) -> Node:
-        B = self.budget
-        node = Node(board, False)
-        total = sum(m["white"] + m["draws"] + m["black"] for m in listed)
-        if not total:  # no games here: the position's worth, whatever follows
-            self.say(board, "  no games here: worth the position's own value, whatever follows")
-            node.none = self.value(board, data["white"], data["draws"], data["black"])
-            node.going = [node.none] * (B + 1)
-            node.best = list(node.going)
-            node.kept = {s: t for s, t in (base or {}).items() if t}
-            return node
-        deep = reach < self.a.min_reach or plies >= self.a.max_plies
-        notes = []
-        for m in listed:
-            p = games_of(m) / total
-            if (base or {}).get(m["san"]):
-                notes.append(f"{m['san']} {p:.1%} (base)")
-            elif deep or reach * p < self.a.min_reach:
-                notes.append(f"{m['san']} {p:.1%} (ends: " + (f"{self.a.max_plies} plies" if plies >= self.a.max_plies
-                             else f"{reach * p:.2%} of the games") + ")")
-            else:
-                notes.append(f"{m['san']} {p:.1%}")
-        self.say(board, f"  {total:,} games, replies: " + ", ".join(notes))
-        for m in listed:
-            p = (m["white"] + m["draws"] + m["black"]) / total
-            child = board.copy()
-            child.push_uci(m["uci"])
-            sub = (base or {}).get(m["san"])
-            results = (m["white"], m["draws"], m["black"])
-            if not sub and (deep or reach * p < self.a.min_reach):
-                leaf = Node(child, True, stop=self.value(child, *results))
-                leaf.answered, leaf.best = [NEG] * (B + 1), [leaf.stop] * (B + 1)
-                node.replies.append((m["san"], p, leaf))
-            else:
-                node.replies.append((m["san"], p, self.node(child, reach * p, plies + 1, sub or None, results)))
-        # Base lines the explorer has no games for: kept, with no weight.
-        for san, sub in (base or {}).items():
-            if sub and san not in {r[0] for r in node.replies}:
-                child = board.copy()
-                child.push_san(san)
-                node.replies.append((san, 0.0, self.node(child, 0.0, plies + 1, sub, (0, 0, 0))))
-
-        # Knapsack over the replies, keeping "none answered" apart.
-        none, some = 0.0, [NEG] * (B + 1)
-        for _, p, child in node.replies:
-            unans = NEG if child.forced else child.stop
-            ans = child.answered
-            nxt, step = [NEG] * (B + 1), [None] * (B + 1)
-            for c in range(B + 1):
-                if unans > NEG and some[c] > NEG and some[c] + p * unans > nxt[c]:
-                    nxt[c], step[c] = some[c] + p * unans, (0, "some", "unans")
-                for k in range(c + 1):
-                    if ans[k] > NEG and some[c - k] > NEG and some[c - k] + p * ans[k] > nxt[c]:
-                        nxt[c], step[c] = some[c - k] + p * ans[k], (k, "some", "ans")
-                if none > NEG and ans[c] > NEG and none + p * ans[c] > nxt[c]:
-                    nxt[c], step[c] = none + p * ans[c], (c, "none", "ans")
-            some = nxt
-            none = none + p * unans if none > NEG and unans > NEG else NEG
-            node.steps.append(step)
-        node.none = none
-        node.going = some
-        node.best = [max(none, g) for g in _prefix_max(some)[0]]
-        return node
+    def chances(self, board: chess.Board) -> float:
+        """Your winning chances at `board`, -1 to 1, from Stockfish."""
+        cp = self.evaluator.get(board)["cp"]
+        return 2 * score_from_cp(cp if self.side == chess.WHITE else -cp) - 1
 
 
 class Evaluator:
@@ -639,25 +426,26 @@ class Evaluator:
         self.engine.quit()
 
 
-class EvaluationSearch(Search):
-    """Maximizes the expected Stockfish evaluation where preparation ends."""
+class EvaluationObjective(Objective):
+    """The expected Stockfish evaluation where preparation ends."""
 
-    def __init__(self, explorer: Explorer, side: chess.Color, args: argparse.Namespace, evaluator: Evaluator):
-        super().__init__(explorer, side, args)
-        self.evaluator = evaluator
+    name = "expected evaluation"
 
     def fmt(self, v: float) -> str:
-        return f"{v:+.2f}" if v > NEG else "none"
+        return f"{v:+.2f}"
+
+    def change(self, g: float) -> str:
+        return f"{g:+.2f} pawns"
 
     def value(self, board: chess.Board, white: int, draws: int, black: int) -> float:
         cp = self.evaluator.get(board)["cp"]
         pawns = (cp if self.side == chess.WHITE else -cp) / 100
         return max(-self.a.mate_cap, min(self.a.mate_cap, pawns))
 
-    def end_value(self, row: dict | None, child: Node) -> float:
+    def end_value(self, row: dict | None, after: chess.Board) -> float | None:
         """A line ending with your move: as on Lirep, the evaluations after
         the opponent's replies, weighted by how often each is played."""
-        return child.none
+        return None
 
     def extra_candidates(self, board: chess.Board) -> list[str]:
         if self.a.engine_candidates <= 0:
@@ -665,14 +453,10 @@ class EvaluationSearch(Search):
         return self.evaluator.get(board)["best"][: self.a.engine_candidates]
 
 
-class HybridSearch(Search):
-    """Maximizes the expected score, valuing a line's end by the explorer's
-    results where they count at least MIN_LEAF_GAMES games, by Stockfish's
+class HybridObjective(Objective):
+    """The expected score, valuing a line's end by the explorer's results
+    where they count at least MIN_LEAF_GAMES games, by Stockfish's
     evaluation (as an expected score) where they count fewer."""
-
-    def __init__(self, explorer: Explorer, side: chess.Color, args: argparse.Namespace, evaluator: Evaluator):
-        super().__init__(explorer, side, args)
-        self.evaluator = evaluator
 
     def stockfish(self, board: chess.Board) -> float:
         cp = self.evaluator.get(board)["cp"]
@@ -683,12 +467,12 @@ class HybridSearch(Search):
             return score(white, draws, black, self.side, self.a.prior_games)
         return self.stockfish(board)
 
-    def end_value(self, row: dict | None, child: Node) -> float:
+    def end_value(self, row: dict | None, after: chess.Board) -> float | None:
         """A line ending with your move: its own results, or, under
         MIN_LEAF_GAMES games (or not listed), Stockfish's value after it."""
         if row and games_of(row) >= MIN_LEAF_GAMES:
             return score(row["white"], row["draws"], row["black"], self.side, self.a.prior_games)
-        return self.stockfish(child.board)
+        return self.stockfish(after)
 
     def extra_candidates(self, board: chess.Board) -> list[str]:
         if self.a.engine_candidates <= 0:
@@ -702,22 +486,21 @@ class HybridSearch(Search):
 class Greedy:
     """Adds your moves one at a time, each time the one that raises the
     expected value most, printing the value after each, until the target
-    (or the number of moves) is reached. Not always optimal, unlike the
-    search above, but it needs only the positions next to the repertoire,
-    and has an answer after every move.
+    (or the number of moves) is reached. Not always optimal, but it needs
+    only the positions next to the repertoire, and has an answer after
+    every move.
 
     The repertoire is a tree {san: subtree} from the start. An addition is
     one of your moves answering an opponent reply the tree leaves
     unanswered: after one of your moves inside a line, or after a line's
-    last move (extending it). Values are Lirep's, as in Search: a line ends
+    last move (extending it). Values are Lirep's, as in Objective: a line ends
     with its last answered move, and an unanswered reply counts with its
     own results."""
 
-    def __init__(self, search: Search, board: chess.Board, side: chess.Color, tree: dict, a: argparse.Namespace):
-        self.s, self.board, self.side, self.tree, self.a = search, board, side, tree, a
-        self.upper = a.mate_cap if isinstance(search, EvaluationSearch) else 1.0  # the best value possible
+    def __init__(self, objective: Objective, board: chess.Board, side: chess.Color, tree: dict, a: argparse.Namespace):
+        self.s, self.board, self.side, self.tree, self.a = objective, board, side, tree, a
+        self.upper = a.mate_cap if isinstance(objective, EvaluationObjective) else 1.0  # the best value possible
         self.options: dict[str, list[tuple[float, str]]] = {}  # FEN -> your candidates' values, best first
-        self.name = "expected evaluation" if isinstance(search, EvaluationSearch) else "expected score"
 
     # -- Values ---------------------------------------------------------------
 
@@ -732,11 +515,8 @@ class Greedy:
     def end_value(self, row: dict | None, after: chess.Board) -> float:
         """A line ending with your move (`row`: its explorer row, `after`:
         the position it leads to)."""
-        if isinstance(self.s, HybridSearch):
-            return self.s.end_value(row, Node(after, False))
-        if isinstance(self.s, EvaluationSearch) or not (row and games_of(row)):
-            return self.opponent(after, {})
-        return self.s.end_value(row, Node(after, False))
+        value = self.s.end_value(row, after)
+        return self.opponent(after, {}) if value is None else value
 
     def opponent(self, board: chess.Board, sub: dict) -> float:
         """The opponent to move, with the tree's replies `sub`."""
@@ -820,8 +600,13 @@ class Greedy:
         if fen not in self.options:
             _, moves = self.listed(board)
             played = sorted((m for m in moves if games_of(m) >= self.a.min_games), key=lambda m: -games_of(m))
-            ucis = [m["uci"] for m in played[: self.a.candidates]]
-            ucis += [u for u in self.s.extra_candidates(board) if u not in ucis]
+            ucis = []
+            for m in played:
+                if len(ucis) == self.a.candidates:
+                    break
+                if not self.unsound(board, m["uci"]):
+                    ucis.append(m["uci"])
+            ucis += [u for u in self.s.extra_candidates(board) if u not in ucis and not self.unsound(board, u)]
             rows = {m["uci"]: m for m in moves}
             values = []
             for uci in ucis:
@@ -831,12 +616,35 @@ class Greedy:
             self.options[fen] = sorted(values, reverse=True)
         return self.options[fen]
 
+    def unsound(self, board: chess.Board, uci: str) -> bool:
+        """Your move `uci` loses more than --max-loss against Stockfish's best."""
+        if self.a.max_loss is None:
+            return False
+        after = board.copy()
+        after.push_uci(uci)
+        loss = self.s.chances(board) - self.s.chances(after)
+        if loss > self.a.max_loss:
+            detail(f"left out: {line_of(after)} loses {loss:.2f} winning chances")
+            return True
+        return False
+
     def best_addition(self):
         """The addition raising the value most: (gain, position's replies
         dict, reply's san, your move's san, board after your move), and how
         many replies were examined out of how many. The replies are looked
         at by their best possible gain, stopping when it can't beat the best
-        found (only those need explorer data)."""
+        found (only those need explorer data). At the start, your move with
+        nothing prepared yet: your first move (reply None)."""
+        if self.board.turn == self.side and not self.tree:
+            doing("Looking for the next move: trying your first moves")
+            now = self.total()
+            best, ranked = None, []
+            for value, san in self.candidates(self.board):  # best first
+                done = self.board.copy()
+                done.push_san(san)
+                ranked.append((value - now, done))
+                best = best or (value - now, self.tree, None, san, done)
+            return best, ranked[:3], 1, 1
         frontier = []
         for board, sub, reach, ended in self.positions():
             _, moves = self.listed(board)
@@ -883,14 +691,11 @@ class Greedy:
         ranked.sort(key=lambda r: -r[0])
         return best, ranked[:3], examined, len(frontier)
 
-    def change(self, g: float) -> str:
-        """A change of the value: in points for a score, in pawns for an evaluation."""
-        return f"{g:+.2f} pawns" if isinstance(self.s, EvaluationSearch) else f"{100 * g:+.2f} points"
-
-    def run(self, fmt, target: float | None, budget: int) -> int:
+    def run(self, target: float | None, budget: int) -> int:
+        fmt, name, change = self.s.fmt, self.s.name, self.s.change
         doing("Valuing the base repertoire: reading the explorer for each of its positions", milestone=True)
         value = self.total()
-        log(f"start: {self.name} {fmt(value)}"
+        log(f"start: {name} {fmt(value)}"
             + (f"; target {fmt(target)}" if target is not None else f"; adding up to {budget} moves"))
         added = 0
         while (target is None or value < target - 1e-12) and added < budget:
@@ -900,66 +705,24 @@ class Greedy:
                 log("no addition raises the value any more: stopping")
                 break
             gain, sub, reply, san, done = best
-            sub[reply] = {san: {}}
+            if reply is None:
+                sub[san] = {}
+            else:
+                sub[reply] = {san: {}}
             added += 1
             new = self.total()
-            log(f"move {added}: {line_of(done)}  ->  {self.name} {fmt(new)} ({self.change(new - value)})")
+            log(f"move {added}: {line_of(done)}  ->  {name} {fmt(new)} ({change(new - value)})")
             if len(ranked) > 1:
-                detail("         next best: " + "; ".join(f"{line_of(b)} {self.change(g)}" for g, b in ranked[1:]))
+                detail("         next best: " + "; ".join(f"{line_of(b)} {change(g)}" for g, b in ranked[1:]))
             if abs(new - value - gain) > 1e-9:
-                log(f"         (the gain was expected to be {self.change(gain)})")
+                log(f"         (the gain was expected to be {change(gain)})")
             value = new
         if target is not None and value >= target - 1e-12:
             log(f"target reached: {fmt(value)} with {added} new moves")
         return added
 
 
-# ---- The solution -----------------------------------------------------------
-
-
-def solution(node: Node, budget: int) -> dict:
-    """The chosen tree with at most `budget` moves, as {san: subtree}: your
-    moves, and the opponent replies answered by one of yours."""
-    if node.own:
-        if node.forced or node.answered[budget] >= node.stop:
-            return _own_solution(node, budget)
-        return {}
-    if node.kept is not None:
-        return node.kept
-    if node.none >= _prefix_max(node.going)[0][budget]:
-        return {}
-    return _opponent_solution(node, budget)
-
-
-def _own_solution(node: Node, budget: int) -> dict:
-    if node.forced:
-        i, mode, k = node.choice[budget]
-    else:
-        values, arg = _prefix_max(node.answered)
-        budget = arg[budget]
-        if node.choice[budget] is None:
-            return {}
-        i, mode, k = node.choice[budget]
-    san, _, child = node.moves[i]
-    return {san: {} if mode == "end" else _opponent_solution(child, k)}
-
-
-def _opponent_solution(node: Node, budget: int) -> dict:
-    if node.kept is not None:
-        return node.kept
-    budget = _prefix_max(node.going)[1][budget]
-    out: dict = {}
-    state = "some"
-    for (san, _, child), step in reversed(list(zip(node.replies, node.steps))):
-        if state == "none":
-            continue  # earlier replies: all unanswered
-        k, state, mode = step[budget]
-        budget -= k
-        if mode == "ans":
-            sub = _own_solution(child, k)
-            if sub:
-                out[san] = sub
-    return out
+# ---- The repertoire ---------------------------------------------------------
 
 
 def count_own(tree: dict, own: bool) -> int:
@@ -1025,73 +788,14 @@ def study_moves(prefix: list[str], tree: dict) -> list[dict]:
     return head + rest
 
 
-def common_parser(description: str, objective: str, target_help: str) -> argparse.ArgumentParser:
-    """The options shared by the tools built on this search."""
-    parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--moves", default="", help="The opening, in SAN from the initial position (e.g. 'b3').")
-    parser.add_argument("--side", choices=["white", "black"], required=True)
-    goal = parser.add_mutually_exclusive_group(required=True)
-    goal.add_argument("--moves-budget", type=int, metavar="N",
-                      help=f"Maximize the {objective} with at most N memorized moves.")
-    goal.add_argument("--target", type=float, help=target_help)
-    parser.add_argument("--explorer", default=EXPLORER,
-                        help=f"The explorer's URL (default {EXPLORER}; the local one: http://127.0.0.1:9002).")
-    parser.add_argument("--delay", type=float,
-                        help=f"Seconds between two explorer requests (default {DELAY:g}; 0 for a local explorer).")
-    parser.add_argument("--explorer-cache", type=Path, default=EXPLORER_CACHE,
-                        help=f"Where explorer answers are kept between runs (default {EXPLORER_CACHE}).")
-    parser.add_argument("--cache-days", type=float, default=CACHE_DAYS,
-                        help=f"Explorer answers older than this are asked again (default {CACHE_DAYS}).")
-    parser.add_argument("--no-explorer-cache", action="store_true", help="Ask the explorer for everything.")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Print everything it does: each position, explorer request and Stockfish evaluation.")
-    parser.add_argument("--speeds", default=SPEEDS)
-    pool = parser.add_mutually_exclusive_group()
-    pool.add_argument("--min-rating", type=int,
-                      help=f"Games whose players average at least this, by rating group (default {MIN_RATING}).")
-    pool.add_argument("--ratings", help="Exact explorer rating groups instead, e.g. '1800,2000'.")
-    parser.add_argument("--candidates", type=int, default=CANDIDATES, help="Your most played moves considered per position.")
-    parser.add_argument("--min-reach", type=float, default=MIN_REACH, help="Lines reached by fewer games than this share end.")
-    parser.add_argument("--max-plies", type=int, default=MAX_PLIES)
-    parser.add_argument("--max-moves", type=int, default=MAX_MOVES, help="With --target: the largest repertoire considered.")
-    parser.add_argument("--base", type=Path,
-                        help="A Lirep study file to build on: its moves are kept, at no cost, and the budget is "
-                             "for new moves. It must start with --moves.")
-    parser.add_argument("--out", help="Write the repertoire as a Lirep study file.")
-    parser.add_argument("--greedy", action="store_true",
-                        help="Add one move at a time, the one raising the value most, printing the value after "
-                             "each, until --target or --moves-budget: fast and step by step, but not always "
-                             "optimal. Candidates are as in the search (--candidates, Stockfish's best); "
-                             "replies reached by fewer than --min-reach of the games are left out.")
-    return parser
-
-
-def resolve_common(parser: argparse.ArgumentParser, a: argparse.Namespace) -> None:
-    if a.ratings is None:
-        floor = MIN_RATING if a.min_rating is None else a.min_rating
-        groups = [g for g in RATING_GROUPS if g >= floor]
-        if not groups:
-            parser.error(f"no rating group starts at {floor} or above (the last starts at {RATING_GROUPS[-1]})")
-        a.ratings = ",".join(map(str, groups))
-        a.pool = f"games averaging {groups[0]}+"
-        if groups[0] != floor:
-            a.pool += f" ({floor} isn't a group boundary)"
-    else:
-        a.pool = f"rating groups {a.ratings}"
-    # The search computes the best value for every repertoire size up to this.
-    a.max_moves = a.moves_budget if a.moves_budget is not None else a.max_moves
-
-
-def run(a: argparse.Namespace, make_search, objective: str, fmt, extra_parameters: list[str]) -> None:
-    """Searches, then prints the best value for each repertoire size and the
-    chosen tree (and writes it as a study file with --out). `fmt` formats a
-    value; `make_search(explorer, side)` builds the Search."""
+def run(a: argparse.Namespace, make_objective, extra_parameters: list[str]) -> None:
+    """Adds the moves, then prints the repertoire (and writes it as a study
+    file with --out). `make_objective(explorer, side)` builds the Objective."""
     side = chess.WHITE if a.side == "white" else chess.BLACK
     board = chess.Board()
     prefix = a.moves.split()
     for san in prefix:
         board.push_san(san)
-    own_prefix = sum(1 for i in range(len(prefix)) if (i % 2 == 0) == (side == chess.WHITE))
 
     base = None
     if a.base:
@@ -1111,12 +815,12 @@ def run(a: argparse.Namespace, make_search, objective: str, fmt, extra_parameter
     explorer = Explorer(a.explorer, a.speeds, a.ratings, delay, token,
                         None if a.no_explorer_cache else a.explorer_cache, a.cache_days)
     try:
-        _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, own_prefix, base, explorer)
+        _run(a, make_objective, extra_parameters, board, prefix, side, base, explorer)
     finally:
         explorer.save()
 
 
-def _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, own_prefix, base, explorer) -> None:
+def _run(a, make_objective, extra_parameters, board, prefix, side, base, explorer) -> None:
     start = explorer.get(board)
     print("Parameters:")
     print(f"  data:       {a.explorer}, speeds {a.speeds}, {a.pool}: "
@@ -1124,61 +828,24 @@ def _run(a, make_search, objective, fmt, extra_parameters, board, prefix, side, 
     print(f"  requests:   {explorer.delay:g} s apart; cache "
           + ("off" if explorer.cache_path is None else f"{explorer.cache_path} ({len(explorer.disk):,} answers, "
              f"kept {a.cache_days:g} days)"))
-    print(f"  search:     {a.candidates} candidates per position, lines down to {a.min_reach:.1%} of games, "
-          f"{a.max_plies} plies deep")
+    print(f"  candidates: {a.candidates} per position, replies down to {a.min_reach:.1%} of games")
     for line in extra_parameters:
         print(f"  {line}")
-    sys.stdout.flush()
     if base is not None:
-        print(f"  base:       {a.base}, {count_own(base, board.turn == side)} of your moves, kept and free")
-    search = make_search(explorer, side)
-    search.root_ply = board.ply()
-    if a.greedy:
-        tree = json.loads(json.dumps(base)) if base else {}
-        print("\nGreedy: one move at a time, each the one raising the value most.\n", flush=True)
-        added = Greedy(search, board, side, tree, a).run(fmt, a.target, a.max_moves)
-        explorer.save()
-        log("done")
-        print(f"\n{added} moves added: {explorer.queries:,} explorer requests, {explorer.from_cache:,} answers "
-              f"from the cache, in {time.monotonic() - START:.0f} s.\n")
-        _, moves = Greedy(search, board, side, tree, a).listed(board) if board.turn != side else (None, [])
-        total = sum(games_of(m) for m in moves)
-        finish(a, tree, board, side, base, prefix, {m["san"]: games_of(m) / total for m in moves} if total else {},
-               f"greedy, {added} new moves")
-        return
-    if VERBOSE:
-        print("\nThe search: '>' enters a position, '<' leaves it with the best value found there for each number of "
-              "your moves (only where it improves).\n", flush=True)
-    doing("Searching every repertoire within the limits (the whole tree first, then the best for each size)",
-          milestone=True)
-    root = search.node(board, 1.0, len(prefix), base)
+        print(f"  base:       {a.base}, {count_own(base, board.turn == side)} of your moves, kept")
+    print(flush=True)
+    objective = make_objective(explorer, side)
+    tree = json.loads(json.dumps(base)) if base else {}
+    greedy = Greedy(objective, board, side, tree, a)
+    added = greedy.run(a.target, a.moves_budget if a.moves_budget is not None else a.max_moves)
     explorer.save()
-    log("search done")
-    print(f"\n{search.positions:,} positions searched: {explorer.queries:,} explorer requests, "
-          f"{explorer.from_cache:,} answers from the cache, in {time.monotonic() - START:.0f} s.\n")
-    print(f"Best {objective} by number of memorized moves (after the opening's own moves"
-          + (", new moves only" if base is not None else "") + "):")
-    shown = [c for c in range(len(root.best)) if c <= 10 or c % 5 == 0 or c == len(root.best) - 1]
-    for c in shown:
-        print(f"  {c:3d} moves: {fmt(root.best[c])}")
-
-    if a.moves_budget is not None:
-        size = a.moves_budget
-        print(f"\nBest repertoire with at most {size} memorized moves "
-              f"(+{own_prefix} for the opening itself): {objective} {fmt(root.best[size])}.\n")
-        name = f"{a.moves or 'Repertoire'}, best {objective} with {size} moves"
-    else:
-        size = next((c for c, v in enumerate(root.best) if v >= a.target - 1e-12), None)
-        if size is None:
-            print(f"\n{fmt(a.target)} isn't reachable within {a.max_moves} moves "
-                  f"(best: {fmt(root.best[-1])}). Try more candidates, a larger --max-moves or --max-plies.")
-            sys.exit(1)
-        print(f"\nSmallest repertoire reaching {fmt(a.target)}: {size} memorized moves "
-              f"(+{own_prefix} for the opening itself), {objective} {fmt(root.best[size])}.\n")
-        name = f"{a.moves or 'Repertoire'}, smallest for {objective} {fmt(a.target)}"
-    tree = solution(root, size)
-    replies = {san: p for san, p, _ in root.replies} if not root.own else {}
-    finish(a, tree, board, side, base, prefix, replies, name)
+    log("done")
+    print(f"\n{added} moves added: {explorer.queries:,} explorer requests, {explorer.from_cache:,} answers "
+          f"from the cache, in {time.monotonic() - START:.0f} s.\n")
+    _, moves = greedy.listed(board) if board.turn != side else (None, [])
+    total = sum(games_of(m) for m in moves)
+    finish(a, tree, board, side, base, prefix, {m["san"]: games_of(m) / total for m in moves} if total else {},
+           f"{a.moves or 'Repertoire'}, {objective.name} with {added} new moves")
 
 
 def finish(a, tree: dict, board: chess.Board, side: chess.Color, base: dict | None, prefix: list[str],
@@ -1215,25 +882,56 @@ def finish(a, tree: dict, board: chess.Board, side: chess.Color, base: dict | No
 
 
 def main() -> None:
-    parser = common_parser(
-        __doc__.split("\n\n")[0],
-        "value",
-        "Find the fewest memorized moves reaching this value: an expected score (0 to 1) or, "
-        "with --objective evaluation, an expected evaluation in pawns (e.g. 0.5).",
-    )
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--moves", default="", help="The opening, in SAN from the initial position (e.g. 'b3').")
+    parser.add_argument("--side", choices=["white", "black"], required=True)
+    goal = parser.add_mutually_exclusive_group(required=True)
+    goal.add_argument("--moves-budget", type=int, metavar="N", help="Add N moves.")
+    goal.add_argument("--target", type=float,
+                      help="Add moves until the value reaches this: an expected score (0 to 1) or, with "
+                           "--objective evaluation, an expected evaluation in pawns (e.g. 0.5).")
     parser.add_argument("--objective", choices=["score", "evaluation", "hybrid"], default=OBJECTIVE,
                         help=f"The explorer's expected score, Stockfish's expected evaluation, or the expected "
                              f"score with Stockfish under {MIN_LEAF_GAMES} games (default {OBJECTIVE}).")
+    parser.add_argument("--explorer", default=EXPLORER,
+                        help=f"The explorer's URL (default {EXPLORER}; the local one: http://127.0.0.1:9002).")
+    parser.add_argument("--delay", type=float,
+                        help=f"Seconds between two explorer requests (default {DELAY:g}; 0 for a local explorer).")
+    parser.add_argument("--explorer-cache", type=Path, default=EXPLORER_CACHE,
+                        help=f"Where explorer answers are kept between runs (default {EXPLORER_CACHE}).")
+    parser.add_argument("--cache-days", type=float, default=CACHE_DAYS,
+                        help=f"Explorer answers older than this are asked again (default {CACHE_DAYS}).")
+    parser.add_argument("--no-explorer-cache", action="store_true", help="Ask the explorer for everything.")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Print each explorer request and Stockfish evaluation, and the next best moves.")
+    parser.add_argument("--speeds", default=SPEEDS)
+    pool = parser.add_mutually_exclusive_group()
+    pool.add_argument("--min-rating", type=int,
+                      help=f"Games whose players average at least this, by rating group (default {MIN_RATING}).")
+    pool.add_argument("--ratings", help="Exact explorer rating groups instead, e.g. '1800,2000'.")
+    parser.add_argument("--candidates", type=int, default=CANDIDATES, help="Your most played moves considered per position.")
+    parser.add_argument("--min-reach", type=float, default=MIN_REACH,
+                        help="Replies reached by fewer games than this share aren't answered.")
+    parser.add_argument("--max-moves", type=int, default=MAX_MOVES, help="With --target: the most moves added.")
+    parser.add_argument("--max-loss", default=MAX_LOSS,
+                        help="Leave out your moves losing more winning chances (-1 to 1) than this against "
+                             "Stockfish's best: best (0.02), good (0.1), inaccuracy (0.2), or a number. "
+                             "Default: any move.")
+    parser.add_argument("--base", type=Path,
+                        help="A Lirep study file to build on: its moves are kept, and the moves are added to "
+                             "it. It must start with --moves.")
+    parser.add_argument("--out", help="Write the repertoire as a Lirep study file.")
     safety = parser.add_argument_group("safeguards against small samples")
     safety.add_argument("--min-games", type=int,
                         help=f"Games one of your played moves needs to be a candidate "
                              f"(default {MIN_GAMES}; {MIN_GAMES_EVALUATION} with --objective evaluation).")
     safety.add_argument("--prior-games", type=float,
-                        help=f"Shrink scores toward 50%% by this many games (default {PRIOR_GAMES}; score only).")
+                        help=f"Shrink explorer scores toward 50%% as if this many more games had been drawn "
+                             f"(default {PRIOR_GAMES}; 0 with --objective evaluation).")
     safety.add_argument("--no-safeguards", action="store_true",
                         help="Trust the explorer's scores as they are: no shrinkage, and any move played at least "
                              "once can be a candidate (unless --min-games or --prior-games are given).")
-    engine = parser.add_argument_group("Stockfish (--objective evaluation)")
+    engine = parser.add_argument_group("Stockfish (--objective evaluation or hybrid, or --max-loss)")
     engine.add_argument("--stockfish", default=STOCKFISH)
     engine.add_argument("--depth", type=int, default=DEPTH)
     engine.add_argument("--engine-candidates", type=int, default=ENGINE_CANDIDATES,
@@ -1243,7 +941,23 @@ def main() -> None:
     a = parser.parse_args()
     global VERBOSE
     VERBOSE = a.verbose
-    resolve_common(parser, a)
+
+    if a.ratings is None:
+        floor = MIN_RATING if a.min_rating is None else a.min_rating
+        groups = [g for g in RATING_GROUPS if g >= floor]
+        if not groups:
+            parser.error(f"no rating group starts at {floor} or above (the last starts at {RATING_GROUPS[-1]})")
+        a.ratings = ",".join(map(str, groups))
+        a.pool = f"games averaging {groups[0]}+"
+        if groups[0] != floor:
+            a.pool += f" ({floor} isn't a group boundary)"
+    else:
+        a.pool = f"rating groups {a.ratings}"
+    if a.max_loss is not None:
+        try:
+            a.max_loss = LOSS_LEVELS.get(a.max_loss) or float(a.max_loss)
+        except ValueError:
+            parser.error(f"--max-loss: {a.max_loss} is neither {', '.join(LOSS_LEVELS)} nor a number")
     evaluation = a.objective == "evaluation"
     hybrid = a.objective == "hybrid"
     if a.min_games is None:
@@ -1252,42 +966,31 @@ def main() -> None:
     if a.prior_games is None:
         a.prior_games = 0 if a.no_safeguards or evaluation else PRIOR_GAMES
 
-    if not evaluation and not hybrid:
-        run(
-            a,
-            lambda explorer, side: Search(explorer, side, a),
-            "expected score",
-            lambda v: f"{v:.2%}",
-            [f"safeguards: {a.min_games} games per candidate move, scores shrunk by {a.prior_games:g} games"
-             + ("  (--no-safeguards)" if a.no_safeguards else "")],
-        )
-        return
-    evaluator = Evaluator(a.stockfish, a.depth, a.engine_candidates, a.cache)
+    soundness = ([] if a.max_loss is None else
+                 [f"soundness:  your moves losing over {a.max_loss:g} winning chances against Stockfish's best "
+                  f"(depth {a.depth}) left out"])
+    evaluator = (Evaluator(a.stockfish, a.depth, a.engine_candidates, a.cache)
+                 if evaluation or hybrid or a.max_loss is not None else None)
     try:
         if hybrid:
-            run(
-                a,
-                lambda explorer, side: HybridSearch(explorer, side, a, evaluator),
-                "expected score",
-                lambda v: f"{v:.2%}",
+            run(a, lambda explorer, side: HybridObjective(explorer, side, a, evaluator),
                 [f"leaves:     explorer results, Stockfish (depth {a.depth}) under {MIN_LEAF_GAMES} games; "
                  f"{a.engine_candidates} engine candidates per position",
                  f"safeguards: {a.min_games} games per played candidate move, scores shrunk by "
-                 f"{a.prior_games:g} games"],
-            )
-            return
-        run(
-            a,
-            lambda explorer, side: EvaluationSearch(explorer, side, a, evaluator),
-            "expected evaluation",
-            lambda v: f"{v:+.2f}",
-            [f"stockfish:  depth {a.depth}, {a.engine_candidates} engine candidates per position, "
-             f"evaluations capped at ±{a.mate_cap:g} pawns",
-             f"safeguards: {a.min_games} games per played candidate move"],
-        )
+                 f"{a.prior_games:g} games"] + soundness)
+        elif evaluation:
+            run(a, lambda explorer, side: EvaluationObjective(explorer, side, a, evaluator),
+                [f"stockfish:  depth {a.depth}, {a.engine_candidates} engine candidates per position, "
+                 f"evaluations capped at ±{a.mate_cap:g} pawns",
+                 f"safeguards: {a.min_games} games per played candidate move"] + soundness)
+        else:
+            run(a, lambda explorer, side: Objective(explorer, side, a, evaluator),
+                [f"safeguards: {a.min_games} games per candidate move, scores shrunk by {a.prior_games:g} games"
+                 + ("  (--no-safeguards)" if a.no_safeguards else "")] + soundness)
     finally:
-        print(f"({evaluator.computed} new Stockfish evaluations; cache: {a.cache})")
-        evaluator.close()
+        if evaluator:
+            print(f"({evaluator.computed} new Stockfish evaluations; cache: {a.cache})")
+            evaluator.close()
 
 
 if __name__ == "__main__":
