@@ -4012,7 +4012,11 @@ details[open] > summary.tree-fold__head::before {
 /* On a phone the board takes the screen's whole width, edge to edge, as in
    the Lichess app: no card around it, and out over the page's 16px gutters. */
 @media (max-width: 640px) {
-  .bullet .study-card--board {
+  /* On phones, the board takes the screen's whole width, on every page
+     with one (the editor, a shared study or game, practice and Bullet):
+     its card loses its padding and frame, and reaches past the page's
+     16px gutter. */
+  .study-card--board {
     margin: 0 -16px;
     padding: 0;
     background: none;
@@ -4022,6 +4026,23 @@ details[open] > summary.tree-fold__head::before {
        as wide as the board: edge to edge, that empty overhang would let the
        page scroll sideways. */
     overflow: hidden;
+  }
+
+  /* With Stockfish on, the evaluation gauge and the board share the width:
+     the gauge at the left edge, the board right after it. */
+  .study-card--board:has(> .eval-gauge:not([hidden])) {
+    padding-left: 14px;
+  }
+
+  .study-card--board .eval-gauge {
+    top: calc(var(--material-row, 0px) + var(--material-gap, 0px));
+    bottom: calc(var(--material-row, 0px) + var(--material-gap, 0px));
+    left: 1px;
+  }
+
+  /* The material rows keep off the screen's edges. */
+  .study-card--board .material {
+    padding-inline: 8px;
   }
 
   /* Nor anything else, on the practice pages: they fit the screen's width. */
