@@ -28,8 +28,8 @@ after one of your moves inside a line, or after a line's last move
 (extending it). Your candidates there are your most played moves (and
 Stockfish's best, with the evaluation or the hybrid); replies reached by few
 games are left out. --max-loss leaves out your moves that Stockfish finds
-unsound: losing more winning chances than a given level against its best. Only the positions next to the repertoire are needed, so
-it is fast, but not always optimal: a move worth little alone, but much with
+unsound: losing more than so many centipawns against its best. Only the
+positions next to the repertoire are needed, so it is fast, but not always optimal: a move worth little alone, but much with
 the next one, is missed.
 
 All the parameters, with their defaults and what they mean, are in the
@@ -64,9 +64,9 @@ export LICHESS_TOKEN=lip_..., or the token in ~/.config/lirep/lichess-token):
   guix shell stockfish -- tools/optimal_repertoire.py --moves "e4 e5 Nc3" \\
       --side white --base vienna.lirep.json --objective hybrid \\
       --target 0.59 --out vienna-59.lirep.json
-  # 20 moves, none worse than an inaccuracy for Stockfish:
+  # 20 moves, each good or better for Stockfish (losing at most 50 cp):
   guix shell stockfish -- tools/optimal_repertoire.py --moves "e4 c5 c3" \\
-      --side white --moves-budget 20 --max-loss inaccuracy
+      --side white --moves-budget 20 --max-loss good
   # Moves added until the repertoire reaches 56%, written as a Lirep study file:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --target 0.56 \\
       --out alapin.lirep.json
@@ -127,12 +127,14 @@ CANDIDATES = 4      # --candidates: your most played moves considered in a posit
 MIN_REACH = 0.002   # --min-reach: a reply reached by fewer than this share of the
                     # games at the start isn't answered (0.002 = 0.2%)
 MAX_MOVES = 150     # --max-moves: with --target, the most moves added
-MAX_LOSS = None     # --max-loss: leave out your moves losing more winning
-                    # chances (-1 to 1, Lichess's curve) than this against
-                    # Stockfish's best, as Lirep's arrows grade them:
-                    # "best" 0.02, "good" 0.1, "inaccuracy" 0.2; None: any
-                    # move (Stockfish then runs whatever the objective)
-LOSS_LEVELS = {"best": 0.02, "good": 0.1, "inaccuracy": 0.2}
+MAX_LOSS = None     # --max-loss: leave out your moves losing more than this
+                    # many centipawns against Stockfish's best (evaluations
+                    # within +/- MATE_CAP); None: any move (Stockfish then
+                    # runs whatever the objective)
+LOSS_LEVELS = {"best": 10, "excellent": 25, "good": 50, "inaccuracy": 100}
+                    # --max-loss by name, as in Lirep's suggested moves
+                    # (Lichess once called a loss of 50 an inaccuracy, of
+                    # 100 a mistake)
 
 # ---- Safeguards against small samples ---------------------------------------
 # An explorer score from N games is uncertain by roughly +/-(50 / sqrt N)
@@ -375,10 +377,12 @@ class Objective:
         """Moves (UCI) to consider at your turn besides the most played."""
         return []
 
-    def chances(self, board: chess.Board) -> float:
-        """Your winning chances at `board`, -1 to 1, from Stockfish."""
+    def cp(self, board: chess.Board) -> float:
+        """Stockfish's evaluation at `board`, in centipawns for your side,
+        within +/- --mate-cap (a mate counts as that)."""
         cp = self.evaluator.get(board)["cp"]
-        return 2 * score_from_cp(cp if self.side == chess.WHITE else -cp) - 1
+        cap = 100 * self.a.mate_cap
+        return max(-cap, min(cap, cp if self.side == chess.WHITE else -cp))
 
 
 class Evaluator:
@@ -622,9 +626,9 @@ class Greedy:
             return False
         after = board.copy()
         after.push_uci(uci)
-        loss = self.s.chances(board) - self.s.chances(after)
+        loss = self.s.cp(board) - self.s.cp(after)
         if loss > self.a.max_loss:
-            detail(f"left out: {line_of(after)} loses {loss:.2f} winning chances")
+            detail(f"left out: {line_of(after)} loses {loss:.0f} centipawns")
             return True
         return False
 
@@ -913,10 +917,10 @@ def main() -> None:
     parser.add_argument("--min-reach", type=float, default=MIN_REACH,
                         help="Replies reached by fewer games than this share aren't answered.")
     parser.add_argument("--max-moves", type=int, default=MAX_MOVES, help="With --target: the most moves added.")
-    parser.add_argument("--max-loss", default=MAX_LOSS,
-                        help="Leave out your moves losing more winning chances (-1 to 1) than this against "
-                             "Stockfish's best: best (0.02), good (0.1), inaccuracy (0.2), or a number. "
-                             "Default: any move.")
+    parser.add_argument("--max-loss", default=MAX_LOSS, metavar="CP",
+                        help="Leave out your moves losing more than CP centipawns against Stockfish's best, or "
+                             "by name: " + ", ".join(f"{k} ({v})" for k, v in LOSS_LEVELS.items())
+                             + ", or any (the default: any move).")
     parser.add_argument("--base", type=Path,
                         help="A Lirep study file to build on: its moves are kept, and the moves are added to "
                              "it. It must start with --moves.")
@@ -953,11 +957,13 @@ def main() -> None:
             a.pool += f" ({floor} isn't a group boundary)"
     else:
         a.pool = f"rating groups {a.ratings}"
+    if a.max_loss == "any":
+        a.max_loss = None
     if a.max_loss is not None:
         try:
-            a.max_loss = LOSS_LEVELS.get(a.max_loss) or float(a.max_loss)
+            a.max_loss = LOSS_LEVELS[a.max_loss] if a.max_loss in LOSS_LEVELS else float(a.max_loss)
         except ValueError:
-            parser.error(f"--max-loss: {a.max_loss} is neither {', '.join(LOSS_LEVELS)} nor a number")
+            parser.error(f"--max-loss: {a.max_loss} is neither {', '.join(LOSS_LEVELS)}, any nor a number")
     evaluation = a.objective == "evaluation"
     hybrid = a.objective == "hybrid"
     if a.min_games is None:
@@ -967,7 +973,7 @@ def main() -> None:
         a.prior_games = 0 if a.no_safeguards or evaluation else PRIOR_GAMES
 
     soundness = ([] if a.max_loss is None else
-                 [f"soundness:  your moves losing over {a.max_loss:g} winning chances against Stockfish's best "
+                 [f"soundness:  your moves losing over {a.max_loss:g} centipawns against Stockfish's best "
                   f"(depth {a.depth}) left out"])
     evaluator = (Evaluator(a.stockfish, a.depth, a.engine_candidates, a.cache)
                  if evaluation or hybrid or a.max_loss is not None else None)

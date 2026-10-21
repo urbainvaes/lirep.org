@@ -48,7 +48,7 @@ import {
   type EvaluationCache,
 } from "./evalCache";
 import { calculateExpectedScore } from "./expectedScore";
-import { Suggester, type Suggestion } from "./suggest";
+import { MOVE_LEVELS, Suggester, type Suggestion } from "./suggest";
 import { cachedExplorerData, errorMessage, fetchExplorerData, hasExplorerData } from "./explorerClient";
 import { materialBalance, materialHtml } from "./material";
 import { downloadStudyFile } from "./studyFile";
@@ -306,13 +306,13 @@ function renderEditor(
                     <label>Your most played moves considered in a position<input id="suggest-candidates" type="number" min="1" max="10" value="4" /></label>
                     <label>Games a move needs to be considered<input id="suggest-min-games" type="number" min="1" value="100" /></label>
                     <label>Replies left out below this share of games (%)<input id="suggest-min-reach" type="number" min="0" max="100" step="0.1" value="0.2" /></label>
-                    <label title="Leaves out the moves losing more winning chances than this against Stockfish's best, as the arrows' colours grade them; Stockfish then evaluates the moves tried, at the depth in the settings">Moves allowed
-                      <select id="suggest-max-loss">
-                        <option value="" selected>Any, unsound ones included</option>
-                        <option value="0.2">Up to inaccuracies</option>
-                        <option value="0.1">Good moves only</option>
-                        <option value="0.02">Stockfish's best only</option>
+                    <label title="By the centipawns a move loses against Stockfish's best: its evaluation before the move minus after it. Stockfish then evaluates the moves tried, at the depth in the settings">Moves allowed
+                      <select id="suggest-level">
+                        <option value="" selected>Any</option>
+                        ${MOVE_LEVELS.map((level) => `<option value="${level.cp}">${level.label} (losing at most ${level.cp} cp)</option>`).join("")}
+                        <option value="custom">Losing at most…</option>
                       </select>
+                      <span id="suggest-max-loss-field" hidden><input id="suggest-max-loss" type="number" min="0" step="5" value="50" aria-label="Most centipawns lost" />cp</span>
                     </label>
                   </details>
                   <div class="suggest-actions">
@@ -1427,7 +1427,8 @@ function renderEditor(
     const start = scope === "here" ? currentId : effectiveStart();
     const leaf = settings.leafValue ?? "explorer";
     const depth = figuresDepth();
-    const maxLoss = (document.getElementById("suggest-max-loss") as HTMLSelectElement).value;
+    const level = (document.getElementById("suggest-level") as HTMLSelectElement).value;
+    const maxLoss = level === "custom" ? (document.getElementById("suggest-max-loss") as HTMLInputElement).value : level;
     let engine: Engine | null = null;
     const status = (text: string) => (suggestStatusEl.textContent = text);
     const suggester = new Suggester(tree, {
@@ -1501,6 +1502,10 @@ function renderEditor(
     return true;
   }
 
+  const suggestLevel = document.getElementById("suggest-level") as HTMLSelectElement;
+  suggestLevel.addEventListener("change", () => {
+    (document.getElementById("suggest-max-loss-field") as HTMLElement).hidden = suggestLevel.value !== "custom";
+  });
   suggestOneBtn.addEventListener("click", () => void suggest(true));
   suggestRunBtn.addEventListener("click", () => void suggest(false));
   suggestStopBtn.addEventListener("click", () => {

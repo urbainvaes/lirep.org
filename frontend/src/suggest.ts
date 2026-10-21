@@ -14,8 +14,17 @@
 import { Chess } from "chess.js";
 
 import { MIN_LEAF_GAMES, type ExplorerData, type ExplorerMove, type LeafValue } from "./explorer";
-import { scoreFromCp } from "./expectedScore";
+import { EVAL_CAP_CP, scoreFromCp } from "./expectedScore";
 import { addMove, sanPathTo, type StudyTree } from "./tree";
+
+/** The moves allowed, by the centipawns they may lose against Stockfish's
+ * best (Lichess once called a loss of 50 an inaccuracy, of 100 a mistake). */
+export const MOVE_LEVELS = [
+  { label: "Best only", cp: 10 },
+  { label: "Excellent or better", cp: 25 },
+  { label: "Good or better", cp: 50 },
+  { label: "Up to inaccuracies", cp: 100 },
+] as const;
 
 export interface SuggestOptions {
   side: "white" | "black";
@@ -24,8 +33,8 @@ export interface SuggestOptions {
   candidates: number; // your most played moves considered in a position
   minGames: number; // games a move needs to be a candidate
   minReach: number; // replies reached by fewer than this share of games aren't answered
-  // The winning chances (−1 to 1, Lichess's curve) a candidate may lose
-  // against Stockfish's best move; null: any move.
+  // The centipawns a candidate may lose against Stockfish's best move;
+  // null: any move.
   maxLoss: number | null;
   explorer: (fen: string) => Promise<ExplorerData>;
   // Stockfish's evaluation in centipawns, White's point of view (null: none).
@@ -89,15 +98,20 @@ export class Suggester {
     return data;
   }
 
-  private async stockfish(chess: Chess): Promise<number> {
+  /** Stockfish's evaluation, in centipawns for your side. */
+  private async cp(chess: Chess): Promise<number> {
     const fen = chess.fen();
-    let score = this.evals.get(fen);
-    if (score === undefined) {
+    let cp = this.evals.get(fen);
+    if (cp === undefined) {
       const white = (await this.o.evaluate(fen)) ?? 0;
-      score = scoreFromCp(this.o.side === "white" ? white : -white);
-      this.evals.set(fen, score);
+      cp = this.o.side === "white" ? white : -white;
+      this.evals.set(fen, cp);
     }
-    return score;
+    return cp;
+  }
+
+  private async stockfish(chess: Chess): Promise<number> {
+    return scoreFromCp(await this.cp(chess));
   }
 
   private explorerScore(row: { white: number; draws: number; black: number }): number {
@@ -183,8 +197,9 @@ export class Suggester {
   // -- The additions -----------------------------------------------------
 
   /** Your candidates after the opponent's move: your most played moves
-   * there, leaving out those losing more than maxLoss against Stockfish's
-   * best; with the value of a line ending with each, best first. */
+   * there, leaving out those losing more than maxLoss centipawns against
+   * Stockfish's best; with the value of a line ending with each, best
+   * first. */
   private async candidates(chess: Chess): Promise<{ san: string; value: number }[]> {
     const { moves } = await this.explorer(chess.fen());
     const played = moves.filter((m) => games(m) >= this.o.minGames).sort((a, b) => games(b) - games(a));
@@ -192,9 +207,10 @@ export class Suggester {
     for (const m of played) {
       if (values.length >= this.o.candidates) break;
       const next = after(chess, m.san);
-      // Your winning chances are 2 × the expected score − 1: before the
-      // move, with Stockfish's best, and after this one.
-      if (this.o.maxLoss !== null && 2 * ((await this.stockfish(chess)) - (await this.stockfish(next))) > this.o.maxLoss) continue;
+      // The evaluation before the move (Stockfish's best) minus after it,
+      // each within ±10 pawns, so that a mate counts as 10 pawns.
+      const capped = (cp: number) => Math.max(-EVAL_CAP_CP, Math.min(EVAL_CAP_CP, cp));
+      if (this.o.maxLoss !== null && capped(await this.cp(chess)) - capped(await this.cp(next)) > this.o.maxLoss) continue;
       values.push({ san: m.san, value: await this.leaf(m, next) });
     }
     return values.sort((a, b) => b.value - a.value);
