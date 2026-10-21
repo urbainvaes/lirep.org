@@ -1,5 +1,6 @@
-// The expected score's tiers, shown as a coloured chess king: on a study's
-// Stats page (with their legend) and on its card on the home page.
+// A study's badge: a chess piece whose shine is the expected score's tier
+// and whose rank is the expected evaluation's, on its Stats page (with
+// their legend) and on its card on the home page.
 
 // Gamification tiers for the expected score, by side: White scores about
 // 52% on average in the Explorer's pools, Black about 48%, so Bronze is the
@@ -30,7 +31,32 @@ export function scoreTier(expectedScore: number | undefined, side: "white" | "bl
   return TIERS.find((t) => pct >= tierThreshold(t.white, side))?.tier ?? "none";
 }
 
-export function pieceBadgeHtml(tier: ScoreTier, size: "" | "sm" = ""): string {
+// The expected evaluation's pieces, highest first: the lowest evaluation,
+// in pawns from the studied side's point of view, for each (the same for
+// both sides). A study without one shows the king.
+export type EvalPiece = "king" | "queen" | "rook" | "bishop" | "knight" | "pawn";
+
+export const PIECES: { piece: EvalPiece; label: string; glyph: string; from: number }[] = [
+  { piece: "king", label: "King", glyph: "♚", from: 1.0 },
+  { piece: "queen", label: "Queen", glyph: "♛", from: 0.9 },
+  { piece: "rook", label: "Rook", glyph: "♜", from: 0.75 },
+  { piece: "bishop", label: "Bishop", glyph: "♝", from: 0.5 },
+  { piece: "knight", label: "Knight", glyph: "♞", from: 0.25 },
+  { piece: "pawn", label: "Pawn", glyph: "♟", from: -Infinity },
+];
+
+export const PIECE_LABELS = Object.fromEntries(PIECES.map((p) => [p.piece, p.label])) as Record<EvalPiece, string>;
+
+/** `evalCp`: the expected evaluation, in centipawns for the studied side. */
+export function evalPiece(evalCp: number | undefined): EvalPiece {
+  if (evalCp === undefined) return "king";
+  return PIECES.find((p) => evalCp / 100 >= p.from)!.piece;
+}
+
+export function pieceBadgeHtml(tier: ScoreTier, size: "" | "sm" = "", piece: EvalPiece = "king"): string {
   const sizeClass = size ? ` piece-badge--${size}` : "";
-  return `<span class="piece-badge piece-badge--${tier}${sizeClass}">♚</span>`;
+  // U+FE0E: the glyph's text form; the pawn's emoji form would ignore the
+  // gradient.
+  const glyph = PIECES.find((p) => p.piece === piece)!.glyph;
+  return `<span class="piece-badge piece-badge--${tier}${sizeClass}">${glyph}\uFE0E</span>`;
 }

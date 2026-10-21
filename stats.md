@@ -74,7 +74,12 @@ Study cards on the home page show the expected score, and their Stats
 button opens the study's Stats page, whose legend gives the score tiers
 by side (for White: Legendary at 60%+, Brilliant at 59%+, Gold at 57%+,
 Silver at 54%+, Bronze at 52%+, about White's average, otherwise no tier;
-Black's thresholds are 4 points lower).
+Black's thresholds are 4 points lower). A study's badge, on its card and
+Stats page, is a chess piece in its tier's colour; the piece follows the
+expected evaluation, in pawns for the studied side: a pawn under +0.25, a
+knight from +0.25, a bishop from +0.50, a rook from +0.75, a queen from
++0.90, the king from +1.00 (the same for both sides; the king while not
+calculated). See `frontend/src/scoreTiers.ts`.
 Calculations are started on the Stats page; the cards have no
 Calculate/Recalculate button.
 

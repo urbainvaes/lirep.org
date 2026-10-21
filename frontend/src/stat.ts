@@ -24,7 +24,17 @@ import {
   type LeafValue,
 } from "./explorer";
 import { calculateExpectedScore, MATE_SCORE_CP } from "./expectedScore";
-import { BLACK_TIER_OFFSET, pieceBadgeHtml, scoreTier, TIER_LABELS, TIERS, tierThreshold } from "./scoreTiers";
+import {
+  BLACK_TIER_OFFSET,
+  evalPiece,
+  PIECE_LABELS,
+  PIECES,
+  pieceBadgeHtml,
+  scoreTier,
+  TIER_LABELS,
+  TIERS,
+  tierThreshold,
+} from "./scoreTiers";
 import { fetchExplorerData } from "./explorerClient";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { mainLineSans, sanPathTo, type StudyTree } from "./tree";
@@ -527,6 +537,7 @@ function renderPage(
     speeds: explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]),
   };
   const tier = scoreTier(stats?.winProbability, study.side);
+  const piece = evalPiece(stats?.evalCp);
   const startPoint = describeStartPoint(study.tree, study.startNodeId);
   const disabled = hasMoves ? "" : "disabled";
 
@@ -580,8 +591,8 @@ function renderPage(
     <div class="stat-page">
       <div class="stat-page__header">
         <h1>
-          <button type="button" id="piece-badge" class="piece-badge-btn" aria-label="Score tier: ${TIER_LABELS[tier]} — click for details">
-            ${pieceBadgeHtml(tier)}
+          <button type="button" id="piece-badge" class="piece-badge-btn" aria-label="Badge: ${TIER_LABELS[tier]} ${PIECE_LABELS[piece]} — click for details">
+            ${pieceBadgeHtml(tier, "", piece)}
           </button>
           ${escapeHtml(study.name)}
         </h1>
@@ -594,12 +605,19 @@ function renderPage(
         <a href="/games.html?id=${study.id}">Games</a>
       </p>
       <div class="piece-legend" id="piece-legend" hidden>
-        <p class="piece-legend__title">Score tiers for ${sideName}, by expected score</p>
+        <p class="piece-legend__title">The colour: score tiers for ${sideName}, by expected score</p>
         ${TIERS.map(
-          (t) => `<div class="piece-legend__row">${pieceBadgeHtml(t.tier, "sm")}<span>${t.label} — ${tierThreshold(t.white, study.side)}% or higher</span></div>`,
+          (t) => `<div class="piece-legend__row">${pieceBadgeHtml(t.tier, "sm", piece)}<span>${t.label} — ${tierThreshold(t.white, study.side)}% or higher</span></div>`,
         ).join("")}
-        <div class="piece-legend__row">${pieceBadgeHtml("none", "sm")}<span>No tier — under ${tierThreshold(TIERS[TIERS.length - 1].white, study.side)}%, below ${sideName}'s average</span></div>
+        <div class="piece-legend__row">${pieceBadgeHtml("none", "sm", piece)}<span>No tier — under ${tierThreshold(TIERS[TIERS.length - 1].white, study.side)}%, below ${sideName}'s average</span></div>
         <p class="piece-legend__note">Bronze is about ${sideName}'s average score in the Explorer; ${study.side === "white" ? "Black's" : "White's"} thresholds are ${BLACK_TIER_OFFSET} points ${study.side === "white" ? "lower" : "higher"}.</p>
+        <p class="piece-legend__title">The piece: by expected evaluation, in pawns for ${sideName}</p>
+        ${PIECES.map(
+          (p, i) => `<div class="piece-legend__row">${pieceBadgeHtml(tier, "sm", p.piece)}<span>${p.label} — ${
+            i === PIECES.length - 1 ? `under +${PIECES[i - 1].from.toFixed(2)}` : `+${p.from.toFixed(2)} or higher`
+          }</span></div>`,
+        ).join("")}
+        <p class="piece-legend__note">The same for both sides. Before the expected evaluation is calculated, the piece is the king.</p>
       </div>
 
       <section class="calc-settings">

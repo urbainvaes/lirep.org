@@ -1,6 +1,6 @@
 import { escapeHtml } from "./layout";
 import { sanPathTo, type StudyTree } from "./tree";
-import { pieceBadgeHtml, scoreTier, TIER_LABELS } from "./scoreTiers";
+import { evalPiece, PIECE_LABELS, pieceBadgeHtml, scoreTier, TIER_LABELS } from "./scoreTiers";
 
 export interface StudyCardData {
   id: number;
@@ -8,7 +8,7 @@ export interface StudyCardData {
   tree: StudyTree;
   side: "white" | "black";
   startNodeId: number | null;
-  stats?: { winProbability?: number } | null;
+  stats?: { winProbability?: number; evalCp?: number } | null;
   gameCount?: number;
 }
 
@@ -97,15 +97,22 @@ function gamesBadgeHtml(study: StudyCardData): string {
     </a>`;
 }
 
-// The study's tier, as on its Stats page, linking there: the king in the
-// tier's colour (grey when not calculated yet), at the top right of the card.
+// The study's badge, as on its Stats page, linking there, at the top right
+// of the card: the piece of its expected evaluation (the king when not
+// calculated yet), in its tier's colour (grey when not calculated yet).
 function trophyLinkHtml(study: StudyCardData): string {
   const score = study.stats?.winProbability;
+  const evalCp = study.stats?.evalCp;
   const tier = scoreTier(score, study.side);
-  const title = score === undefined
-    ? "Expected score not calculated yet — click to see the stats"
-    : `${TIER_LABELS[tier]} · expected score ${(score * 100).toFixed(1)}% — click to see the stats`;
-  return `<a class="study-card__trophy" href="/stat.html?id=${study.id}" title="${title}" aria-label="${title}">${pieceBadgeHtml(tier, "sm")}</a>`;
+  const piece = evalPiece(evalCp);
+  const scoreText = score === undefined
+    ? "expected score not calculated yet"
+    : `${TIER_LABELS[tier]} · expected score ${(score * 100).toFixed(1)}%`;
+  const evalText = evalCp === undefined
+    ? "expected evaluation not calculated yet"
+    : `${PIECE_LABELS[piece]} · expected evaluation ${evalCp >= 0 ? "+" : "−"}${Math.abs(evalCp / 100).toFixed(2)}`;
+  const title = `${scoreText}; ${evalText} — click to see the stats`;
+  return `<a class="study-card__trophy" href="/stat.html?id=${study.id}" title="${title}" aria-label="${title}">${pieceBadgeHtml(tier, "sm", piece)}</a>`;
 }
 
 export function renderStudyCardWithActions(study: StudyCardData): string {

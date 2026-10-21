@@ -1,5 +1,5 @@
 import { fetchMe, renderAuthArea } from "./layout";
-import { pieceBadgeHtml, TIERS, tierThreshold } from "./scoreTiers";
+import { pieceBadgeHtml, PIECES, TIERS, tierThreshold } from "./scoreTiers";
 
 // The Changelog page: what changed, newest first, by day. Each change shows
 // a one-line summary; clicking it opens the details, and for recent changes
@@ -36,6 +36,26 @@ function tiersFigure(): string {
       <tbody>${rows}</tbody>
     </table>
     <figcaption>The tiers, from the expected score of the whole study. Black's thresholds are ${tierThreshold(TIERS[0].white, "white") - tierThreshold(TIERS[0].white, "black")} points lower, since Black scores less on average.</figcaption>
+  </figure>`;
+}
+
+// The pieces by expected evaluation, each in a tier's colour: built from
+// scoreTiers.ts, like the tiers' figure.
+function piecesFigure(): string {
+  const tiers = ["legendary", "brilliant", "gold", "silver", "bronze", "none"] as const;
+  const rows = PIECES.map(
+    (p, i) => `<tr>
+      <td>${p.label}</td>
+      <td>${i === PIECES.length - 1 ? `under +${PIECES[i - 1].from.toFixed(2)}` : `+${p.from.toFixed(2)} or more`}</td>
+      <td>${tiers.map((t) => pieceBadgeHtml(t, "sm", p.piece)).join(" ")}</td>
+    </tr>`,
+  ).join("");
+  return `<figure class="changelog-figure">
+    <table class="changelog-tiers">
+      <thead><tr><th>Piece</th><th>Expected evaluation</th><th>From Legendary to no tier</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <figcaption>The piece, from the expected evaluation in pawns for the studied side; its colour stays the expected score's tier.</figcaption>
   </figure>`;
 }
 
@@ -93,6 +113,21 @@ function focusFigure(): string {
 }
 
 const DAYS: Day[] = [
+  {
+    date: "2026-10-22",
+    changes: [
+      {
+        area: "Stats",
+        summary: "A study's badge shows its expected evaluation too",
+        details: `<p>The badge on a study's card and Stats page now combines its two results. The expected score still gives its colour
+          and shine; the expected evaluation now gives the piece: a pawn under +0.25, then a knight, bishop, rook and queen, and the king
+          from +1.00, the same for both sides. A study whose evaluation hasn't been calculated keeps the king. The Stats page's legend,
+          opened by clicking the badge, explains both.</p>
+          <p>Bronze, silver and gold are lighter and crisper, gold now shimmers gently, and Brilliant shines more.</p>`,
+        figure: piecesFigure,
+      },
+    ],
+  },
   {
     date: "2026-10-20",
     changes: [
