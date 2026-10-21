@@ -10,6 +10,7 @@
 // in IndexedDB (see explorer-cache.md).
 
 import { lirepExplorerUrl, type ExplorerData, type ExplorerSettings } from "./explorer";
+import { serverCacheEnabled, serverExplorerGet, serverExplorerSet } from "./serverCache";
 
 /** Minimum pause between two requests to Lichess's Opening Explorer. */
 export const EXPLORER_REQUEST_GAP_MS = 500;
@@ -188,26 +189,40 @@ function openCache(): Promise<IDBDatabase | null> {
   return dbPromise;
 }
 
+// With server storage (serverCache.ts), what this browser lacks is asked
+// from the server, and kept here; what it fetches goes to both.
 async function cacheGet(key: string, ttl: number): Promise<ExplorerData | undefined> {
   const db = await openCache();
-  if (!db) return undefined;
-  const entry = await new Promise<CachedResponse | undefined>((resolve) => {
-    const request = db.transaction("responses", "readonly").objectStore("responses").get(key);
-    request.onsuccess = () => resolve(request.result as CachedResponse | undefined);
-    request.onerror = () => resolve(undefined);
-  });
-  return entry && Date.now() - entry.fetchedAt <= ttl ? entry.data : undefined;
+  const entry = db
+    ? await new Promise<CachedResponse | undefined>((resolve) => {
+        const request = db.transaction("responses", "readonly").objectStore("responses").get(key);
+        request.onsuccess = () => resolve(request.result as CachedResponse | undefined);
+        request.onerror = () => resolve(undefined);
+      })
+    : undefined;
+  if (entry && Date.now() - entry.fetchedAt <= ttl) return entry.data;
+  if (!(await serverCacheEnabled())) return undefined;
+  const server = await serverExplorerGet(key);
+  if (!server || Date.now() - server.fetchedAt > ttl) return undefined;
+  await localSet(key, server);
+  return server.data;
 }
 
-async function cacheSet(key: string, data: ExplorerData): Promise<void> {
+async function localSet(key: string, entry: CachedResponse): Promise<void> {
   const db = await openCache();
   if (!db) return;
   await new Promise<void>((resolve) => {
     const transaction = db.transaction("responses", "readwrite");
-    transaction.objectStore("responses").put({ data, fetchedAt: Date.parse(data.fetchedAt) } satisfies CachedResponse, key);
+    transaction.objectStore("responses").put(entry, key);
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => resolve();
   });
+}
+
+async function cacheSet(key: string, data: ExplorerData): Promise<void> {
+  const fetchedAt = Date.parse(data.fetchedAt);
+  if (await serverCacheEnabled()) serverExplorerSet(key, data, fetchedAt);
+  await localSet(key, { data, fetchedAt });
 }
 
 // --- Shaping --------------------------------------------------------------

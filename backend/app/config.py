@@ -60,3 +60,8 @@ FORUM_ADMINS = {name.strip().lower() for name in os.getenv("FORUM_ADMINS", "").s
 # Pen names shown instead of some players' Lichess usernames, by user number
 # (see store.user_aliases), so the usernames themselves never appear here.
 USER_ALIASES = {1: "Lirep", 2: "Lirep tester"}
+
+# User numbers (comma-separated) who may keep Stockfish and Explorer data on
+# the server (see cache.py); others can ask by email. On for them unless they
+# turn it off in their profile.
+SERVER_CACHE_USERS = {int(n) for n in os.getenv("SERVER_CACHE_USERS", "1").split(",") if n.strip()}

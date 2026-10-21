@@ -4648,6 +4648,13 @@ details[open] > summary.tree-fold__head::before {
   margin: 0 12px 0 0;
 }
 
+/* An option this account can't use yet (e.g. server storage): greyed out. */
+.profile-option--unavailable {
+  color: var(--text-dim);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .community-owner:hover {
   color: var(--primary-hover);
   text-decoration: underline;

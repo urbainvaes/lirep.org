@@ -9,7 +9,8 @@ data lives:
 | Lichess Explorer responses | Browser IndexedDB `lirep-explorer`, per browser profile | 30 days; 24 hours for the player database |
 | Lirep Explorer (2016 sample) responses | Not cached: the local Explorer is unlimited and never changes | — |
 | Resolved default rating bucket (for a new study's picker) | Backend `rating_cache`, per username | 1-hour TTL; stale fallback on refresh failure |
-| Stockfish position evals | Browser IndexedDB `lirep-position-evals`, keyed by `[username, fen]` | Until browser data is cleared; no sync |
+| Stockfish position evals | Browser IndexedDB `lirep-position-evals`, keyed by `[username, fen, depth]` | Until browser data is cleared |
+| Both, for accounts with server storage | Also backend `server_explorer_cache` and `server_eval_cache`, shared by those accounts | Explorer answers by the same TTLs (checked by the browser); evals kept |
 
 Older databases may still contain the legacy `cloud_eval_cache` table, but
 nothing reads or writes it. There is **no Lichess Cloud Eval fallback**.
@@ -82,6 +83,27 @@ Browsers cannot feed a cache shared between users: anyone could then
 upload invented move statistics and skew other people's scores. Before this
 change, the backend kept such a shared cache (`explorer_cache` in SQLite);
 it now drops that table on startup.
+
+## Server storage
+
+For the accounts allowed it (`SERVER_CACHE_USERS` in `config.py`, user
+numbers; `1` by default), the browser caches above have the server behind
+them (`frontend/src/serverCache.ts`, `backend/app/cache.py`). A lookup this
+browser can't answer is asked of the server, and a hit is kept here too;
+whatever is fetched from Lichess or evaluated by Stockfish is saved in both.
+Lookups and saves made within 20 ms of each other go in one request (up to
+500 items), and a position the server lacked isn't asked again during the
+page visit. The server is never in the way: a failed request just counts as
+a miss.
+
+The server's cache is shared: an Explorer answer (under the browser's own
+cache key, so its settings are part of it) or an evaluation (FEN and depth,
+in centipawns from White's view) is the same whoever asks. Only accounts
+with server storage on can read or write it, so nobody else can put data in
+it. Each account can turn it off in its profile (`users.server_cache`: NULL
+until chosen, meaning on); others see the option greyed out, with the
+address to ask for it. The profile also shows the cache's total size. The
+cache isn't deleted with an account, as it isn't any one account's.
 
 ## Rating bucket default
 

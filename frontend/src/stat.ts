@@ -567,9 +567,11 @@ function renderPage(
     : `<div class="stat-detail__score stat-card__score--empty">—</div>
        <p class="stat-card__meta">Not calculated yet.</p>`;
 
-  const cacheNote = cache.persistent
-    ? "Stockfish runs in this browser; evaluated positions are saved on this device and reused."
-    : "Browser storage is unavailable; evaluations last only until this tab closes.";
+  const cacheNote = cache.server
+    ? "Stockfish runs in this browser; evaluated positions are saved on this device and on the server, and reused."
+    : cache.persistent
+      ? "Stockfish runs in this browser; evaluated positions are saved on this device and reused."
+      : "Browser storage is unavailable; evaluations last only until this tab closes.";
   const lastRunNote = lastEvalRun
     ? `Last run: ${lastEvalRun.required} end-of-prep positions, ${lastEvalRun.computed} newly evaluated.`
     : "";

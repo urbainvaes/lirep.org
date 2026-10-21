@@ -2,6 +2,7 @@ import { Chess } from "chess.js";
 
 import { DEFAULT_SEARCH_DEPTH, type Engine, type EngineLine } from "./engine";
 import { MATE_SCORE_CP } from "./expectedScore";
+import { serverCacheEnabled, serverEvalGet, serverEvalSet } from "./serverCache";
 
 /** The Stockfish depths the Stats page offers for its evaluations; the
  * editor's figures use the same one. */
@@ -52,7 +53,8 @@ export async function evaluatePosition(engine: Engine, chess: Chess, depth: numb
 
 
 export interface EvaluationCache {
-  persistent: boolean;
+  persistent: boolean; // kept in this browser
+  server: boolean; // also kept on the server (serverCache.ts)
   get(fen: string, depth: number): Promise<number | undefined>;
   set(fen: string, depth: number, cp: number): Promise<void>;
 }
@@ -94,31 +96,43 @@ export async function openEvaluationCache(username: string): Promise<EvaluationC
   }
 
   const database = db;
+  // With server storage (serverCache.ts), what this browser lacks is asked
+  // from the server, and kept here; what Stockfish finds goes to both.
+  const server = await serverCacheEnabled();
+  const save = async (fen: string, depth: number, cp: number) => {
+    if (database) {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction("positions", "readwrite");
+        transaction.objectStore("positions").put(cp, [username, fen, depth]);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    }
+    memory.set(`${fen}|${depth}`, cp);
+  };
   return {
     persistent: database !== null,
+    server,
     async get(fen, depth) {
       const key = `${fen}|${depth}`;
       if (memory.has(key)) return memory.get(key);
-      if (!database) return undefined;
-      const value = await new Promise<number | undefined>((resolve, reject) => {
-        const request = database.transaction("positions", "readonly").objectStore("positions").get([username, fen, depth]);
-        request.onsuccess = () => resolve(request.result as number | undefined);
-        request.onerror = () => reject(request.error);
-      });
+      let value = database
+        ? await new Promise<number | undefined>((resolve, reject) => {
+            const request = database.transaction("positions", "readonly").objectStore("positions").get([username, fen, depth]);
+            request.onsuccess = () => resolve(request.result as number | undefined);
+            request.onerror = () => reject(request.error);
+          })
+        : undefined;
+      if (value === undefined && server) {
+        value = await serverEvalGet(fen, depth);
+        if (value !== undefined) await save(fen, depth, value);
+      }
       if (value !== undefined) memory.set(key, value);
       return value;
     },
     async set(fen, depth, cp) {
-      const key = `${fen}|${depth}`;
-      if (database) {
-        await new Promise<void>((resolve, reject) => {
-          const transaction = database.transaction("positions", "readwrite");
-          transaction.objectStore("positions").put(cp, [username, fen, depth]);
-          transaction.oncomplete = () => resolve();
-          transaction.onerror = () => reject(transaction.error);
-        });
-      }
-      memory.set(key, cp);
+      if (server) serverEvalSet(fen, depth, cp);
+      await save(fen, depth, cp);
     },
   };
 }

@@ -15,6 +15,7 @@ from .store import (
     get_user,
     register_user,
     register_user_limited,
+    server_cache_state,
     set_user_anonymous,
     touch_user,
     user_aliases,
@@ -259,6 +260,9 @@ async def me(request: Request) -> dict:
         "username": username,
         "displayName": display_name,
         "title": request.session.get("title"),
+        # Whether the browser also keeps its Stockfish and Explorer data on
+        # the server (cache.py).
+        "serverCache": server_cache_state(username)[1],
     }
 
 
@@ -290,12 +294,14 @@ async def profile(request: Request) -> dict:
 
     user_number = register_user(data["username"])
     user = get_user(data["username"])
+    allowed, enabled = server_cache_state(data["username"])
     return {
         "username": data["username"],
         "title": data.get("title"),
         "userNumber": user_number,
         "maxUsers": MAX_USERS,
         "anonymous": bool(user and user["anonymous"]),
+        "serverCache": {"allowed": allowed, "enabled": enabled},
         "ratings": ratings,
     }
 

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
-from .config import DEFAULT_EXPLORER_SOURCE, USER_ALIASES
+from .config import DEFAULT_EXPLORER_SOURCE, SERVER_CACHE_USERS, USER_ALIASES
 
 # LIREP_DB_PATH lets a deployment keep the database outside the source tree.
 DB_PATH = Path(os.getenv("LIREP_DB_PATH") or Path(__file__).resolve().parent.parent / "lirep.db")
@@ -128,6 +128,33 @@ def init_db() -> None:
         # shown next to them (see community.py).
         if "anonymous" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN anonymous INTEGER NOT NULL DEFAULT 0")
+        # Whether a user allowed server storage keeps their Stockfish and
+        # Explorer data there: NULL until they choose, meaning yes.
+        if "server_cache" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN server_cache INTEGER")
+        # The server's cache of Explorer answers and Stockfish evaluations,
+        # shared by the users allowed server storage (see cache.py): an
+        # answer is the browser's, by its cache key (explorerClient.ts), and
+        # an evaluation is in centipawns, from White's point of view.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS server_explorer_cache (
+                key TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                fetched_at REAL NOT NULL
+            ) WITHOUT ROWID
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS server_eval_cache (
+                fen TEXT NOT NULL,
+                depth INTEGER NOT NULL,
+                cp INTEGER NOT NULL,
+                PRIMARY KEY (fen, depth)
+            ) WITHOUT ROWID
+            """
+        )
         conn.execute(
             """
             INSERT OR IGNORE INTO users (username, created_at)
@@ -412,6 +439,76 @@ def set_user_anonymous(username: str, anonymous: bool) -> bool:
             "UPDATE users SET anonymous = ? WHERE username = ? COLLATE NOCASE", (1 if anonymous else 0, username)
         )
     return cur.rowcount > 0
+
+
+def server_cache_state(username: str) -> tuple[bool, bool]:
+    """Whether the user may keep their data on the server, and whether they do."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, server_cache FROM users WHERE username = ? COLLATE NOCASE", (username,)
+        ).fetchone()
+    allowed = row is not None and row["id"] in SERVER_CACHE_USERS
+    return allowed, allowed and row["server_cache"] != 0
+
+
+def set_server_cache(username: str, enabled: bool) -> bool:
+    """False if the user is not registered."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE users SET server_cache = ? WHERE username = ? COLLATE NOCASE", (1 if enabled else 0, username)
+        )
+    return cur.rowcount > 0
+
+
+def explorer_cache_get(keys: list[str]) -> dict[str, dict[str, Any]]:
+    """The cached Explorer answers among `keys`: {key: {data, fetchedAt}}."""
+    with _connect() as conn:
+        rows = conn.execute(
+            f"SELECT key, data, fetched_at FROM server_explorer_cache WHERE key IN ({','.join('?' * len(keys))})", keys
+        ).fetchall()
+    return {row["key"]: {"data": json.loads(row["data"]), "fetchedAt": row["fetched_at"]} for row in rows}
+
+
+def explorer_cache_put(entries: list[tuple[str, str, float]]) -> None:
+    """(key, data as JSON, fetched_at in ms) each; a newer answer replaces an older one."""
+    with _connect() as conn:
+        conn.executemany(
+            """
+            INSERT INTO server_explorer_cache (key, data, fetched_at) VALUES (?, ?, ?)
+            ON CONFLICT (key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at
+            WHERE excluded.fetched_at > server_explorer_cache.fetched_at
+            """,
+            entries,
+        )
+
+
+def eval_cache_get(positions: list[tuple[str, int]]) -> list[tuple[str, int, int]]:
+    """The cached evaluations among (fen, depth) pairs, as (fen, depth, cp)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            WITH wanted (fen, depth) AS (VALUES {', '.join(['(?, ?)'] * len(positions))})
+            SELECT e.fen, e.depth, e.cp FROM server_eval_cache e JOIN wanted w ON e.fen = w.fen AND e.depth = w.depth
+            """,
+            [x for position in positions for x in position],
+        ).fetchall()
+    return [(row["fen"], row["depth"], row["cp"]) for row in rows]
+
+
+def eval_cache_put(entries: list[tuple[str, int, int]]) -> None:
+    with _connect() as conn:
+        conn.executemany("INSERT OR REPLACE INTO server_eval_cache (fen, depth, cp) VALUES (?, ?, ?)", entries)
+
+
+def cache_size() -> dict[str, int]:
+    """The server cache's size: its entries, and their bytes (keys and data;
+    SQLite's own overhead aside)."""
+    with _connect() as conn:
+        explorer = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(LENGTH(key) + LENGTH(data) + 8), 0) FROM server_explorer_cache"
+        ).fetchone()
+        evals = conn.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(fen) + 16), 0) FROM server_eval_cache").fetchone()
+    return {"explorerEntries": explorer[0], "evaluations": evals[0], "bytes": explorer[1] + evals[1]}
 
 
 def anonymous_usernames() -> set[str]:

@@ -13,6 +13,7 @@ interface ProfileResponse {
   userNumber: number;
   maxUsers: number;
   anonymous: boolean;
+  serverCache: { allowed: boolean; enabled: boolean };
   ratings: Partial<Record<"bullet" | "blitz" | "rapid" | "classical", RatingInfo>>;
 }
 
@@ -152,6 +153,28 @@ function renderProfile(
       <span id="profile-anonymous-status" class="profile-subtitle" role="status"></span>
     </section>
 
+    <section class="profile-section">
+      <div class="profile-section__heading">
+        <div>
+          <h2>Storage</h2>
+          <p class="profile-subtitle">Opening Explorer answers and Stockfish evaluations are kept in this browser, so they
+            aren't asked or calculated twice. With server storage, they are also kept on the server, shared with the other
+            accounts that have it: they follow you across devices and survive clearing the browser.</p>
+        </div>
+      </div>
+      <label class="study-share profile-anonymous${profile.serverCache.allowed ? "" : " profile-option--unavailable"}">
+        <input type="checkbox" id="profile-server-cache" ${profile.serverCache.enabled ? "checked" : ""} ${profile.serverCache.allowed ? "" : "disabled"} />
+        Keep Stockfish and Explorer data on the server
+      </label>
+      ${
+        profile.serverCache.allowed
+          ? ""
+          : `<p class="profile-subtitle">Server storage is available on request: email <a href="mailto:contact@lirep.org">contact@lirep.org</a>.</p>`
+      }
+      <p id="profile-cache-size" class="profile-subtitle"></p>
+      <span id="profile-server-cache-status" class="profile-subtitle" role="status"></span>
+    </section>
+
     <section class="profile-section profile-delete">
       <div class="profile-section__heading">
         <h2>Account</h2>
@@ -193,6 +216,50 @@ function bindDeleteAccount(username: string): void {
       status.textContent = "Could not delete the account. Please try again.";
     }
   });
+}
+
+function bindServerCacheToggle(): void {
+  const input = document.getElementById("profile-server-cache") as HTMLInputElement | null;
+  const status = document.getElementById("profile-server-cache-status");
+  if (!input || !status || input.disabled) return;
+  input.addEventListener("change", async () => {
+    const wanted = input.checked;
+    input.disabled = true;
+    try {
+      const res = await fetch("/api/profile/server-cache", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: wanted }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      status.textContent = wanted
+        ? "Your Stockfish and Explorer data is now also kept on the server."
+        : "Your Stockfish and Explorer data is now kept in this browser only.";
+    } catch {
+      input.checked = !wanted;
+      status.textContent = "Could not change this setting. Please try again.";
+    } finally {
+      input.disabled = false;
+    }
+  });
+}
+
+// The server cache's total size, shared by the accounts with server storage.
+async function showCacheSize(): Promise<void> {
+  const el = document.getElementById("profile-cache-size");
+  if (!el) return;
+  try {
+    const res = await fetch("/api/cache/size", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const size = (await res.json()) as { bytes: number; explorerEntries: number; evaluations: number };
+    const mb = size.bytes / 1e6;
+    el.textContent =
+      `Server cache: ${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB in all ` +
+      `(${size.explorerEntries.toLocaleString()} Explorer answers, ${size.evaluations.toLocaleString()} Stockfish evaluations).`;
+  } catch {
+    // The size is only informative.
+  }
 }
 
 function bindAnonymousToggle(): void {
@@ -247,6 +314,8 @@ async function init(): Promise<void> {
     const practice: Record<string, PracticeSummary> = practiceRes?.ok ? await practiceRes.json() : {};
     renderProfile(main, profile, studies, practice);
     bindAnonymousToggle();
+    bindServerCacheToggle();
+    void showCacheSize();
     bindDeleteAccount(profile.username);
   } catch {
     renderSignedOut(main);
