@@ -564,10 +564,89 @@ body {
   margin: 0;
 }
 
-.study-card__actions .study-card__delete {
-  justify-self: end;
+/* Archived studies (main.ts): after the others, behind a switch, their
+   cards faded with a dashed border and their badge still, so they read as
+   put away. */
+.archived-bar {
+  margin-top: 20px;
 }
 
+.opening-group--archived {
+  margin-top: 12px;
+}
+
+.opening-group__note {
+  margin: -4px 0 12px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.study-card--archived {
+  border-style: dashed;
+  background: transparent;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+
+.study-card--archived:hover,
+.study-card--archived:focus-within {
+  opacity: 1;
+}
+
+.study-card--archived .piece-badge {
+  --piece-c1: #8a8a8a;
+  --piece-c2: #55555a;
+  --metal-edge: #8a8a8a;
+  --metal-body: #77777c;
+  --metal-light: #a0a0a4;
+  --metal-line: transparent;
+  animation: none;
+  filter: none;
+}
+
+.study-card--archived .piece-badge::before,
+.study-card--archived .piece-badge::after {
+  display: none;
+}
+
+/* "Archived …, Undo", for a few seconds after archiving: at the bottom of
+   the window, wherever the card was. */
+.archive-note {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 20;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  box-shadow: 0 4px 16px var(--shadow);
+  color: var(--text);
+  font-size: 0.88rem;
+  transform: translateX(-50%);
+}
+
+.archive-note__undo {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The duplicate and bin icons, at the right end of the card's buttons. */
+.study-card__icons {
+  display: inline-flex;
+  justify-self: end;
+  gap: 2px;
+}
+
+.study-card__icon-btn,
 .study-card__delete {
   display: inline-flex;
   flex-shrink: 0;
@@ -581,6 +660,11 @@ body {
   color: var(--text-dim);
   cursor: pointer;
   transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out;
+}
+
+.study-card__icon-btn:hover {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
 .study-card__delete:hover {
@@ -639,6 +723,40 @@ body {
      buttons aligned between cards with different-length names/lines. */
   margin-top: auto;
   padding-top: 4px;
+}
+
+/* In place of the buttons while duplicating: the copy's name, and the
+   buttons to make it or not. */
+.study-card__duplicate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* Their own display would otherwise win over `hidden`. */
+.study-card__duplicate[hidden],
+.study-card__actions[hidden] {
+  display: none;
+}
+
+.study-card__duplicate-name {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card-nested-bg);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.study-card__duplicate .btn {
+  font-size: 0.82rem;
+  padding-inline: 8px;
 }
 
 .study-card__actions .btn {

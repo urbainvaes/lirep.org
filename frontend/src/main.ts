@@ -1,9 +1,40 @@
 import { bindZoom, renderLanding } from "./landing";
-import { fetchMe, renderAuthArea } from "./layout";
+import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { studyFromFile } from "./studyFile";
-import { bindStudyDelete, renderStudyCardWithActions, renderStudyGroups, renderNewStudyCard, type StudyCardData } from "./studyCard";
+import { bindStudyArchive, bindStudyDelete, bindStudyDuplicate, renderStudyCardWithActions, setArchived, renderStudyGroups, renderNewStudyCard, type StudyCardData } from "./studyCard";
 
 // Import a Lirep study file (see studyFile.ts) as a new study, then open it.
+const SHOW_ARCHIVED_KEY = "home-show-archived";
+
+function savedShowArchived(): boolean {
+  try {
+    return localStorage.getItem(SHOW_ARCHIVED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+// The archived studies, after the others: the switch that shows them (only
+// when there are some), then their own section, White's first.
+function archivedHtml(archived: StudyCardData[], shown: boolean): string {
+  if (!archived.length) return "";
+  const cards = [...archived].sort((a, b) => (a.side === b.side ? 0 : a.side === "white" ? -1 : 1));
+  return `
+    <div class="archived-bar">
+      <button id="show-archived" class="study-switch" type="button" role="switch" aria-checked="${shown}"><span class="study-switch__track" aria-hidden="true"></span>Show archived (${archived.length})</button>
+    </div>
+    ${
+      shown
+        ? `<section class="opening-group opening-group--archived">
+            <h2>Archived</h2>
+            <p class="opening-group__note">Kept, but off the Practice and Community pages. Restore one to bring it back; the bin deletes it for good.</p>
+            <div class="studies-grid">${cards.map(renderStudyCardWithActions).join("")}</div>
+          </section>`
+        : ""
+    }
+  `;
+}
+
 function importStudyHtml(): string {
   return `
     <div class="study-import">
@@ -81,13 +112,46 @@ async function init(): Promise<void> {
     // Keep the new-study action available if loading fails.
   }
 
+  let showArchived = savedShowArchived();
   const render = (): void => {
+    const active = studies.filter((study) => !study.archived);
+    const archived = studies.filter((study) => study.archived);
     grid.innerHTML =
-      renderStudyGroups(studies, renderStudyCardWithActions, "studies-grid", renderNewStudyCard) + importStudyHtml();
+      renderStudyGroups(active, renderStudyCardWithActions, "studies-grid", renderNewStudyCard) +
+      archivedHtml(archived, showArchived) +
+      importStudyHtml() +
+      `<p id="archive-note" class="archive-note" role="status" aria-live="polite" hidden></p>`;
     bindStudyImport(grid);
   };
   render();
+  grid.addEventListener("click", (event) => {
+    if (!(event.target as Element).closest("#show-archived")) return;
+    showArchived = !showArchived;
+    try {
+      localStorage.setItem(SHOW_ARCHIVED_KEY, showArchived ? "1" : "0");
+    } catch {
+      // Remembered for this visit only.
+    }
+    render();
+  });
+  // Archiving says so for a few seconds, with Undo: a card that vanishes
+  // could otherwise look deleted.
+  let noteTimer: number | null = null;
+  bindStudyArchive(grid, studies, render, (study) => {
+    const note = document.getElementById("archive-note") as HTMLElement;
+    note.innerHTML = `Archived “${escapeHtml(study.name)}”. <button class="archive-note__undo" type="button">Undo</button>`;
+    note.hidden = false;
+    (note.querySelector("button") as HTMLButtonElement).addEventListener("click", async () => {
+      if (await setArchived(study, false)) render();
+    });
+    if (noteTimer !== null) window.clearTimeout(noteTimer);
+    noteTimer = window.setTimeout(() => {
+      const current = document.getElementById("archive-note");
+      if (current) current.hidden = true;
+    }, 8000);
+  });
   bindStudyDelete(grid, studies, render);
+  bindStudyDuplicate(grid, studies, render);
 }
 
 init();

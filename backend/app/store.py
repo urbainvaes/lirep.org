@@ -108,6 +108,12 @@ def init_db() -> None:
         # study_games), so a section keeps its place even while empty.
         if "game_sections" not in columns:
             conn.execute("ALTER TABLE studies ADD COLUMN game_sections TEXT")
+        # When the owner archived the study (NULL: not archived). Archived
+        # studies are kept, apart on the home page, and are off the Practice
+        # and Community pages; `shared` keeps the owner's choice for when
+        # it's restored.
+        if "archived_at" not in columns:
+            conn.execute("ALTER TABLE studies ADD COLUMN archived_at TEXT")
 
         # Registration order: users.id is the user number, starting at 1. Lichess
         # usernames are case-insensitive. Accounts that existed before this table
@@ -336,12 +342,13 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
         # root", the default for every study. See starting-point.md.
         "startNodeId": row["start_node_id"],
         "shared": bool(row["shared"]),
+        "archived": row["archived_at"] is not None,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
 
 
-_COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, shared, created_at, updated_at"
+_COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, shared, archived_at, created_at, updated_at"
 
 
 def register_user(username: str) -> int:
@@ -400,7 +407,7 @@ def list_users() -> list[dict[str, Any]]:
             """
             SELECT u.id, u.username, u.created_at, u.anonymous,
                    (SELECT COUNT(*) FROM studies s
-                     WHERE s.owner = u.username COLLATE NOCASE AND s.shared = 1) AS shared
+                     WHERE s.owner = u.username COLLATE NOCASE AND s.shared = 1 AND s.archived_at IS NULL) AS shared
             FROM users u ORDER BY u.id
             """
         ).fetchall()
@@ -544,16 +551,17 @@ def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] 
 
 
 def list_shared_studies() -> list[tuple[str, dict[str, Any]]]:
-    """(owner, study) for every study its owner has chosen to share."""
+    """(owner, study) for every study its owner has chosen to share (and
+    hasn't archived)."""
     with _connect() as conn:
-        rows = conn.execute(f"SELECT owner, {_COLUMNS} FROM studies WHERE shared = 1").fetchall()
+        rows = conn.execute(f"SELECT owner, {_COLUMNS} FROM studies WHERE shared = 1 AND archived_at IS NULL").fetchall()
     return [(row["owner"], _row_to_study(row)) for row in rows]
 
 
 def get_shared_study(study_id: int) -> tuple[str, dict[str, Any]] | None:
     with _connect() as conn:
         row = conn.execute(
-            f"SELECT owner, {_COLUMNS} FROM studies WHERE id = ? AND shared = 1", (study_id,)
+            f"SELECT owner, {_COLUMNS} FROM studies WHERE id = ? AND shared = 1 AND archived_at IS NULL", (study_id,)
         ).fetchone()
     return (row["owner"], _row_to_study(row)) if row else None
 
@@ -562,7 +570,9 @@ def community_counts() -> dict[str, int]:
     with _connect() as conn:
         players = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
         studies = conn.execute("SELECT COUNT(*) AS n FROM studies").fetchone()["n"]
-        shared = conn.execute("SELECT COUNT(*) AS n FROM studies WHERE shared = 1").fetchone()["n"]
+        shared = conn.execute(
+            "SELECT COUNT(*) AS n FROM studies WHERE shared = 1 AND archived_at IS NULL"
+        ).fetchone()["n"]
         active = conn.execute(
             "SELECT COUNT(*) AS n FROM users WHERE last_seen_at >= datetime('now', '-7 days')"
         ).fetchone()["n"]
@@ -630,6 +640,46 @@ def create_study(
         study_id = cur.lastrowid
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
     assert row is not None
+    return _row_to_study(row)
+
+
+def set_study_archived(owner: str, study_id: int, archived: bool) -> bool:
+    """Archives or restores one of the owner's studies; False if not found.
+    Its last change (updated_at) is left as it was."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE studies SET archived_at = CASE WHEN ? THEN COALESCE(archived_at, datetime('now')) END"
+            " WHERE owner = ? AND id = ?",
+            (1 if archived else 0, owner, study_id),
+        )
+    return cur.rowcount > 0
+
+
+def duplicate_study(owner: str, study_id: int, name: str) -> dict[str, Any] | None:
+    """A copy of one of the owner's studies, under `name`: its moves and
+    comments, side, starting point, Explorer settings, calculated stats and
+    games. Private (so it doesn't appear twice on the leaderboards) and
+    without the practice history, which starts afresh. None if not found."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO studies (owner, name, tree, explorer_settings, side, stats, evals, start_node_id, shared, game_sections)
+            SELECT owner, ?, tree, explorer_settings, side, stats, evals, start_node_id, 0, game_sections
+            FROM studies WHERE owner = ? AND id = ?
+            """,
+            (name, owner, study_id),
+        )
+        if cur.rowcount == 0:
+            return None
+        copy_id = cur.lastrowid
+        conn.execute(
+            """
+            INSERT INTO study_games (study_id, section, position, pgn, comment, created_at)
+            SELECT ?, section, position, pgn, comment, created_at FROM study_games WHERE study_id = ?
+            """,
+            (copy_id, study_id),
+        )
+        row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (copy_id,)).fetchone()
     return _row_to_study(row)
 
 

@@ -310,7 +310,10 @@ async function init(): Promise<void> {
       return;
     }
     const profile: ProfileResponse = await profileRes.json();
-    const studies: ProfileStudy[] = studiesRes?.ok ? await studiesRes.json() : [];
+    // Archived studies are only on the home page.
+    const studies: ProfileStudy[] = studiesRes?.ok
+      ? ((await studiesRes.json()) as (ProfileStudy & { archived?: boolean })[]).filter((study) => !study.archived)
+      : [];
     const practice: Record<string, PracticeSummary> = practiceRes?.ok ? await practiceRes.json() : {};
     renderProfile(main, profile, studies, practice);
     bindAnonymousToggle();

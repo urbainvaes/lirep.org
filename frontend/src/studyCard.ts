@@ -9,6 +9,7 @@ export interface StudyCardData {
   side: "white" | "black";
   startNodeId: number | null;
   stats?: { winProbability?: number; evalCp?: number } | null;
+  archived?: boolean;
   gameCount?: number;
 }
 
@@ -67,10 +68,34 @@ export function openingMovesHtml(study: StudyCardData): string {
   return rows.join("");
 }
 
+// An active study's archive box: it moves the study to the archive.
+function archiveButtonHtml(study: StudyCardData): string {
+  return `<button class="study-card__icon-btn" type="button" data-archive-study="${study.id}" aria-label="Archive ${escapeHtml(study.name)}" title="Archive study">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg>
+      </button>`;
+}
+
+// An archived study's bin: it deletes the study for good.
 function deleteButtonHtml(study: StudyCardData): string {
-  return `<button class="study-card__delete" type="button" data-delete-study="${study.id}" aria-label="Delete ${escapeHtml(study.name)}" title="Delete study">
+  return `<button class="study-card__delete" type="button" data-delete-study="${study.id}" aria-label="Delete ${escapeHtml(study.name)}" title="Delete study for good">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>
       </button>`;
+}
+
+function duplicateButtonHtml(study: StudyCardData): string {
+  return `<button class="study-card__icon-btn" type="button" data-duplicate-study="${study.id}" aria-label="Duplicate ${escapeHtml(study.name)}" title="Duplicate study">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>`;
+}
+
+/** The name a copy is offered: "Alapin (copy)", or "(copy 2)" and so on
+ * when that one is taken. */
+function copyName(name: string, studies: StudyCardData[]): string {
+  const taken = new Set(studies.map((s) => s.name));
+  for (let n = 1; ; n++) {
+    const candidate = `${name} (copy${n === 1 ? "" : ` ${n}`})`;
+    if (!taken.has(candidate)) return candidate;
+  }
 }
 
 function renderStudyCardContent(study: StudyCardData, headerExtra = ""): string {
@@ -115,20 +140,136 @@ function trophyLinkHtml(study: StudyCardData): string {
   return `<a class="study-card__trophy" href="/stat.html?id=${study.id}" title="${title}" aria-label="${title}">${pieceBadgeHtml(tier, "sm", piece)}</a>`;
 }
 
+/** A home-page card. An archived study's card has Restore in place of
+ * Practice, and the bin; an active one's, the archive box. */
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
-    <article class="study-card study-card--summary">
+    <article class="study-card study-card--summary${study.archived ? " study-card--archived" : ""}">
       ${renderStudyCardContent(study, `<span class="study-card__header-end">${gamesBadgeHtml(study)}${trophyLinkHtml(study)}</span>`)}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
-        <a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>
-        ${deleteButtonHtml(study)}
+        ${
+          study.archived
+            ? `<button class="btn btn-secondary" type="button" data-restore-study="${study.id}" title="Back to your openings">Restore</button>`
+            : `<a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>`
+        }
+        <span class="study-card__icons">${duplicateButtonHtml(study)}${study.archived ? deleteButtonHtml(study) : archiveButtonHtml(study)}</span>
       </div>
+      <form class="study-card__duplicate" data-duplicate-form="${study.id}" hidden>
+        <input class="study-card__duplicate-name" type="text" required maxlength="200" aria-label="Name of the copy" />
+        <button class="btn btn-primary" type="submit">Duplicate</button>
+        <button class="btn btn-secondary" type="button" data-duplicate-cancel>Cancel</button>
+      </form>
     </article>
   `;
 }
 
-/** Handles clicks on a card's bin button: confirm, DELETE, then drop the study and re-render. */
+/** Handles a card's duplicate button: it swaps the card's buttons for a
+ * name (its own plus "(copy)", selected), and Duplicate makes a private
+ * copy (see store.duplicate_study), shown first among the side's studies. */
+export function bindStudyDuplicate(
+  grid: HTMLElement,
+  studies: StudyCardData[],
+  rerender: () => void,
+): void {
+  const card = (el: Element) => el.closest<HTMLElement>(".study-card") as HTMLElement;
+  const show = (cardEl: HTMLElement, open: boolean) => {
+    (cardEl.querySelector(".study-card__actions") as HTMLElement).hidden = open;
+    (cardEl.querySelector("[data-duplicate-form]") as HTMLElement).hidden = !open;
+  };
+  grid.addEventListener("click", (event) => {
+    const target = event.target as Element;
+    const button = target.closest<HTMLButtonElement>("[data-duplicate-study]");
+    if (button) {
+      event.preventDefault();
+      const study = studies.find((s) => s.id === Number(button.dataset.duplicateStudy));
+      if (!study) return;
+      const cardEl = card(button);
+      const input = cardEl.querySelector(".study-card__duplicate-name") as HTMLInputElement;
+      input.value = copyName(study.name, studies);
+      show(cardEl, true);
+      input.focus();
+      input.select();
+      return;
+    }
+    if (target.closest("[data-duplicate-cancel]")) show(card(target), false);
+  });
+  grid.addEventListener("keydown", (event) => {
+    const target = event.target as Element;
+    if (event.key === "Escape" && target.closest("[data-duplicate-form]")) show(card(target), false);
+  });
+  grid.addEventListener("submit", async (event) => {
+    const form = (event.target as Element).closest<HTMLFormElement>("[data-duplicate-form]");
+    if (!form) return;
+    event.preventDefault();
+    const id = Number(form.dataset.duplicateForm);
+    const original = studies.find((s) => s.id === id);
+    const name = (form.querySelector(".study-card__duplicate-name") as HTMLInputElement).value.trim();
+    if (!original || !name) return;
+    const submit = form.querySelector<HTMLButtonElement>("[type=submit]")!;
+    submit.disabled = true;
+    try {
+      const res = await fetch(`/api/studies/${id}/duplicate`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error("Duplicate failed");
+      const copy = (await res.json()) as StudyCardData;
+      studies.unshift({ ...copy, gameCount: original.gameCount });
+      rerender();
+    } catch {
+      submit.disabled = false;
+      window.alert("Could not duplicate the study. Please try again.");
+    }
+  });
+}
+
+/** Archives or restores a study; false if the server refused. */
+export async function setArchived(study: StudyCardData, archived: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/studies/${study.id}/archived`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived }),
+    });
+    if (!res.ok) return false;
+    study.archived = archived;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Handles a card's archive box and Restore button: `onArchived` is told
+ * of a study just archived (for its Undo). */
+export function bindStudyArchive(
+  grid: HTMLElement,
+  studies: StudyCardData[],
+  rerender: () => void,
+  onArchived: (study: StudyCardData) => void,
+): void {
+  grid.addEventListener("click", async (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-archive-study], [data-restore-study]");
+    if (!button) return;
+    event.preventDefault();
+    const archive = button.dataset.archiveStudy !== undefined;
+    const study = studies.find((s) => s.id === Number(button.dataset.archiveStudy ?? button.dataset.restoreStudy));
+    if (!study) return;
+    button.disabled = true;
+    if (!(await setArchived(study, archive))) {
+      button.disabled = false;
+      window.alert(`Could not ${archive ? "archive" : "restore"} the study. Please try again.`);
+      return;
+    }
+    rerender();
+    if (archive) onArchived(study);
+  });
+}
+
+/** Handles clicks on an archived card's bin: confirm, DELETE, then drop the study and re-render. */
 export function bindStudyDelete(
   grid: HTMLElement,
   studies: StudyCardData[],
@@ -141,7 +282,7 @@ export function bindStudyDelete(
     event.stopPropagation();
     const id = Number(button.dataset.deleteStudy);
     const index = studies.findIndex((study) => study.id === id);
-    if (index < 0 || !window.confirm(`Delete "${studies[index].name}"? This cannot be undone.`)) return;
+    if (index < 0 || !window.confirm(`Delete "${studies[index].name}" for good? This cannot be undone.`)) return;
     button.disabled = true;
     try {
       const res = await fetch(`/api/studies/${id}`, { method: "DELETE", credentials: "same-origin" });

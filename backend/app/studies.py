@@ -156,6 +156,38 @@ def create_study(payload: StudyIn, request: Request) -> dict:
     )
 
 
+class ArchivedIn(BaseModel):
+    archived: bool
+
+
+@router.put("/api/studies/{study_id}/archived")
+def set_archived(study_id: int, payload: ArchivedIn, request: Request) -> dict:
+    """Archives a study (kept, apart on the home page, off the Practice and
+    Community pages) or restores it."""
+    owner = _require_owner(request)
+    if not store.set_study_archived(owner, study_id, payload.archived):
+        raise HTTPException(status_code=404, detail="not found")
+    return {"archived": payload.archived}
+
+
+class DuplicateIn(BaseModel):
+    name: str
+
+
+@router.post("/api/studies/{study_id}/duplicate")
+def duplicate_study(study_id: int, payload: DuplicateIn, request: Request) -> dict:
+    """A private copy of one of your studies, under a new name (see
+    store.duplicate_study)."""
+    owner = _require_owner(request)
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    copy = store.duplicate_study(owner, study_id, name)
+    if not copy:
+        raise HTTPException(status_code=404, detail="not found")
+    return copy
+
+
 @router.get("/api/studies/{study_id}")
 def get_study(study_id: int, request: Request) -> dict:
     owner = _require_owner(request)

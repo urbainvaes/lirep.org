@@ -114,6 +114,38 @@ function focusFigure(): string {
 
 const DAYS: Day[] = [
   {
+    date: "2026-10-25",
+    changes: [
+      {
+        area: "Stats",
+        summary: "Hybrid values use Stockfish under 100 games, up from 50",
+        details: `<p>With the Hybrid end-of-prep value, a line's end is now worth the Explorer's results only when its last move has at
+          least 100 games, Stockfish's value otherwise: a score over 50 games is still uncertain by about 7 points, over 100 by
+          about 5. Hybrid scores calculated before are marked out of date on the Stats page; recalculate to update them.</p>
+          <p>Suggested moves now consider your 6 most played moves in a position, up from 4.</p>`,
+      },
+      {
+        area: "Home",
+        summary: "Archive studies instead of deleting them",
+        details: `<p>The bin on a study's card is now an archive box: the study moves to an archive, with an Undo for a few seconds. Archived
+          studies keep everything, practice history included, but leave the Practice and Community pages. “Show archived”, after your
+          studies, shows them apart, faded; from there, Restore brings one back and the bin deletes it for good.</p>`,
+      },
+    ],
+  },
+  {
+    date: "2026-10-24",
+    changes: [
+      {
+        area: "Home",
+        summary: "Duplicate a study from its card",
+        details: `<p>A new icon next to the bin on each study card makes a copy of the study under a new name, offered as the study's own
+          plus “(copy)”. The copy has the same moves, comments, starting point, settings, games and calculated results; it starts with
+          no practice history and isn't shared, so it doesn't appear twice on the leaderboards.</p>`,
+      },
+    ],
+  },
+  {
     date: "2026-10-22",
     changes: [
       {

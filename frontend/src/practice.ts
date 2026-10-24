@@ -90,7 +90,8 @@ async function init(): Promise<void> {
       fetch("/api/practice/summary", { credentials: "same-origin" }),
       fetch(`/api/practice/activity?tzOffset=${activityTzOffset()}`, { credentials: "same-origin" }),
     ]);
-    if (studiesRes.ok) studies = await studiesRes.json();
+    // Archived studies are off the Practice page (see main.ts).
+    if (studiesRes.ok) studies = ((await studiesRes.json()) as StudyCardData[]).filter((study) => !study.archived);
     if (summaryRes.ok) summaries = await summaryRes.json();
     if (activityRes.ok) activity = await activityRes.json();
   } catch {
