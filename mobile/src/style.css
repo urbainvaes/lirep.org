@@ -1,0 +1,449 @@
+/* Lirep mobile: a phone's screen, the website's palette (frontend/src/
+   style.css) in its dark and light themes, little text. */
+
+@font-face {
+  font-family: "lichess";
+  font-display: block;
+  src: url("/fonts/lichess.woff2") format("woff2");
+}
+
+[data-icon]::before {
+  font-family: "lichess";
+  content: attr(data-icon);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+}
+
+:root {
+  --page-bg: #161512;
+  --panel-bg: #262421;
+  --raised: #33302c;
+  --border: #403d39;
+  --text: #bababa;
+  --text-dim: #a3a3a3;
+  --text-strong: #ffffff;
+  --primary: #3692e7;
+  --good: #3fbf60;
+  --bad: #e05252;
+  --warn: #e0a53f;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --page-bg: #edebe9;
+  --panel-bg: #ffffff;
+  --raised: #f3f1ee;
+  --border: #d4d1cc;
+  --text: #4d4d4d;
+  --text-dim: #6f6f6f;
+  --text-strong: #1a1a1a;
+  --primary: #1f78d1;
+  --good: #1d8a3a;
+  --bad: #c93a3a;
+  --warn: #a5680f;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Hidden means hidden, whatever an element's own display. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--page-bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a,
+button {
+  touch-action: manipulation;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+/* ---- Buttons --------------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  color: var(--text-strong);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button--primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ---- The top bar and the tabs ---------------------------------------- */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + var(--safe-top)) 16px 10px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.bar__logo {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  background: url("/icon-192.png") center / contain no-repeat;
+}
+
+.bar__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 1.1rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bar__aside {
+  flex: none;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: -8px;
+  color: var(--text-strong);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.tabs {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  padding-bottom: var(--safe-bottom);
+  background: var(--panel-bg);
+  border-top: 1px solid var(--border);
+}
+
+.tabs__tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0 6px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.tabs__tab--on {
+  color: var(--primary);
+}
+
+/* ---- The lists --------------------------------------------------------- */
+
+.list {
+  padding: 8px 0 calc(72px + var(--safe-bottom));
+}
+
+.list__empty {
+  margin: 40px 24px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.group__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 16px 6px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.side-dot {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--text-dim);
+  border-radius: 50%;
+}
+
+.side-dot--white {
+  background: #f0f0f0;
+}
+
+.side-dot--black {
+  background: #3a3a3a;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--panel-bg);
+  border-block: 1px solid var(--border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+
+.row__link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px 0 8px 16px;
+  color: inherit;
+}
+
+.row__link:active {
+  background: var(--raised);
+}
+
+.row__lead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+}
+
+.row__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.row__name {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row__sub {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.row__bullet {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 52px;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+}
+
+.due {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* Knowledge, as a ring filled to its percentage. */
+.ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, var(--panel-bg) 78%, transparent 80%),
+    conic-gradient(var(--good) calc(var(--pct) * 1%), var(--border) 0);
+  color: var(--text-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* ---- Badges (scoreTiers.ts): a piece, in its tier's metal ------------- */
+
+.piece-badge {
+  display: inline-block;
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+  background-image: linear-gradient(120deg, var(--c1), var(--c2) 46%, var(--c3) 56%, var(--c1));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 0.6px var(--line, transparent)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.piece-badge--legendary {
+  --c1: #b57bff;
+  --c2: #3fc7dd;
+  --c3: #ff8ad8;
+}
+
+.piece-badge--brilliant {
+  --c1: #67bfd8;
+  --c2: #ffffff;
+  --c3: #f2fdff;
+}
+
+.piece-badge--gold {
+  --c1: #e9b22a;
+  --c2: #fffbe3;
+  --c3: #ffd95a;
+  --line: #8a5d00;
+}
+
+.piece-badge--silver {
+  --c1: #b9c2cc;
+  --c2: #ffffff;
+  --c3: #e3e8ee;
+  --line: #4d5866;
+}
+
+.piece-badge--bronze {
+  --c1: #d9894c;
+  --c2: #ffe9d4;
+  --c3: #f4b47c;
+  --line: #7a3b12;
+}
+
+.piece-badge--none {
+  --c1: #77777c;
+  --c2: #9a9a9e;
+  --c3: #8a8a8a;
+}
+
+/* ---- A session ----------------------------------------------------------- */
+
+.session {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* The board takes the screen's whole width. */
+.session__board {
+  overflow: hidden;
+}
+
+.board {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+.session__status {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 4px;
+}
+
+.session__prompt {
+  color: var(--text-strong);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.session__prompt--good {
+  color: var(--good);
+}
+
+.session__prompt--bad {
+  color: var(--bad);
+}
+
+.session__progress {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.session__actions {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px calc(16px + var(--safe-bottom));
+}
+
+.session__warning {
+  margin: 0 16px;
+  color: var(--bad);
+  font-size: 0.85rem;
+}
+
+/* ---- Signed out, or unreachable ------------------------------------------ */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px;
+  text-align: center;
+}
+
+.welcome__logo {
+  width: 72px;
+  height: 72px;
+  background: url("/icon-192.png") center / contain no-repeat;
+}
+
+.welcome h1 {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.welcome p {
+  margin: 0 0 12px;
+  color: var(--text-dim);
+}
