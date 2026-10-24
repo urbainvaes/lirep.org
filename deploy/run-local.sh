@@ -51,11 +51,19 @@ http {
     # Bots probe for paths that don't exist; the 404 is in the access log, no
     # need to repeat it in the error log.
     log_not_found off;
-    # Pages must be re-checked on every visit: they name the hashed script and
-    # style files, so a stale cached page keeps showing an old version of the
-    # site (old links, old icon) after a deploy. The hashed files themselves
-    # are safe to cache.
-    location ~ (\.html|/)\$ { add_header Cache-Control "no-cache"; }
+    # Pages must be fetched afresh on every visit: they name the hashed script
+    # and style files, so a stale cached page keeps running an old version of
+    # the site after a deploy. Re-checking isn't enough: files in the Guix
+    # store all date from 1970, so nginx's validators (an ETag of date and
+    # size, and Last-Modified) don't change when a page does, as a new build
+    # only renames its scripts, and the browser is told its old copy is
+    # current. Without validators it downloads the page each time. The hashed
+    # files themselves are safe to cache.
+    location ~ (\.html|/)\$ {
+      add_header Cache-Control "no-cache";
+      etag off;
+      if_modified_since off;
+    }
     location /api/  { proxy_pass http://127.0.0.1:8000; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
     location /auth/ { proxy_pass http://127.0.0.1:8000; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
   }
