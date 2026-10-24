@@ -848,10 +848,15 @@ function renderPage(
     const estimate = Object.keys(current.tree.nodes).length;
     label.textContent = "Checking positions…";
     const explorerCache = new Map<string, ExplorerData>();
+    // Explorer positions read, and Stockfish evaluations made, on one line
+    // that only grows (the two used to replace each other, flickering).
     let positions = 0;
+    let evaluated = 0;
+    let stockfish = false;
     const progress = () => {
-      fill.style.width = `${Math.min(100, Math.round((positions / Math.max(1, estimate)) * 100))}%`;
-      label.textContent = `${positions} position${positions === 1 ? "" : "s"} checked…`;
+      fill.style.width = `${Math.min(100, Math.round(((positions + evaluated) / Math.max(1, estimate)) * 100))}%`;
+      label.textContent = `${positions} position${positions === 1 ? "" : "s"} checked`
+        + (stockfish ? ` · Stockfish, depth ${depth}: ${evaluated} evaluated` : "") + "…";
     };
     // Stockfish starts only if a line's end needs it; its evaluations are
     // shared with the expected evaluation's, in this browser's cache.
@@ -860,10 +865,13 @@ function renderPage(
       const known = await cache.get(fen, depth);
       if (known !== undefined) return known;
       engine ??= new Engine();
-      label.textContent = `Stockfish: evaluating a position (depth ${depth})…`;
+      if (!stockfish) {
+        stockfish = true;
+        progress();
+      }
       const cp = await evaluatePosition(engine, new Chess(fen), depth);
       if (cp !== null) await cache.set(fen, depth, cp);
-      positions += 1;
+      evaluated += 1;
       progress();
       return cp;
     };
