@@ -17,7 +17,7 @@ explorer, and the value where preparation ends is:
               your side's point of view. Stockfish's own best moves are then
               candidates at your turn too, played or not, and evaluations are
               cached in a file, so a second run on the same opening is fast.
-  hybrid      the explorer's score where the move has at least 50 games
+  hybrid      the explorer's score where the move has at least 100 games
               (MIN_LEAF_GAMES), Stockfish's evaluation as an expected score
               where it has fewer (Lirep's "Hybrid" end-of-prep value). As a
               percentage. Stockfish's best moves are candidates too, as
@@ -95,7 +95,7 @@ import chess.engine
 
 OBJECTIVE = "score"   # --objective: "score" (the explorer's), "evaluation"
                       # (Stockfish's) or "hybrid"; see the top of this file
-MIN_LEAF_GAMES = 50   # hybrid: fewer games than this, and Stockfish values a
+MIN_LEAF_GAMES = 100  # hybrid: fewer games than this, and Stockfish values a
                       # line's end (also the candidates' minimum, by default)
 
 # ---- The data ---------------------------------------------------------------
@@ -123,7 +123,7 @@ RATING_GROUPS = (0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500)
 # (--ratings "1800,2000" picks exact groups instead: here 1800-2199.)
 
 # ---- The candidates ---------------------------------------------------------
-CANDIDATES = 4      # --candidates: your most played moves considered in a position
+CANDIDATES = 6      # --candidates: your most played moves considered in a position
 MIN_REACH = 0.002   # --min-reach: a reply reached by fewer than this share of the
                     # games at the start isn't answered (0.002 = 0.2%)
 MAX_MOVES = 150     # --max-moves: with --target, the most moves added

@@ -12,7 +12,7 @@ of the tree:
 
 | Stat | At the edge of preparation | Where calculated |
 | --- | --- | --- |
-| Expected score / win and loss probabilities | Explorer win/draw/loss results, Stockfish's evaluation as an expected score, or the first with the second under 50 games (the end-of-prep value setting) | Browser |
+| Expected score / win and loss probabilities | Explorer win/draw/loss results, Stockfish's evaluation as an expected score, or the first with the second under 100 games (the end-of-prep value setting) | Browser |
 | Coverage | Drop probability mass that leaves the tree | Backend job |
 | Expected evaluation | Local Stockfish centipawns, weighted by Explorer move frequency | Browser |
 
@@ -22,7 +22,7 @@ outcomes and the chance of staying in book, not objective position quality.
 The expected score can instead value lines' ends with local Stockfish,
 converted to an expected score by Lichess's winning-chances curve
 `1 / (1 + exp(-0.00368208 * cp))`, alone or where the Explorer row has fewer
-than 50 games; Stockfish values have no win/draw/loss split. Expected
+than 100 games; Stockfish values have no win/draw/loss split. Expected
 evaluation uses actual local Stockfish results, never a
 win-rate-to-centipawn conversion or a Lichess Cloud Eval fallback.
 
@@ -57,7 +57,7 @@ With the `stockfish` end-of-prep value, each line's end is worth the
 Stockfish evaluation of the position its last move leads to, converted to an
 expected score (unlike the expected evaluation, before the opponent's reply
 to a studied-side move: one evaluation per line); with `explorer-stockfish`, the Explorer row when it has at
-least 50 games, Stockfish otherwise. Where an opponent position has no
+least 100 games, Stockfish otherwise. Where an opponent position has no
 Explorer games, both use Stockfish instead of the neutral 0.5. See
 `frontend/doc/expected-score.html`.
 

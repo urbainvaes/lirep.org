@@ -73,6 +73,10 @@ class ExpectedScoreIn(BaseModel):
     leafValue: LeafValue = "explorer"
     # Stockfish depth, when Stockfish values some lines' ends.
     depth: int | None = Field(default=None, strict=True, ge=1, le=99)
+    # Hybrid's threshold: Stockfish values a line's end under this many
+    # games (the frontend's MIN_LEAF_GAMES). Missing on Hybrid scores saved
+    # before it was recorded, which used 50.
+    leafGames: int | None = Field(default=None, strict=True, ge=1, le=1_000_000)
     stockfishLeaves: int = Field(default=0, strict=True, ge=0)
     # coverage[i]: share of games still in the tree after the opponent's
     # (i+1)th move from the starting point.
@@ -143,6 +147,7 @@ def save_expected_score(study_id: int, request: Request, payload: ExpectedScoreI
             "lossProbability": payload.lossProbability,
             "leafValue": payload.leafValue,
             "scoreDepth": payload.depth if payload.leafValue != "explorer" else None,
+            "leafGames": payload.leafGames if payload.leafValue == "explorer-stockfish" else None,
             "stockfishLeaves": payload.stockfishLeaves,
             "coverage": payload.coverage,
             "winProbabilityCalculatedAt": datetime.now(UTC).isoformat(),

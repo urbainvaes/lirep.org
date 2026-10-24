@@ -41,7 +41,9 @@ export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
  * than MIN_LEAF_GAMES games, then Stockfish's. See doc/expected-score.html. */
 export type LeafValue = "explorer" | "stockfish" | "explorer-stockfish";
 
-export const MIN_LEAF_GAMES = 50;
+export const MIN_LEAF_GAMES = 100;
+// What it was before: Hybrid scores saved without their threshold used it.
+export const LEGACY_LEAF_GAMES = 50;
 
 export const LEAF_VALUE_LABELS: Record<LeafValue, string> = {
   explorer: "Explorer results",

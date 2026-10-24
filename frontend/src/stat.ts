@@ -22,6 +22,8 @@ import {
   type ExplorerSettings,
   type ExplorerSpeed,
   type LeafValue,
+  LEGACY_LEAF_GAMES,
+  MIN_LEAF_GAMES,
 } from "./explorer";
 import { calculateExpectedScore, MATE_SCORE_CP } from "./expectedScore";
 import {
@@ -67,6 +69,7 @@ interface StudyStats extends CalculationSettings {
   lossProbability?: number | null;
   leafValue?: LeafValue; // missing on scores saved before the choice existed: "explorer"
   scoreDepth?: number | null; // Stockfish depth, when Stockfish valued some lines' ends
+  leafGames?: number | null; // Hybrid's threshold; missing on Hybrid scores saved with LEGACY_LEAF_GAMES
   stockfishLeaves?: number;
   coverage?: number[]; // coverage[i] = fraction of games still in-book after the opponent's (i+1)th move
   winProbabilityCalculatedAt?: string;
@@ -426,6 +429,9 @@ function scoreStaleness(study: Study, current: ExplorerSettings, leaf: LeafValue
   if (!sameExplorerSettings(stats, current)) reasons.push("Explorer settings changed");
   if ((stats.leafValue ?? "explorer") !== leaf) reasons.push("end-of-prep values changed");
   else if (leaf !== "explorer" && stats.scoreDepth && stats.scoreDepth !== depth) reasons.push("Stockfish depth changed");
+  else if (leaf === "explorer-stockfish" && (stats.leafGames ?? LEGACY_LEAF_GAMES) !== MIN_LEAF_GAMES) {
+    reasons.push(`Hybrid now uses Stockfish under ${MIN_LEAF_GAMES} games`);
+  }
   const fingerprint = stats.winProbabilityMovesFingerprint;
   if (fingerprint && fingerprint !== study.movesFingerprint) reasons.push("moves changed");
   return reasons;
@@ -876,6 +882,7 @@ function renderPage(
         explorerCalls: result.explorerCalls,
         stockfishLeaves: result.stockfishLeaves,
         leafValue: leaf,
+        leafGames: leaf === "explorer-stockfish" ? MIN_LEAF_GAMES : null,
         depth: leaf === "explorer" ? null : depth,
         explorerSettings: settings,
       }),
