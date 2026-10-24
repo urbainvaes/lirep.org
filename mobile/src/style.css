@@ -512,52 +512,48 @@ a {
 
 /* ---- Bullet ---------------------------------------------------------------- */
 
-/* The clock under the board: the time, Start, and a bar of what's left. */
+/* The clock under the board, as in the Lichess app: the time in a rounded
+   box at the right, just under the board, dim while it waits, lit while it
+   runs (your turn), red under 10 seconds; Start at the left. */
 .clock {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 12px;
-  padding: 14px 16px 0;
+  gap: 12px;
+  padding: 6px 16px 0;
 }
 
+/* Wide enough for "0:07.4", so the box keeps its size as the tenths come. */
 .clock__time {
+  flex: none;
+  margin-left: auto; /* at the right, Start hidden or not */
+  box-sizing: content-box;
+  width: 6ch;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--raised);
   color: var(--text-dim);
-  font-size: 2.6rem;
-  font-weight: 700;
+  font-family: "Roboto Mono", "DejaVu Sans Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 1.4rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  line-height: 1.25;
+  text-align: center;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .clock--running .clock__time {
-  color: var(--text-strong);
+  background: var(--text-strong);
+  color: var(--page-bg);
 }
 
 .clock--low .clock__time {
-  color: var(--bad);
+  background: #c33131;
+  color: #fff;
 }
 
 .clock__start {
   min-width: 110px;
-}
-
-.clock__bar {
-  flex-basis: 100%;
-  height: 5px;
-  overflow: hidden;
-  border-radius: 3px;
-  background: var(--border);
-}
-
-.clock__fill {
-  height: 100%;
-  width: 100%;
-  background: var(--primary);
-}
-
-.clock--low .clock__fill {
-  background: var(--bad);
 }
 
 .bullet__options {

@@ -52,9 +52,8 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
       <div class="session__board"><div id="board" class="board"></div></div>
       <div class="session__below">
         <div class="clock" id="clock" role="timer" aria-label="Your clock">
-          <span class="clock__time" id="clock-time">${clockText(BASE_MS)}</span>
           <button class="button button--primary clock__start" type="button" id="start">Start</button>
-          <div class="clock__bar"><div class="clock__fill" id="clock-fill"></div></div>
+          <span class="clock__time" id="clock-time">${clockText(BASE_MS)}</span>
         </div>
       </div>
       <div class="session__toolbar bullet__options">
@@ -73,7 +72,6 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const clockEl = el("clock");
   const timeEl = el("clock-time");
-  const fillEl = el("clock-fill");
   const startBtn = el("start") as HTMLButtonElement;
   const resultEl = el("result");
   const evalEl = el("eval");
@@ -94,7 +92,6 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
     timeEl.textContent = clockText(ms);
     clockEl.classList.toggle("clock--running", ticking);
     clockEl.classList.toggle("clock--low", game.running && ms <= LOW_TIME_MS);
-    fillEl.style.width = `${Math.max(0, Math.min(1, ms / BASE_MS)) * 100}%`;
   }
 
   function onEnd(end: RunEnd): void {
