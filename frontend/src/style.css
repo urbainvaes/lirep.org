@@ -566,10 +566,29 @@ body {
   gap: 8px;
 }
 
+/* The title on one line, a little smaller than a plain h3 so that most
+   names fit; a longer one is cut with an ellipsis (its full name in the
+   tooltip) and scrolls to its end while the card is hovered (see
+   bindTitleScroll). */
 .study-card__header h3 {
+  flex: 1 1 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
   margin: 0;
+  font-size: 1.1em;
+}
+
+.study-card__title-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-indent: 0;
+  transition: text-indent var(--title-time, 0.4s) linear;
+}
+
+.study-card__title-text--scrolled {
+  text-overflow: clip;
+  text-indent: var(--title-shift, 0);
 }
 
 /* Archived studies (main.ts): after the others, behind a switch, their

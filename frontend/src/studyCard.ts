@@ -154,6 +154,8 @@ function expectedResultHtml(
  * the tree's size and the opening line. */
 export function studyCardBodyHtml(card: {
   titleHtml: string;
+  /** The title as plain text, for its tooltip when it's cut. */
+  titleText: string;
   headerEnd: string;
   stats: { winProbability?: number | null; evalCp?: number | null };
   /** On a leaderboard: the value it ranks by. */
@@ -174,7 +176,7 @@ export function studyCardBodyHtml(card: {
       : "");
   return `
     <div class="study-card__header">
-      <h3>${card.titleHtml}</h3>
+      <h3 title="${escapeHtml(card.titleText)}"><span class="study-card__title-text">${card.titleHtml}</span></h3>
       ${card.headerEnd}
     </div>
     ${expectedResultHtml(card.stats, card.ranked)}
@@ -188,6 +190,7 @@ function renderStudyCardContent(study: StudyCardData, headerEnd: string): string
   const startId = study.startNodeId !== null && study.tree.nodes[study.startNodeId] ? study.startNodeId : study.tree.rootId;
   return studyCardBodyHtml({
     titleHtml: escapeHtml(study.name),
+    titleText: study.name,
     headerEnd,
     stats: study.stats ?? {},
     ...countMovesAndLines(study.tree),
@@ -195,6 +198,32 @@ function renderStudyCardContent(study: StudyCardData, headerEnd: string): string
     games: study.gameCount ? { count: study.gameCount, href: `/games.html?id=${study.id}` } : undefined,
     startLine: sanPathTo(study.tree, startId),
     side: study.side,
+  });
+}
+
+/** A card's title stays on one line, cut with an ellipsis when too long;
+ * hovering the card scrolls it to show the end, and leaving it scrolls
+ * back. Bound once per page, on `root`, for every card in it. */
+export function bindTitleScroll(root: HTMLElement): void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const titleOf = (event: MouseEvent): HTMLElement | null => {
+    const card = (event.target as Element).closest(".study-card");
+    // Moves within the card don't count as entering or leaving it.
+    if (!card || card.contains(event.relatedTarget as Node | null)) return null;
+    return card.querySelector<HTMLElement>(".study-card__title-text");
+  };
+  root.addEventListener("mouseover", (event) => {
+    const text = titleOf(event);
+    if (!text) return;
+    const overflow = text.scrollWidth - text.clientWidth;
+    if (overflow <= 0) return;
+    // About 40 pixels a second, so long names don't rush past.
+    text.style.setProperty("--title-shift", `${-overflow - 4}px`);
+    text.style.setProperty("--title-time", `${Math.max(0.6, overflow / 40)}s`);
+    text.classList.add("study-card__title-text--scrolled");
+  });
+  root.addEventListener("mouseout", (event) => {
+    titleOf(event)?.classList.remove("study-card__title-text--scrolled");
   });
 }
 

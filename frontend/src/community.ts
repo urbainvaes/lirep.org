@@ -1,6 +1,6 @@
 import { LEAF_VALUE_LABELS, LIREP_DATASET, type LeafValue } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { studyBadgeHtml, studyCardBodyHtml } from "./studyCard";
+import { bindTitleScroll, studyBadgeHtml, studyCardBodyHtml } from "./studyCard";
 
 interface Summary {
   players: number;
@@ -167,6 +167,7 @@ function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T,
     <article class="study-card study-card--summary">
       ${studyCardBodyHtml({
         titleHtml: `<span class="study-card__rank">${opening.rank ?? "–"}</span> <a class="study-card__title-link" href="/opening.html?id=${opening.id}">${escapeHtml(opening.name)}</a>`,
+        titleText: opening.name,
         headerEnd: studyBadgeHtml(opening.badge, opening.side, opening.mine ? opening.id : undefined),
         stats: opening.badge,
         ranked: board.ranked,
@@ -417,6 +418,7 @@ async function init(): Promise<void> {
 
   const main = document.getElementById("community-main");
   if (!main) return;
+  bindTitleScroll(main);
 
   try {
     const [summaryRes, openingsRes, evalRes] = await Promise.all([

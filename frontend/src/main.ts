@@ -1,7 +1,7 @@
 import { bindZoom, renderLanding } from "./landing";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { studyFromFile } from "./studyFile";
-import { bindStudyArchive, bindStudyDelete, bindStudyDuplicate, renderStudyCardWithActions, setArchived, renderStudyGroups, renderNewStudyCard, type StudyCardData } from "./studyCard";
+import { bindStudyArchive, bindStudyDelete, bindStudyDuplicate, bindTitleScroll, renderStudyCardWithActions, setArchived, renderStudyGroups, renderNewStudyCard, type StudyCardData } from "./studyCard";
 
 // Import a Lirep study file (see studyFile.ts) as a new study, then open it.
 const SHOW_ARCHIVED_KEY = "home-show-archived";
@@ -163,6 +163,7 @@ async function init(): Promise<void> {
     }, 8000);
   });
   bindStudyDelete(grid, studies, render);
+  bindTitleScroll(grid);
   bindStudyDuplicate(grid, studies, render);
 }
 
