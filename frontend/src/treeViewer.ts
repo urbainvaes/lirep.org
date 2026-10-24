@@ -32,7 +32,19 @@ import { errorMessage, fetchExplorerData } from "./explorerClient";
 import { FOCUS_SHORTCUT_HTML, setupFocusMode } from "./focusMode";
 import { escapeHtml } from "./layout";
 import { materialBalance, materialHtml } from "./material";
-import { lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, siblingVariation, type StudyTree } from "./tree";
+import {
+  FOLD_SWITCHES_HTML,
+  getSavedFolding,
+  lastMoveAt,
+  lichessAnalysisUrl,
+  pathTo,
+  positionAt,
+  renderTree,
+  saveFolding,
+  sanPathTo,
+  siblingVariation,
+  type StudyTree,
+} from "./tree";
 
 // A read-only view of a move tree: a shared opening (opening.ts) or one of
 // a study's games (games.ts). It is laid out like the study editor, with the
@@ -83,6 +95,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
           <div class="study-side-col__inner">
             <div class="study-card study-card--moves">
               <div class="study-actions">
+                ${FOLD_SWITCHES_HTML}
                 <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
                 <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
               </div>
@@ -160,6 +173,31 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   // Which child was last followed from each node, so the arrow keys continue
   // along the variation being viewed, as in the editor.
   const lastChild: Record<number, number> = {};
+
+  // Fold branches and Auto-fold, as in the editor, sharing its switches.
+  let { fold: foldBranches, autoFold } = getSavedFolding();
+  const openFolds = new Set<number>();
+  const foldBtn = document.getElementById("fold-btn") as HTMLButtonElement;
+  const autoFoldBtn = document.getElementById("autofold-btn") as HTMLButtonElement;
+  foldBtn.setAttribute("aria-checked", String(foldBranches));
+  autoFoldBtn.setAttribute("aria-checked", String(autoFold));
+  autoFoldBtn.disabled = !foldBranches;
+  foldBtn.addEventListener("click", () => {
+    foldBranches = !foldBranches;
+    foldBtn.setAttribute("aria-checked", String(foldBranches));
+    autoFoldBtn.disabled = !foldBranches;
+    saveFolding("fold", foldBranches);
+    renderTreeView();
+  });
+  autoFoldBtn.addEventListener("click", () => {
+    autoFold = !autoFold;
+    autoFoldBtn.setAttribute("aria-checked", String(autoFold));
+    saveFolding("autoFold", autoFold);
+    if (autoFold) {
+      openFolds.clear();
+      renderTreeView();
+    }
+  });
 
   /** Plays a move only if the opening already has it here (no free moves). */
   function followSan(san: string): void {
@@ -289,9 +327,25 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   }
 
   function renderTreeView(): void {
-    treeViewEl.innerHTML = renderTree(tree, currentId, side, startNodeId);
+    // Folded, the folds on the way to the current move are open too.
+    const open = new Set(openFolds);
+    for (const node of pathTo(tree, currentId)) open.add(node.id);
+    treeViewEl.innerHTML = renderTree(tree, currentId, side, startNodeId, {
+      folding: foldBranches ? { open } : undefined,
+    });
     treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
-      el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
+      el.addEventListener("click", (event) => {
+        // A move in a fold's head goes to the move rather than toggling the fold.
+        if (el.closest("summary")) event.preventDefault();
+        goTo(Number(el.dataset.nodeId));
+      });
+    });
+    treeViewEl.querySelectorAll<HTMLDetailsElement>("details[data-fold-id]").forEach((fold) => {
+      fold.addEventListener("toggle", () => {
+        const id = Number(fold.dataset.foldId);
+        if (fold.open) openFolds.add(id);
+        else openFolds.delete(id);
+      });
     });
     const activeMove = treeViewEl.querySelector<HTMLElement>(".tree-move--current");
     if (activeMove) {
@@ -304,6 +358,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   }
 
   function goTo(nodeId: number): void {
+    const previousId = currentId;
     const path = pathTo(tree, nodeId);
     for (let i = 0; i < path.length - 1; i++) lastChild[path[i].id] = path[i + 1].id;
 
@@ -333,6 +388,8 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
       movable: { color: undefined, dests: new Map() },
     });
     renderMaterial();
+    // Auto-fold: only the folds on the way to the new move stay open.
+    if (autoFold && nodeId !== previousId) openFolds.clear();
     renderTreeView();
     navBackBtn.disabled = navStartBtn.disabled = currentId === tree.rootId;
     navForwardBtn.disabled = navEndBtn.disabled = tree.nodes[currentId].children.length === 0;

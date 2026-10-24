@@ -148,6 +148,34 @@ export interface TreeMarks {
   };
 }
 
+// The Fold branches and Auto-fold switches, shared by the study editor and
+// the read-only viewer: folding is on unless switched off in this browser,
+// auto-fold off unless switched on.
+const FOLD_STORAGE_KEY = "study-fold-branches";
+const AUTO_FOLD_STORAGE_KEY = "study-auto-fold";
+
+export function getSavedFolding(): { fold: boolean; autoFold: boolean } {
+  try {
+    return {
+      fold: localStorage.getItem(FOLD_STORAGE_KEY) !== "off",
+      autoFold: localStorage.getItem(AUTO_FOLD_STORAGE_KEY) === "on",
+    };
+  } catch {
+    return { fold: true, autoFold: false };
+  }
+}
+
+export function saveFolding(which: "fold" | "autoFold", on: boolean): void {
+  try {
+    localStorage.setItem(which === "fold" ? FOLD_STORAGE_KEY : AUTO_FOLD_STORAGE_KEY, on ? "on" : "off");
+  } catch {
+    // Keep the choice for this page even when browser storage is blocked.
+  }
+}
+
+export const FOLD_SWITCHES_HTML = `<button id="fold-btn" class="study-switch" type="button" role="switch" aria-checked="true" title="Put the moves at each branching in folds"><span class="study-switch__track" aria-hidden="true"></span>Fold branches</button>
+                <button id="autofold-btn" class="study-switch" type="button" role="switch" aria-checked="false" title="Close a variation's fold when you move out of it"><span class="study-switch__track" aria-hidden="true"></span>Auto-fold</button>`;
+
 const moveNumberLabel = (depth: number) => `${Math.floor((depth - 1) / 2) + 1}.${depth % 2 === 1 ? "" : ".."}`;
 
 // Small shares need a decimal to be told apart from zero.

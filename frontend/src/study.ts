@@ -53,10 +53,22 @@ import { cachedExplorerData, errorMessage, fetchExplorerData, hasExplorerData } 
 import { materialBalance, materialHtml } from "./material";
 import { downloadStudyFile } from "./studyFile";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { addMove, createEmptyTree, deleteSubtree, lastMoveAt, lichessAnalysisUrl, pathTo, positionAt, renderTree, sanPathTo, siblingVariation, type StudyTree } from "./tree";
-
-const FOLD_STORAGE_KEY = "study-fold-branches";
-const AUTO_FOLD_STORAGE_KEY = "study-auto-fold";
+import {
+  addMove,
+  createEmptyTree,
+  deleteSubtree,
+  FOLD_SWITCHES_HTML,
+  getSavedFolding,
+  lastMoveAt,
+  lichessAnalysisUrl,
+  pathTo,
+  positionAt,
+  renderTree,
+  saveFolding,
+  sanPathTo,
+  siblingVariation,
+  type StudyTree,
+} from "./tree";
 
 interface StudyStats {
   winProbability: number;
@@ -222,8 +234,7 @@ function renderEditor(
           <div class="study-side-col__inner">
             <div class="study-card study-card--moves">
               <div class="study-actions">
-                <button id="fold-btn" class="study-switch" type="button" role="switch" aria-checked="true" title="Put the moves at each branching in folds"><span class="study-switch__track" aria-hidden="true"></span>Fold branches</button>
-                <button id="autofold-btn" class="study-switch" type="button" role="switch" aria-checked="false" title="Close a variation's fold when you move out of it"><span class="study-switch__track" aria-hidden="true"></span>Auto-fold</button>
+                ${FOLD_SWITCHES_HTML}
                 <button id="comment-btn" class="btn btn-secondary study-icon-btn" type="button" aria-expanded="false" aria-controls="comment-editor" aria-label="Comment on this position" title="Comment on this position"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
                 <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
                 <button id="start-point-btn" class="btn btn-secondary study-icon-btn study-start-btn" type="button" aria-label="Set as starting point" title="Set as starting point"><span aria-hidden="true">🏁</span><span class="study-start-btn__cross" aria-hidden="true">✕</span></button>
@@ -353,13 +364,8 @@ function renderEditor(
 
   // Experimental: the moves at each branching in folds (see renderFolds in
   // tree.ts), on unless switched off in this browser.
-  let foldBranches = (() => {
-    try {
-      return localStorage.getItem(FOLD_STORAGE_KEY) !== "off";
-    } catch {
-      return true;
-    }
-  })();
+  const savedFolding = getSavedFolding();
+  let foldBranches = savedFolding.fold;
   const openFolds = new Set<number>();
   const foldBtn = document.getElementById("fold-btn") as HTMLButtonElement;
   foldBtn.setAttribute("aria-checked", String(foldBranches));
@@ -367,35 +373,21 @@ function renderEditor(
     foldBranches = !foldBranches;
     foldBtn.setAttribute("aria-checked", String(foldBranches));
     autoFoldBtn.disabled = !foldBranches;
-    try {
-      localStorage.setItem(FOLD_STORAGE_KEY, foldBranches ? "on" : "off");
-    } catch {
-      // Keep the choice for this page even when browser storage is blocked.
-    }
+    saveFolding("fold", foldBranches);
     renderTreeView();
   });
 
   // With folding on: moving to another move closes the folds not on the
   // way to it, so a variation folds up once you leave it. Off unless
   // switched on in this browser.
-  let autoFold = (() => {
-    try {
-      return localStorage.getItem(AUTO_FOLD_STORAGE_KEY) === "on";
-    } catch {
-      return false;
-    }
-  })();
+  let autoFold = savedFolding.autoFold;
   const autoFoldBtn = document.getElementById("autofold-btn") as HTMLButtonElement;
   autoFoldBtn.setAttribute("aria-checked", String(autoFold));
   autoFoldBtn.disabled = !foldBranches;
   autoFoldBtn.addEventListener("click", () => {
     autoFold = !autoFold;
     autoFoldBtn.setAttribute("aria-checked", String(autoFold));
-    try {
-      localStorage.setItem(AUTO_FOLD_STORAGE_KEY, autoFold ? "on" : "off");
-    } catch {
-      // Keep the choice for this page even when browser storage is blocked.
-    }
+    saveFolding("autoFold", autoFold);
     if (autoFold) {
       openFolds.clear();
       renderTreeView();
