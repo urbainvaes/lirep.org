@@ -1,5 +1,6 @@
 import Sortable from "sortablejs";
 import { escapeHtml } from "./layout";
+import { playSans, type MiniBoard } from "./miniBoard";
 import { sanPathTo, type StudyTree } from "./tree";
 import { evalPiece, PIECE_LABELS, pieceBadgeHtml, scoreTier, TIER_LABELS } from "./scoreTiers";
 
@@ -161,30 +162,66 @@ export function studyCardBodyHtml(card: {
   stats: { winProbability?: number | null; evalCp?: number | null };
   /** On a leaderboard: the value it ranks by. */
   ranked?: "score" | "eval";
-  moves: number;
-  lines: number;
-  /** The tree's size in a section of its own under the opening line (the
-   * home page), rather than under the expected result (the leaderboards). */
-  sizeBelowLine?: boolean;
-  /** After the size: the study's games, as a link to its Games page. */
-  games?: { count: number; href: string };
+  /** Under the expected result, in its section (a leaderboard's settings). */
+  afterResult?: string;
+  /** The tree's size, in a section of its own under the opening line (the
+   * home page); a leaderboard card puts it lower (see studySizeHtml). */
+  size?: { moves: number; lines: number; games?: { count: number; href?: string } };
   startLine: string[];
+  /** A board at the starting position in place of the moves to it (which
+   * become its caption), playing `mainLine` from there on hover (a
+   * leaderboard's card; see cardBoardSpec). */
+  board?: { mainLine: string[] };
   side: "white" | "black";
 }): string {
-  const size = `${card.moves} ${card.moves === 1 ? "move" : "moves"} · ${card.lines} ${card.lines === 1 ? "line" : "lines"}`
-    + (card.games?.count
-      ? ` · <a class="study-card__games" href="${card.games.href}" title="Open the Games page">${card.games.count} ${card.games.count === 1 ? "game" : "games"}</a>`
-      : "");
   return `
     <div class="study-card__header">
       <h3 title="${escapeHtml(card.titleText)}"><span class="study-card__title-text">${card.titleHtml}</span></h3>
       ${card.headerEnd}
     </div>
     ${expectedResultHtml(card.stats, card.ranked)}
-    ${card.sizeBelowLine ? "" : `<p class="study-card__meta">${size}</p>`}
-    <div class="study-card__line">${openingLineHtml(card.startLine, card.side)}</div>
-    ${card.sizeBelowLine ? `<p class="study-card__meta study-card__section">${size}</p>` : ""}
+    ${card.afterResult ?? ""}
+    ${card.board ? cardBoardHtml(card.startLine, card.board.mainLine, card.side) : `<div class="study-card__line">${openingLineHtml(card.startLine, card.side)}</div>`}
+    ${card.size ? `<p class="study-card__meta study-card__section">${studySizeHtml(card.size)}</p>` : ""}
   `;
+}
+
+// A card's board: the moves to the starting position and the main line after
+// it, as space-separated SAN (which has no spaces), for cardBoardSpec; under
+// it, the moves on one line, cut with … if too long.
+function cardBoardHtml(startLine: string[], mainLine: string[], side: "white" | "black"): string {
+  const caption = startLine.length
+    ? startLine.map((san, i) => (i % 2 === 0 ? `${i / 2 + 1}. ${san}` : san)).join(" ")
+    : "Starting position";
+  return `<div class="study-card__line study-card__line--board">
+      <div class="study-card__board" data-mini-board data-side="${side}" data-start="${escapeHtml(startLine.join(" "))}" data-main="${escapeHtml(mainLine.join(" "))}"></div>
+      <span class="study-card__caption" title="${escapeHtml(caption)}">${escapeHtml(caption)}</span>
+    </div>`;
+}
+
+/** For observeMiniBoards: a card's board, at its starting position, the
+ * main line played over the card. */
+export function cardBoardSpec(el: HTMLElement): MiniBoard {
+  const sans = (value: string | undefined) => (value ? value.split(" ") : []);
+  const start = playSans(sans(el.dataset.start));
+  const startFen = start.moves.length ? start.moves[start.moves.length - 1].fen : start.startFen;
+  return {
+    orientation: el.dataset.side === "black" ? "black" : "white",
+    startFen,
+    startLastMove: start.moves[start.moves.length - 1],
+    moves: playSans(sans(el.dataset.main), startFen).moves,
+    hoverEl: el.closest(".study-card") as HTMLElement,
+  };
+}
+
+/** "12 moves · 3 lines", then the study's games, if any: a link to its
+ * Games page given `href` (the owner's), else just their number. */
+export function studySizeHtml(size: { moves: number; lines: number; games?: { count: number; href?: string } }): string {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const games = size.games?.count ? plural(size.games.count, "game") : "";
+  return `${plural(size.moves, "move")} · ${plural(size.lines, "line")}${
+    !games ? "" : size.games?.href ? ` · <a class="study-card__games" href="${size.games.href}" title="Open the Games page">${games}</a>` : ` · ${games}`
+  }`;
 }
 
 function renderStudyCardContent(study: StudyCardData, headerEnd: string): string {
@@ -194,9 +231,10 @@ function renderStudyCardContent(study: StudyCardData, headerEnd: string): string
     titleText: study.name,
     headerEnd,
     stats: study.stats ?? {},
-    ...countMovesAndLines(study.tree),
-    sizeBelowLine: true,
-    games: study.gameCount ? { count: study.gameCount, href: `/games.html?id=${study.id}` } : undefined,
+    size: {
+      ...countMovesAndLines(study.tree),
+      games: study.gameCount ? { count: study.gameCount, href: `/games.html?id=${study.id}` } : undefined,
+    },
     startLine: sanPathTo(study.tree, startId),
     side: study.side,
   });

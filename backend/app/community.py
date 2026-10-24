@@ -45,17 +45,51 @@ def _start_line(study: dict) -> list[str]:
     return sans[::-1]
 
 
+def _main_line(study: dict) -> list[str]:
+    """The moves after the study's starting point along its main line: at
+    each branching, the move with the most moves prepared after it (the
+    first one on a tie). Its card's board plays them on hover."""
+    nodes = study["tree"].get("nodes", {})
+    start = str(study.get("startNodeId"))
+    if start not in nodes:
+        start = str(study["tree"].get("rootId", 0))
+    # Each node's number of moves after it, children before their parent.
+    order, stack = [], [start]
+    while stack:
+        key = stack.pop()
+        order.append(key)
+        stack.extend(str(c) for c in nodes[key].get("children", []) if str(c) in nodes)
+    after: dict[str, int] = {}
+    for key in reversed(order):
+        after[key] = sum(1 + after[str(c)] for c in nodes[key].get("children", []) if str(c) in after)
+    sans: list[str] = []
+    key = start
+    while children := [str(c) for c in nodes[key].get("children", []) if str(c) in after]:
+        key = max(children, key=lambda c: after[c])  # the first of the largest
+        sans.append(nodes[key]["san"])
+    return sans
+
+
 def _card_fields(study: dict) -> dict:
-    """What a leaderboard card shows besides its metric: the opening line,
-    the size of the tree, and the badge's expected score and evaluation (as
-    calculated, ranked or not)."""
+    """What a leaderboard card shows besides its metric: the opening line and
+    the main line after it (its board), the size of the tree and its number
+    of games, and the badge's expected score and evaluation (as calculated,
+    ranked or not)."""
     stats = study.get("stats") or {}
     moves, lines = _count_moves_and_lines(study["tree"])
     return {
         "moves": moves,
         "lines": lines,
+        "games": study.get("gameCount", 0),
         "startLine": _start_line(study),
-        "badge": {"winProbability": stats.get("winProbability"), "evalCp": stats.get("evalCp")},
+        "mainLine": _main_line(study),
+        # With the evaluation's Stockfish depth, for a card whose score wasn't
+        # valued with Stockfish.
+        "badge": {
+            "winProbability": stats.get("winProbability"),
+            "evalCp": stats.get("evalCp"),
+            "evalDepth": stats.get("evalDepth"),
+        },
     }
 
 

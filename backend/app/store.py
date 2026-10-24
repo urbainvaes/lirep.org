@@ -559,7 +559,9 @@ def list_shared_studies() -> list[tuple[str, dict[str, Any]]]:
     hasn't archived)."""
     with _connect() as conn:
         rows = conn.execute(f"SELECT owner, {_COLUMNS} FROM studies WHERE shared = 1 AND archived_at IS NULL").fetchall()
-    return [(row["owner"], _row_to_study(row)) for row in rows]
+        counts = dict(conn.execute("SELECT study_id, COUNT(*) FROM study_games GROUP BY study_id").fetchall())
+    # The leaderboards' cards show how many games a study has.
+    return [(row["owner"], {**_row_to_study(row), "gameCount": counts.get(row["id"], 0)}) for row in rows]
 
 
 def get_shared_study(study_id: int) -> tuple[str, dict[str, Any]] | None:

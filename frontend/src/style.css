@@ -933,6 +933,64 @@ body {
   line-height: normal;
 }
 
+/* A leaderboard card's board (miniBoard.ts), at the starting position,
+   with the moves to it under it on one line. */
+.study-card__line--board {
+  font-family: inherit;
+}
+
+.study-card__board {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+}
+
+.study-card__caption {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-family: "Courier New", monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A leaderboard card's settings, folded under "Calculation settings" just
+   under the expected result (closer to it than the card's gap), one per
+   line when open. */
+.study-card__settings {
+  margin-top: -4px;
+}
+
+.study-card__settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.study-card__settings summary {
+  cursor: pointer;
+}
+
+.study-card__settings summary:hover {
+  color: var(--text);
+}
+
+.study-card__settings[open] summary {
+  margin-bottom: 4px;
+}
+
+.study-card__setting {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.study-card__setting strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .study-card__author {
   min-width: 0;
   color: var(--text-dim);

@@ -1,11 +1,9 @@
-import { Chessground } from "@lichess-org/chessground";
-import type { Api } from "@lichess-org/chessground/api";
-import type { Key } from "@lichess-org/chessground/types";
 import Sortable from "sortablejs";
 
 import { applyBoardTheme } from "./board";
 import type { ExplorerSettings } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
+import { observeMiniBoards, type MiniBoard } from "./miniBoard";
 import { gameDetails, gameTitle, parseGame, splitPgnGames, type ParsedGame } from "./pgnGames";
 import { createEmptyTree, lichessAnalysisUrl, type StudyTree } from "./tree";
 import { renderTreeViewer } from "./treeViewer";
@@ -39,8 +37,6 @@ type Layout = { name: string; gameIds: number[] }[];
 
 const NEW_SECTION = "__new__";
 const STANDARD_START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-// The replay on hover: a move every PLAYBACK_MS.
-const PLAYBACK_MS = 220;
 
 // Where a card opens its game: Lichess (the default) or Lirep's viewer
 // (remembered in this browser).
@@ -257,7 +253,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
            ${onLichess ? 'target="_blank" rel="noopener noreferrer"' : ""}
            title="${escapeHtml(gameTitle(headers))}: open${onLichess ? " on Lichess" : ""} (drag to reorder, or Alt+←/→)">
           ${player(top)}
-          <div class="games-card__board" data-board="${game.id}"></div>
+          <div class="games-card__board" data-mini-board data-board="${game.id}"></div>
           ${player(bottom)}
           <span class="games-card__details">${p ? escapeHtml([known(headers.Event), known(headers.Date?.slice(0, 4))].filter(Boolean).join(" · ")) || "&nbsp;" : "Unreadable PGN"}</span>
         </a>
@@ -265,50 +261,22 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
       </div>`;
   }
 
-  // ---- Small boards: created when a card scrolls into view, final position
-  // at rest, the game replayed while the pointer is over the card.
-  let boards: Api[] = [];
-  let observer: IntersectionObserver | null = null;
+  // ---- Small boards (miniBoard.ts): the game's final position at rest,
+  // the game replayed while the pointer is over the card.
+  let unmountBoards = (): void => {};
 
-  function mountBoard(el: HTMLElement): void {
+  function boardSpec(el: HTMLElement): MiniBoard | null {
     const game = data.games.find((g) => g.id === Number(el.dataset.board));
     const p = game ? parsedGame(game) : null;
-    if (!game || !p) return;
+    if (!game || !p) return null;
     const last = p.moves[p.moves.length - 1];
-    const finalState = () => ({
-      fen: last ? last.fen : p.startFen,
-      lastMove: last ? ([last.from, last.to] as Key[]) : undefined,
-    });
-    const board = Chessground(el, {
-      viewOnly: true,
-      coordinates: false,
+    return {
       orientation: study.side,
-      animation: { duration: 120 },
-      ...finalState(),
-    });
-    boards.push(board);
-
-    const card = el.closest(".games-card") as HTMLElement;
-    let timer: number | null = null;
-    const stop = () => {
-      if (timer !== null) window.clearInterval(timer);
-      timer = null;
+      startFen: p.startFen,
+      moves: p.moves,
+      rest: { fen: last ? last.fen : p.startFen, lastMove: last },
+      hoverEl: el.closest(".games-card") as HTMLElement,
     };
-    card.addEventListener("pointerenter", (event) => {
-      if (event.pointerType !== "mouse" || !p.moves.length) return;
-      stop();
-      let ply = 0;
-      board.set({ fen: p.startFen, lastMove: undefined });
-      timer = window.setInterval(() => {
-        const move = p.moves[ply++];
-        board.set({ fen: move.fen, lastMove: [move.from as Key, move.to as Key] });
-        if (ply >= p.moves.length) stop();
-      }, PLAYBACK_MS);
-    });
-    card.addEventListener("pointerleave", () => {
-      stop();
-      board.set(finalState());
-    });
   }
 
   let sortables: Sortable[] = [];
@@ -337,9 +305,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
 
   function render(): void {
     renderSectionOptions();
-    boards.forEach((b) => b.destroy());
-    boards = [];
-    observer?.disconnect();
+    unmountBoards();
     sortables.forEach((s) => s.destroy());
     sortables = [];
 
@@ -368,16 +334,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
         )
         .join("") + `<button id="new-section-btn" class="btn btn-secondary btn-small" type="button">New section</button>`;
 
-    observer = new IntersectionObserver(
-      (entries) =>
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          observer?.unobserve(entry.target);
-          mountBoard(entry.target as HTMLElement);
-        }),
-      { rootMargin: "200px" },
-    );
-    pageEl.querySelectorAll<HTMLElement>("[data-board]").forEach((el) => observer!.observe(el));
+    unmountBoards = observeMiniBoards(pageEl, boardSpec);
 
     const on = (attr: string, handler: (value: string) => void) =>
       pageEl.querySelectorAll<HTMLButtonElement>(`[${attr}]`).forEach((btn) =>

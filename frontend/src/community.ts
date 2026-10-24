@@ -1,6 +1,8 @@
 import { LEAF_VALUE_LABELS, LIREP_DATASET, type LeafValue } from "./explorer";
+import { applyBoardTheme } from "./board";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { bindTitleScroll, studyBadgeHtml, studyCardBodyHtml } from "./studyCard";
+import { observeMiniBoards } from "./miniBoard";
+import { bindTitleScroll, cardBoardSpec, studyBadgeHtml, studyCardBodyHtml, studySizeHtml } from "./studyCard";
 
 interface Summary {
   players: number;
@@ -34,7 +36,9 @@ interface Opening {
   calculatedAt: string | null;
   moves: number;
   lines: number;
+  games: number;
   startLine: string[];
+  mainLine: string[];
   badge: Badge;
 }
 
@@ -42,6 +46,7 @@ interface Opening {
 interface Badge {
   winProbability: number | null;
   evalCp: number | null;
+  evalDepth: number | null;
 }
 
 // A row of the leaderboard by expected evaluation (/api/community/openings-by-eval).
@@ -62,24 +67,58 @@ interface EvalOpening {
   calculatedAt: string | null;
   moves: number;
   lines: number;
+  games: number;
   startLine: string[];
+  mainLine: string[];
   badge: Badge;
 }
 
 type ExplorerSettingsRow = Pick<Opening, "source" | "database" | "minRating" | "speeds">;
 
-// The Explorer settings the score was calculated with: win probability only
-// means something next to the rating band and time controls behind it.
-// Returns HTML: "Lirep" and "Lichess" link to the docs that say what their data is.
-function settingsLabel(opening: ExplorerSettingsRow): string {
-  const database = opening.source === "lirep"
-    ? `<a class="source-lirep" href="/doc/stats.html#explorer-settings" title="${escapeHtml(LIREP_DATASET)}">2016 sample</a>`
+// A setting a result was calculated with, on a line of its own: its name,
+// then its value as text and as HTML (which may link to the docs).
+interface Setting {
+  name: string;
+  text: string;
+  html?: string;
+}
+
+// The Explorer settings the result was calculated with: a result only means
+// something next to the games, rating band and time controls behind it.
+// "2016 sample" and "Lichess" link to the docs that say what their data is.
+function explorerSettings(opening: ExplorerSettingsRow): Setting[] {
+  const explorer: Setting = opening.source === "lirep"
+    ? {
+        name: "Explorer",
+        text: "2016 sample",
+        html: `<a class="source-lirep" href="/doc/stats.html#explorer-settings" title="${escapeHtml(LIREP_DATASET)}">2016 sample</a>`,
+      }
     : opening.database === "masters"
-      ? "Masters games"
-      : `<a class="source-lichess" href="/doc/stats.html#explorer-settings" title="Lichess's full Explorer, all Lichess players' games">Lichess</a>`;
-  const rating = opening.database === "masters" ? "" : opening.minRating ? `${opening.minRating}+ · ` : "all ratings · ";
-  const speeds = opening.database === "masters" || opening.speeds.length === 0 ? "" : opening.speeds.join(", ");
-  return `${database}${rating || speeds ? " · " : ""}${rating}${escapeHtml(speeds)}`.replace(/ · $/, "");
+      ? { name: "Explorer", text: "Masters games" }
+      : {
+          name: "Explorer",
+          text: "Lichess",
+          html: `<a class="source-lichess" href="/doc/stats.html#explorer-settings" title="Lichess's full Explorer, all Lichess players' games">Lichess</a>`,
+        };
+  if (opening.database === "masters") return [explorer];
+  return [
+    explorer,
+    { name: "Ratings", text: opening.minRating ? `${opening.minRating}+` : "all" },
+    { name: "Time controls", text: opening.speeds.length ? opening.speeds.join(", ") : "all" },
+  ];
+}
+
+// One line each, the name in bold; a value too long for the card ends in an
+// ellipsis, and shows in full on hover.
+function settingsHtml(settings: Setting[]): string {
+  return settings
+    .map(
+      (s) =>
+        `<span class="study-card__setting" title="${escapeHtml(`${s.name}: ${s.text}`)}"><strong>${s.name}:</strong> ${
+          s.html ?? escapeHtml(s.text)
+        }</span>`,
+    )
+    .join("");
 }
 
 function renderStats(summary: Summary): string {
@@ -114,13 +153,13 @@ interface Leaderboard<T> {
   description: string;
   /** The value of the expected result it ranks by, in bold on its cards. */
   ranked: "score" | "eval";
-  settings: (opening: T) => string;
+  settings: (opening: T) => Setting[];
   empty: (side: string) => string;
 }
 
 type LeaderboardRow = Pick<
   Opening,
-  "id" | "mine" | "name" | "side" | "moves" | "lines" | "startLine" | "badge" | "owner" | "anonymous"
+  "id" | "mine" | "name" | "side" | "moves" | "lines" | "games" | "startLine" | "mainLine" | "badge" | "owner" | "anonymous"
 > & {
   rank: number | null;
 };
@@ -134,10 +173,16 @@ const BY_EXPECTED_SCORE: Leaderboard<Opening> = {
   ranked: "score",
   // Scores whose lines' ends weren't valued with the Explorer's results say
   // how they were, with Stockfish's depth.
-  settings: (o) =>
-    o.leafValue === "explorer"
-      ? settingsLabel(o)
-      : `${settingsLabel(o)} · <span title="${escapeHtml(LEAF_VALUE_LABELS[o.leafValue])}">${LEAF_SHORT_LABELS[o.leafValue]}${o.depth ? `, depth ${o.depth}` : ""}</span>`,
+  // Stockfish's depth: the score's, when Stockfish valued lines' ends, else
+  // the expected evaluation's, if calculated.
+  settings: (o) => {
+    const depth = o.leafValue === "explorer" ? o.badge.evalDepth : o.depth;
+    return [
+      ...explorerSettings(o),
+      { name: "End of prep", text: LEAF_VALUE_LABELS[o.leafValue] },
+      ...(depth ? [{ name: "Stockfish", text: `depth ${depth}` }] : []),
+    ];
+  },
   empty: (side) => `No ranked openings for ${side} yet.`,
 };
 
@@ -148,7 +193,7 @@ const BY_EXPECTED_EVALUATION: Leaderboard<EvalOpening> = {
     "Ranked by Stockfish's average evaluation at the end of prep, in pawns from the prepared side's point of " +
     "view, with opponents replying as in the Explorer. Only evaluations at depth 12 (Balanced) or more are ranked.",
   ranked: "eval",
-  settings: (o) => `${settingsLabel(o)} · depth ${o.depth}`,
+  settings: (o) => [...explorerSettings(o), { name: "Stockfish", text: `depth ${o.depth}` }],
   empty: (side) => `No ranked openings for ${side} yet.`,
 };
 
@@ -160,8 +205,9 @@ function ownerHtml(opening: LeaderboardRow): string {
 }
 
 // A card as on the home page, with the rank before the name (which opens
-// the study, read-only), the Explorer settings the result was calculated
-// with, and at the bottom the author, then Import.
+// the study, read-only), the settings the result was calculated with under
+// it (folded, one per line), the tree's size and games under the opening
+// line, and at the bottom the author, then Import.
 function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T, signedIn: boolean): string {
   return `
     <article class="study-card study-card--summary">
@@ -171,12 +217,15 @@ function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T,
         headerEnd: studyBadgeHtml(opening.badge, opening.side, opening.mine ? opening.id : undefined),
         stats: opening.badge,
         ranked: board.ranked,
-        moves: opening.moves,
-        lines: opening.lines,
+        afterResult: `<details class="study-card__meta study-card__settings">
+          <summary>Calculation settings</summary>
+          <div class="study-card__settings-list">${settingsHtml(board.settings(opening))}</div>
+        </details>`,
         startLine: opening.startLine,
+        board: { mainLine: opening.mainLine },
         side: opening.side,
       })}
-      <p class="study-card__meta study-card__section">${board.settings(opening)}</p>
+      <p class="study-card__meta">${studySizeHtml({ moves: opening.moves, lines: opening.lines, games: { count: opening.games } })}</p>
       <div class="study-card__footer">
         <span class="study-card__author">by ${ownerHtml(opening)}</span>
         ${actionsHtml(opening, signedIn)}
@@ -218,14 +267,6 @@ function renderLeaderboard<T extends LeaderboardRow>(board: Leaderboard<T>, open
     </section>
   `;
 }
-
-// How a score's lines' ends were valued, in a row's settings: shorter than
-// the Stats page's labels, which the title shows in full.
-const LEAF_SHORT_LABELS: Record<LeafValue, string> = {
-  explorer: "Explorer values",
-  stockfish: "Stockfish values",
-  "explorer-stockfish": "Explorer and Stockfish values",
-};
 
 // The leaderboards rank one Explorer's scores at a time, since the two
 // aren't comparable: Lichess's (the default) or the local 2016 sample's.
@@ -342,6 +383,9 @@ function render(
   const message = main.querySelector<HTMLElement>("#community-message")!;
   const tables = main.querySelector<HTMLElement>(`#${BY_EXPECTED_SCORE.id}`)!;
   const evalTables = main.querySelector<HTMLElement>(`#${BY_EXPECTED_EVALUATION.id}`)!;
+  // The cards' boards, mounted as they scroll into view (the hidden
+  // leaderboard's once it's shown), and again after the Explorer switch.
+  let unmountBoards = observeMiniBoards(main, cardBoardSpec);
 
   function bindImports(): void {
     main.querySelectorAll<HTMLButtonElement>("[data-import]").forEach((button) => {
@@ -384,6 +428,8 @@ function render(
       source = wantedSource;
       tables.innerHTML = renderTables(BY_EXPECTED_SCORE, fresh, signedIn);
       evalTables.innerHTML = renderTables(BY_EXPECTED_EVALUATION, freshEval, signedIn);
+      unmountBoards();
+      unmountBoards = observeMiniBoards(main, cardBoardSpec);
       bindImports();
       switchButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.source === source)));
     } catch {
@@ -419,6 +465,7 @@ async function init(): Promise<void> {
   const main = document.getElementById("community-main");
   if (!main) return;
   bindTitleScroll(main);
+  void applyBoardTheme();
 
   try {
     const [summaryRes, openingsRes, evalRes] = await Promise.all([
