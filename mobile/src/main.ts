@@ -3,11 +3,13 @@
 //   #/            the studies
 //   #/practice    practice: what's due, study by study
 //   #/practice/ID a practice session on one study
+//   #/bullet/ID   Bullet on one study
 
 import "@web/theme";
 import "./style.css";
 
 import { SignedOut, me, signInUrl } from "./api";
+import { renderBullet } from "./bullet";
 import { renderPracticeList, renderStudies } from "./lists";
 import { renderSession } from "./session";
 
@@ -32,8 +34,10 @@ async function route(): Promise<void> {
   leave = null;
   const hash = location.hash || "#/";
   const session = hash.match(/^#\/practice\/(\d+)$/);
+  const bullet = hash.match(/^#\/bullet\/(\d+)$/);
   try {
     if (session) leave = await renderSession(app, Number(session[1]));
+    else if (bullet) leave = await renderBullet(app, Number(bullet[1]));
     else if (hash.startsWith("#/practice")) await renderPracticeList(app);
     else await renderStudies(app);
   } catch (err) {

@@ -4,6 +4,10 @@
 
 import type { StudyTree } from "./tree";
 
+/** How long a move takes to slide on a practice board, in ms: quicker than
+ * the board's default 200, so the walk's moves don't keep you waiting. */
+export const PRACTICE_ANIMATION_MS = 120;
+
 // One instruction in the pre-computed walk through the tree — see
 // buildSteps() below. "auto" covers both the opponent's replies (always)
 // and any of the studied side's own moves that weren't selected for this

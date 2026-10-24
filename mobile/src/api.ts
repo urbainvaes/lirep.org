@@ -1,6 +1,7 @@
 // The backend's API, as the website uses it (backend/app): same origin,
 // the same session cookie.
 
+import type { BulletStats } from "@web/bulletStats";
 import type { StudyTree } from "@web/tree";
 
 export interface StudyStats {
@@ -23,7 +24,7 @@ export interface PracticeSummary {
   dueCount: number;
   newCount: number;
   aggregateKnowledge: number | null;
-  bullet?: { runs: number; successes: number };
+  bullet?: BulletStats;
 }
 
 export interface Attempt {

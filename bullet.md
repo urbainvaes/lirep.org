@@ -1,7 +1,10 @@
 # Bullet practice
 
-A timed run through a study (`frontend/src/bullet.ts`, opened by
-`practice-session.html?id=…&mode=bullet`). User documentation:
+A timed run through a study. The game (the clock, the computer's replies,
+the options, recording the runs) is `frontend/src/bulletRun.ts`, shared by
+the website's page (`frontend/src/bullet.ts`, opened by
+`practice-session.html?id=…&mode=bullet`) and the mobile app's screen
+(`mobile/src/bullet.ts`, at `/m/#/bullet/…`). User documentation:
 `frontend/doc/bullet.html`.
 
 ## How it works now

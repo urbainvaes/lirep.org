@@ -21,8 +21,14 @@ and the website always compute and record the same things.
 - **A practice session**, from either list: the board across the screen, the
   same queue and rules as on the website (`practice.md`), your answers
   recorded the same way.
-- **Bullet**, from the bullet at the end of each row: the website's Bullet
-  page for now.
+- **Bullet**, from the bullet at the end of each row: the website's game
+  (`frontend/src/bulletRun.ts`), with the clock and Start under the board and
+  the options (the line's choice, auto-restart, loading missing Explorer
+  data) as chips.
+
+In the practice and Bullet screens, the board sits low on the screen, as in
+the Lichess app: the prompt or result just above it, the clock just below,
+the buttons in a bar at the bottom.
 
 Archived studies are left out, as on the website's Practice page. Signing in
 goes through Lichess and comes back to the app (`/auth/login?next=/m/`).
@@ -64,12 +70,11 @@ says so if it isn't served.
 
 ## Next steps
 
-1. **Bullet in the app**, rather than the website's page.
-2. **Stats:** the saved results first, then calculating them on the phone,
+1. **Stats:** the saved results first, then calculating them on the phone,
    with the website's code.
-3. **The editor:** adding moves on the board, with the Explorer and
+2. **The editor:** adding moves on the board, with the Explorer and
    Stockfish.
-4. **Community.** The forum and the documentation stay on the website.
+3. **Community.** The forum and the documentation stay on the website.
 
 The address can move to mobile.lirep.org later: nginx would serve the app
 there and pass `/api` and `/auth` to the same backend, which would then also

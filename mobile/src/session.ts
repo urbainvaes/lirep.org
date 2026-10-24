@@ -9,7 +9,7 @@ import type { Key } from "@lichess-org/chessground/types";
 
 import { applyBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "@web/board";
 import { escapeHtml } from "@web/layout";
-import { buildSteps, type Step } from "@web/practiceSteps";
+import { buildSteps, PRACTICE_ANIMATION_MS, type Step } from "@web/practiceSteps";
 import { lastMoveAt, positionAt } from "@web/tree";
 
 import { practiceQueue, practiceSummary, recordAttempt, study as loadStudy } from "./api";
@@ -30,16 +30,20 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
         <h1 class="bar__title">${escapeHtml(study.name)}</h1>
         <span class="bar__aside" id="knowledge" title="Known"></span>
       </header>
-      <div class="session__board"><div id="board" class="board"></div></div>
-      <div class="session__status">
-        <span class="session__prompt" id="prompt" aria-live="polite"></span>
-        <span class="session__progress" id="progress"></span>
+      <div class="session__above">
+        <div class="session__status">
+          <span class="session__prompt" id="prompt" aria-live="polite"></span>
+          <span class="session__progress" id="progress"></span>
+        </div>
       </div>
-      <div class="session__actions">
+      <div class="session__board"><div id="board" class="board"></div></div>
+      <div class="session__below">
+        <p class="session__warning" id="warning" hidden>Not saved: check your connection</p>
+      </div>
+      <div class="session__toolbar">
         <button class="button" type="button" id="answer" hidden>Show answer</button>
         <a class="button" href="#/practice" id="done" hidden>Done</a>
       </div>
-      <p class="session__warning" id="warning" hidden>Not saved: check your connection</p>
     </div>
   `;
   const el = (id: string) => document.getElementById(id) as HTMLElement;
@@ -58,6 +62,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   let left = false;
 
   const board: Api = createBoard(el("board"), onMove, study.side);
+  board.set({ animation: { duration: PRACTICE_ANIMATION_MS } });
   void applyBoardTheme();
 
   function prompt(text: string, tone: "" | "good" | "bad" = ""): void {

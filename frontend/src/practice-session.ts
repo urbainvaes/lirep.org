@@ -9,7 +9,7 @@ import { FOCUS_BUTTON_HTML, setupFocusMode } from "./focusMode";
 import type { BulletStats } from "./bulletStats";
 import type { ExplorerSettings } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { buildSteps, type Step } from "./practiceSteps";
+import { buildSteps, PRACTICE_ANIMATION_MS, type Step } from "./practiceSteps";
 import { lastMoveAt, positionAt, sanPathTo, type StudyTree } from "./tree";
 
 interface Study {
@@ -489,6 +489,7 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
   }
 
   board = createBoard(boardEl, onMove, boardOrientation);
+  board.set({ animation: { duration: PRACTICE_ANIMATION_MS } });
 
   function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";

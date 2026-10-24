@@ -362,11 +362,42 @@ a {
 
 /* ---- A session ----------------------------------------------------------- */
 
+/* As in the Lichess app: the board low on the screen, the prompt just
+   above it, what goes with it just below, and the buttons in a bar at the
+   bottom, within the thumb's reach. The space above the board takes twice
+   that below it. */
 .session {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.session__above {
+  display: flex;
+  flex: 2 1 0;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.session__board {
+  flex: none;
+}
+
+.session__below {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.session__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: calc(60px + var(--safe-bottom));
+  padding: 8px 16px calc(8px + var(--safe-bottom));
+  background: var(--panel-bg);
+  border-top: 1px solid var(--border);
 }
 
 /* The board takes the screen's whole width. */
@@ -384,7 +415,7 @@ a {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px 4px;
+  padding: 10px 16px;
 }
 
 .session__prompt {
@@ -406,16 +437,118 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.session__actions {
-  display: flex;
-  gap: 10px;
-  padding: 10px 16px calc(16px + var(--safe-bottom));
-}
-
 .session__warning {
-  margin: 0 16px;
+  margin: 10px 16px 0;
   color: var(--bad);
   font-size: 0.85rem;
+}
+
+/* ---- Bullet ---------------------------------------------------------------- */
+
+/* The clock under the board: the time, Start, and a bar of what's left. */
+.clock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 14px 16px 0;
+}
+
+.clock__time {
+  color: var(--text-dim);
+  font-size: 2.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.clock--running .clock__time {
+  color: var(--text-strong);
+}
+
+.clock--low .clock__time {
+  color: var(--bad);
+}
+
+.clock__start {
+  min-width: 110px;
+}
+
+.clock__bar {
+  flex-basis: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.clock__fill {
+  height: 100%;
+  width: 100%;
+  background: var(--primary);
+}
+
+.clock--low .clock__fill {
+  background: var(--bad);
+}
+
+.bullet__options {
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* A run that reached the end: a tick over everything, briefly. */
+.done {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--page-bg) 70%, transparent);
+  animation: done-in 0.25s ease-out;
+}
+
+.done__mark {
+  color: var(--good);
+  font-size: 5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.done__time {
+  color: var(--text-strong);
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes done-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
 }
 
 /* ---- Signed out, or unreachable ------------------------------------------ */

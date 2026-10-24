@@ -1,6 +1,6 @@
 // The two list screens, under a tab bar: the studies (as on the website's
 // home page) and practice (as on its Practice page). Each row opens a
-// practice session; the bullet at its end starts a Bullet run.
+// practice session; the bullet at its end opens Bullet.
 
 import { escapeHtml } from "@web/layout";
 import { evalPiece, pieceBadgeHtml, scoreTier } from "@web/scoreTiers";
@@ -30,7 +30,7 @@ function shell(tab: Tab, title: string, aside: string, body: string): string {
 }
 
 const bulletLink = (study: Study) =>
-  `<a class="row__bullet" href="/practice-session.html?id=${study.id}&amp;mode=bullet" aria-label="Bullet on ${escapeHtml(study.name)}" title="Bullet"><span data-icon="&#xe032;" aria-hidden="true"></span></a>`;
+  `<a class="row__bullet" href="#/bullet/${study.id}" aria-label="Bullet on ${escapeHtml(study.name)}" title="Bullet"><span data-icon="&#xe032;" aria-hidden="true"></span></a>`;
 
 function row(study: Study, lead: string, sub: string): string {
   return `
