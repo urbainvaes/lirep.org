@@ -2315,7 +2315,20 @@ button.study-head__link:disabled:hover {
   opacity: 1;
 }
 
-/* The suggested moves' window. */
+/* The suggested moves' window. Its title, with the link to the
+   algorithm's documentation after it. */
+.suggest-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.suggest-head .tool-settings__title {
+  margin: 0;
+}
+
+/* The suggested moves' window's controls. */
 .suggest-goal {
   display: grid;
   gap: 6px;

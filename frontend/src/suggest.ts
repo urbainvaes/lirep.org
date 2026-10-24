@@ -28,7 +28,9 @@ export const MOVE_LEVELS = [
 
 export interface SuggestOptions {
   side: "white" | "black";
-  startNodeId: number;
+  startNodeId: number; // the study's starting point: the score is the whole study's
+  // Only add moves after this one (null: anywhere in the study).
+  within: number | null;
   leafValue: LeafValue;
   candidates: number; // your most played moves considered in a position
   minGames: number; // games a move needs to be a candidate
@@ -180,6 +182,14 @@ export class Suggester {
     return score;
   }
 
+  /** Whether `nodeId` is `ancestor` or comes after it in the tree. */
+  private isUnder(nodeId: number, ancestor: number): boolean {
+    for (let id: number | null = nodeId; id !== null; id = this.tree.nodes[id].parentId) {
+      if (id === ancestor) return true;
+    }
+    return false;
+  }
+
   private start(): Chess {
     const chess = new Chess();
     for (const san of sanPathTo(this.tree, this.o.startNodeId)) chess.move(san);
@@ -229,7 +239,9 @@ export class Suggester {
     }[] = [];
     for (const turn of turns) {
       if (stopped()) return null;
+      const within = this.o.within;
       if (turn.own) {
+        if (within !== null && !this.isUnder(turn.nodeId, within)) continue;
         // Your first move: the line goes on with it, worth what it gives.
         const old = turn.ended as number;
         frontier.push({ bound: turn.reach * (1 - old), turn, reply: null, next: turn.chess, p: 1, base: 0, old });
@@ -255,6 +267,9 @@ export class Suggester {
         const childId = children.get(m.san);
         const next = after(turn.chess, m.san);
         if (childId !== undefined && this.answered(childId, next)) continue;
+        // Only after the selected move: in its subtree, or the selected
+        // reply itself.
+        if (within !== null && !this.isUnder(turn.nodeId, within) && childId !== within) continue;
         const p = games(m) / total;
         if (turn.reach * p < this.o.minReach) continue;
         // Answering m changes this position's value by p * (yours - m's); a

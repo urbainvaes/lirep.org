@@ -291,7 +291,10 @@ function renderEditor(
 
               <div id="tool-suggest" class="tool-panel tool-panel--settings" hidden>
                 <div class="tool-settings__group">
-                  <h3 class="tool-settings__title">Suggest moves</h3>
+                  <div class="suggest-head">
+                    <h3 class="tool-settings__title">Suggest moves</h3>
+                    <a class="btn btn-secondary btn-small" href="/doc/suggested-moves.html" target="_blank" rel="noopener" title="How the moves are chosen: the algorithm, in the documentation">How it works</a>
+                  </div>
                   <p class="tool-settings__note">Adds your moves one at a time, each the one raising the expected score most, with the end-of-prep value set in the settings (<span id="suggest-valued"></span>). Nothing goes into the study until you add it. Fast, but not always the best: a move worth little alone, but much with the next one, is missed.</p>
                   <div class="suggest-goal" role="radiogroup" aria-label="How many moves">
                     <label class="tool-settings__radio"><input type="radio" name="suggest-goal" value="moves" checked />Add<input id="suggest-moves" type="number" min="1" max="200" value="5" aria-label="Number of moves" />moves</label>
@@ -303,7 +306,7 @@ function renderEditor(
                   </div>
                   <details class="suggest-advanced">
                     <summary>Advanced</summary>
-                    <label>Your most played moves considered in a position<input id="suggest-candidates" type="number" min="1" max="10" value="4" /></label>
+                    <label>Your most played moves considered in a position<input id="suggest-candidates" type="number" min="1" max="10" value="6" /></label>
                     <label>Games a move needs to be considered<input id="suggest-min-games" type="number" min="1" value="100" /></label>
                     <label>Replies left out below this share of games (%)<input id="suggest-min-reach" type="number" min="0" max="100" step="0.1" value="0.2" /></label>
                     <label title="By the centipawns a move loses against Stockfish's best: its evaluation before the move minus after it. Stockfish then evaluates the moves tried, at the depth in the settings">Moves allowed
@@ -1327,7 +1330,7 @@ function renderEditor(
   );
 
   // The study's end-of-prep value: saved with its settings, and the
-  // figures follow it. With Stockfish, alone or under 50 games, its depth
+  // figures follow it. With Stockfish, alone or as Hybrid, its depth
   // shows too.
   const leafValueRadios = document.getElementById("leaf-value-radios") as HTMLElement;
   const depthGroup = document.getElementById("figures-depth-group") as HTMLElement;
@@ -1434,7 +1437,10 @@ function renderEditor(
     const side = currentSide();
     const scope = (document.querySelector('input[name="suggest-scope"]:checked') as HTMLInputElement).value;
     const goal = (document.querySelector('input[name="suggest-goal"]:checked') as HTMLInputElement).value;
-    const start = scope === "here" ? currentId : effectiveStart();
+    // The score is always the whole study's; "here" only restricts where
+    // moves are added.
+    const start = effectiveStart();
+    const within = scope === "here" ? currentId : null;
     const leaf = settings.leafValue ?? "explorer";
     const depth = figuresDepth();
     const level = (document.getElementById("suggest-level") as HTMLSelectElement).value;
@@ -1444,8 +1450,9 @@ function renderEditor(
     const suggester = new Suggester(tree, {
       side,
       startNodeId: start,
+      within,
       leafValue: leaf,
-      candidates: Math.max(1, suggestNumber("suggest-candidates") || 4),
+      candidates: Math.max(1, suggestNumber("suggest-candidates") || 6),
       minGames: Math.max(1, suggestNumber("suggest-min-games") || 1),
       minReach: Math.max(0, suggestNumber("suggest-min-reach") || 0) / 100,
       maxLoss: maxLoss ? Number(maxLoss) : null,

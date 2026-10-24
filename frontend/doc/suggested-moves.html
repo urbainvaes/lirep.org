@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        document.documentElement.dataset.theme =
+          t === "light" || t === "dark" ? t : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      } catch (e) {}
+    </script>
+    <meta name="description" content="The algorithm behind the editor's suggested moves: a greedy maximization of a study's expected score, one move at a time." />
+    <title>Suggested moves · lirep.org</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#e4e1dd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#2e2a24" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="Lirep" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-title" href="/">
+          <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
+          <span class="site-name">lirep<span class="tld">.org</span></span>
+        </a>
+        <nav class="site-nav">
+          <a href="/practice.html">Practice</a>
+          <a href="/tutorial.html">Tutorial</a>
+          <a href="/community.html">Community</a>
+          <a href="/forum.html">Forum</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <div class="site-auth" id="auth-area">
+          <a class="btn btn-primary" href="/auth/login">Sign in</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="site-main doc-main">
+      <h1 class="page-title">Suggested moves</h1>
+      <p>
+        The editor's 💡 window extends a study by a greedy maximization of its
+        <a href="expected-score.html">expected score</a>: at each step, it adds the one move of the studied side that
+        raises the expected score most, until a number of moves has been added or a target score is reached. This page
+        defines the objective, the set of admissible additions, the gain of an addition and the search for the best
+        one, and states the method's limits. The command-line tool <code>tools/optimal_repertoire.py</code> implements
+        the same method.
+      </p>
+
+      <section id="objective">
+        <h2>1. Objective</h2>
+        <p>
+          Let \(T\) be the study, a tree of moves rooted at its starting point. The studied side plays its prepared
+          move in each position (the first child); the opponent plays each move \(m\) listed by the Opening Explorer
+          in a position \(x\) with probability
+          $$p_x(m) = \frac{n_x(m)}{\sum_{m'} n_x(m')},$$
+          where \(n_x(m)\) is the number of games in which \(m\) was played in \(x\). A line ends with its last
+          answered move. The expected score is
+          $$S(T) = \sum_{\ell \in L(T)} P(\ell)\, v(\ell),$$
+          where \(L(T)\) is the set of lines' ends, \(P(\ell)\) the product of the opponent's probabilities along
+          the line and \(v(\ell) \in [0, 1]\) the value of its end. This is the expected score of the Stats page,
+          with the end-of-prep value chosen in the editor's settings:
+        </p>
+        <ul>
+          <li><strong>Explorer:</strong> \(v\) is the score of the line's last move over its Explorer games,
+            \(v = (w + d/2)/n\), with \(w\), \(d\), \(n\) the wins, draws and games from the studied side's point of view.</li>
+          <li><strong>Stockfish:</strong> \(v = \sigma(c)\), with \(c\) Stockfish's evaluation in centipawns of the
+            position after the last move, from the studied side, and \(\sigma(c) = 1/(1 + e^{-0.00368208\,c})\).</li>
+          <li><strong>Hybrid:</strong> the Explorer value when the move has at least 100 games, \(\sigma(c)\) otherwise.</li>
+        </ul>
+        <p>
+          Since the studied side's moves carry probability 1, \(S\) is linear in the value of each position:
+          a position \(t\) where the opponent is to move, reached with probability \(r_t\) and of value \(S_t\),
+          contributes \(r_t S_t\) to \(S(T)\).
+        </p>
+      </section>
+
+      <section id="additions">
+        <h2>2. Admissible additions</h2>
+        <p>
+          An addition is a pair \((m, a)\): an opponent move \(m\), in a position \(t\) of the study where the
+          opponent is to move, that the study leaves unanswered, and a move \(a\) of the studied side answering it.
+          The position \(t\) is either inside a line, or after a line's last move, which the addition then extends.
+          The reply \(m\) is admissible if its probability of being reached is at least a threshold \(\rho\)
+          (0.2% by default):
+          $$r_t\, p_t(m) \ge \rho.$$
+          When the starting point is a position of the studied side with no move prepared, the only additions are
+          the studied side's first moves there. With “After the selected move only”, an addition is admissible only
+          if \(t\) is the selected node or follows it, or if \(m\) is the selected node; \(S\), \(r_t\) and the
+          gains remain those of the whole study, from its starting point.
+        </p>
+        <p>
+          The candidates \(A(y)\) in the position \(y = t \cdot m\) are the studied side's moves listed by the
+          Explorer, by decreasing number of games: the first \(k\) (6 by default) with at least \(n_{\min}\) games
+          (100 by default) that satisfy the soundness constraint, if one is set. A move \(a\) is
+          <em>sound</em> when it loses at most \(\Delta\) centipawns against Stockfish's best move:
+          $$\hat c(y) - \hat c(y \cdot a) \le \Delta,$$
+          with \(\hat c\) Stockfish's evaluation from the studied side, at the depth chosen in the settings,
+          clipped to \([-1000, 1000]\) so that a forced mate counts as 10 pawns; the evaluation of \(y\) stands for
+          that of its best move. The levels offered are \(\Delta = 10\) (best only), 25 (excellent or better),
+          50 (good or better), 100 (up to inaccuracies), a value of the user's, or \(\Delta = \infty\) (any move,
+          the default; Stockfish is then not needed for this).
+        </p>
+      </section>
+
+      <section id="gain">
+        <h2>3. Gain of an addition</h2>
+        <p>
+          A new move \(a\) ends its line. Its value \(\lambda(a)\) is the end-of-prep value of §1 for a line ending
+          with \(a\). Let \(v_t(m)\) be the current value of the reply \(m\) in \(t\), that of a line ending with
+          \(m\), and
+          $$S_t = \sum_{m'} p_t(m')\, v_t(m')$$
+          the value of \(t\) with the study's current answers. Answering \(m\) with \(a\) replaces \(v_t(m)\)
+          by \(\lambda(a)\). If no reply in \(t\) was answered, the line ended with the move before \(t\), with
+          value \(e_t\), and now goes on through \(t\). By the linearity of §1, the gain is exact:
+          $$G(m, a) = r_t \left[\, S_t - p_t(m)\, v_t(m) + p_t(m)\, \lambda(a) - S_t^{\text{old}} \right],$$
+          $$S_t^{\text{old}} = \begin{cases} e_t & \text{if the line ended before } t, \\ S_t & \text{otherwise.} \end{cases}$$
+          For the first move at the starting point, \(G(a) = \lambda(a) - v_0\), with \(v_0\) the starting
+          position's own value.
+        </p>
+      </section>
+
+      <section id="search">
+        <h2>4. The search for the best addition</h2>
+        <p>
+          \(G\) is increasing in \(\lambda(a)\), so for each reply \(m\) only the candidate of largest
+          \(\lambda\) needs to be considered. Since \(\lambda \le 1\),
+          $$G(m, a) \le U(m) = r_t \left[\, S_t - p_t(m)\, v_t(m) + p_t(m) - S_t^{\text{old}} \right].$$
+          The bound \(U\) only needs the Explorer data of \(t\), whereas \(G\) needs that of \(y = t \cdot m\) (and
+          Stockfish's evaluations, if required). The admissible replies are therefore examined by decreasing
+          \(U\), and the search stops at the first reply whose bound does not exceed the best gain found. The result
+          is the exact maximizer of \(G\) over all admissible additions, at the cost of the Explorer data of the
+          replies examined only.
+        </p>
+        <p>
+          The best addition is applied to a working copy of the study, \(S\) is recomputed, and the step repeats.
+          The procedure stops when \(N\) moves have been added, when \(S\) reaches the target, when the user stops
+          it, or when no addition has a positive gain. The study itself is changed only when a suggestion is added.
+        </p>
+      </section>
+
+      <section id="limits">
+        <h2>5. Limits</h2>
+        <ul>
+          <li>
+            <strong>Myopia.</strong> A move is valued as the end of its line, \(\lambda(a)\), not with the
+            continuations that could follow it. A move whose own results are poor but whose follow-ups are strong
+            is undervalued, and a pair of moves worth more together than the sum of their single-step gains can be
+            missed. The method is therefore not optimal for a given number of moves; an exact solution, a knapsack
+            over the tree computed from the leaves up, needs the Explorer data of every position within its limits,
+            a number that grows exponentially with depth, instead of those next to the study.
+          </li>
+          <li>
+            <strong>Small samples.</strong> Explorer values are raw frequencies: a move's score over \(n\) games is
+            uncertain by about \(\pm 50/\sqrt{n}\) points, ±5 at 100 games. The minimum \(n_{\min}\) limits the
+            effect; the command-line tool can also shrink every score toward 50% as if \(n_0\) more games had been
+            drawn (<code>--prior-games</code>), \(v = (w + d/2 + n_0/2)/(n + n_0)\).
+          </li>
+          <li>
+            <strong>Candidates.</strong> Only the \(k\) most played moves are candidates. The command-line tool can
+            add Stockfish's best moves (<code>--engine-candidates</code>); the editor does not.
+          </li>
+          <li>
+            <strong>Stockfish's noise.</strong> \(\hat c(y)\) and \(\hat c(y \cdot a)\) come from two searches at
+            a fixed depth, which can differ by a few tens of centipawns at depth 12: small values of \(\Delta\) are
+            better used with depth 16.
+          </li>
+        </ul>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/doc-math.ts"></script>
+  </body>
+</html>
