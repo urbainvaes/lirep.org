@@ -33,7 +33,7 @@ export function scoreTier(expectedScore: number | undefined, side: "white" | "bl
 
 // The expected evaluation's pieces, highest first: the lowest evaluation,
 // in pawns from the studied side's point of view, for each (the same for
-// both sides). A study without one shows the king.
+// both sides). A study without one shows the pawn.
 export type EvalPiece = "king" | "queen" | "rook" | "bishop" | "knight" | "pawn";
 
 export const PIECES: { piece: EvalPiece; label: string; glyph: string; from: number }[] = [
@@ -49,7 +49,7 @@ export const PIECE_LABELS = Object.fromEntries(PIECES.map((p) => [p.piece, p.lab
 
 /** `evalCp`: the expected evaluation, in centipawns for the studied side. */
 export function evalPiece(evalCp: number | undefined): EvalPiece {
-  if (evalCp === undefined) return "king";
+  if (evalCp === undefined) return "pawn";
   return PIECES.find((p) => evalCp / 100 >= p.from)!.piece;
 }
 
