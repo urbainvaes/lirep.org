@@ -9,7 +9,7 @@
 import "@web/theme";
 import "./style.css";
 
-import { SignedOut, me, signInUrl } from "./api";
+import { SignedOut, me, prefetch, signInUrl } from "./api";
 import { flush, onWaiting } from "./outbox";
 import { renderBullet } from "./bullet";
 import { renderCommunity, renderPracticeList, renderStudies } from "./lists";
@@ -90,6 +90,7 @@ async function start(): Promise<void> {
   }
   window.addEventListener("hashchange", () => void route());
   await route();
+  prefetch();
 }
 
 void start();

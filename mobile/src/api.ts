@@ -41,9 +41,32 @@ export class SignedOut extends Error {}
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: "same-origin" });
-  if (res.status === 401) throw new SignedOut();
+  if (res.status === 401) {
+    kept.clear();
+    throw new SignedOut();
+  }
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
   return res.json() as Promise<T>;
+}
+
+// The lists' answers are kept a minute in memory, so that going back to a
+// tab doesn't wait for the network. What the app changes itself (answers,
+// runs) drops the copies it makes stale.
+const KEEP_MS = 60_000;
+const kept = new Map<string, { at: number; data: Promise<unknown> }>();
+
+function keptGet<T>(url: string): Promise<T> {
+  const copy = kept.get(url);
+  if (copy && Date.now() - copy.at < KEEP_MS) return copy.data as Promise<T>;
+  const data = get<T>(url);
+  kept.set(url, { at: Date.now(), data });
+  data.catch(() => kept.get(url)?.data === data && kept.delete(url));
+  return data;
+}
+
+/** Fetches the main tabs' data ahead, so the first switch is quick too. */
+export function prefetch(): void {
+  for (const load of [studies, practiceSummary, () => leaderboard("score")]) void load().catch(() => {});
 }
 
 export async function me(): Promise<{ authenticated: boolean; displayName?: string }> {
@@ -52,12 +75,12 @@ export async function me(): Promise<{ authenticated: boolean; displayName?: stri
 
 /** The account's studies, in its order, without the archived ones. */
 export async function studies(): Promise<Study[]> {
-  return (await get<Study[]>("/api/studies")).filter((study) => !study.archived);
+  return (await keptGet<Study[]>("/api/studies")).filter((study) => !study.archived);
 }
 
-export const study = (id: number) => get<Study>(`/api/studies/${id}`);
+export const study = (id: number) => keptGet<Study>(`/api/studies/${id}`);
 
-export const practiceSummary = () => get<Record<string, PracticeSummary>>("/api/practice/summary");
+export const practiceSummary = () => keptGet<Record<string, PracticeSummary>>("/api/practice/summary");
 
 /** The positions to drill in the next round (see practice.md). */
 export async function practiceQueue(id: number): Promise<number[]> {
@@ -72,6 +95,7 @@ export async function recordAttempt(id: number, nodeId: number, correct: boolean
     correct,
     answeredAt: new Date().toISOString(),
   });
+  kept.delete("/api/practice/summary");
   if (result.status === "offline") return "later";
   return result.status === "sent" ? (result.data as Attempt) : null;
 }
@@ -80,6 +104,7 @@ export async function recordAttempt(id: number, nodeId: number, correct: boolean
  * (offline: it waits in the outbox). */
 export async function recordRun(id: number, run: object): Promise<BulletStats | null> {
   const result = await send(`/api/studies/${id}/bullet/runs`, run);
+  kept.delete("/api/practice/summary");
   return result.status === "sent" ? (result.data as BulletStats) : null;
 }
 
@@ -99,7 +124,7 @@ export interface Ranked {
 
 /** The leaderboard by expected score ("score") or evaluation ("eval"). */
 export const leaderboard = (by: "score" | "eval") =>
-  get<Ranked[]>(by === "score" ? "/api/community/openings" : "/api/community/openings-by-eval");
+  keptGet<Ranked[]>(by === "score" ? "/api/community/openings" : "/api/community/openings-by-eval");
 
 /** Signing in with Lichess, then back to where the app was. */
 export function signInUrl(): string {
