@@ -23,18 +23,73 @@ export function computeDests(chess: Chess): Dests {
   return dests;
 }
 
-const MOVE_SOUNDS = {
-  move: new Audio("https://lichess1.org/assets/sound/standard/Move.mp3"),
-  capture: new Audio("https://lichess1.org/assets/sound/standard/Capture.mp3"),
-  check: new Audio("https://lichess1.org/assets/sound/standard/Check.mp3"),
-};
+const MOVE_SOUND_URLS = {
+  move: "https://lichess1.org/assets/sound/standard/Move.mp3",
+  capture: "https://lichess1.org/assets/sound/standard/Capture.mp3",
+  check: "https://lichess1.org/assets/sound/standard/Check.mp3",
+} as const;
+type MoveSound = keyof typeof MOVE_SOUND_URLS;
 
-export function playMoveSound(move: ReturnType<Chess["move"]>, chess: Chess): void {
-  const sound = chess.isCheck() ? MOVE_SOUNDS.check : move.isCapture() ? MOVE_SOUNDS.capture : MOVE_SOUNDS.move;
+// Keep an HTMLAudio fallback, but normally use decoded Web Audio buffers:
+// starting a network-backed audio element on every move can lag behind the
+// board animation on mobile. These tiny Lichess sounds are cached by the CDN.
+const MOVE_SOUNDS: Record<MoveSound, HTMLAudioElement> = {
+  move: new Audio(MOVE_SOUND_URLS.move),
+  capture: new Audio(MOVE_SOUND_URLS.capture),
+  check: new Audio(MOVE_SOUND_URLS.check),
+};
+for (const sound of Object.values(MOVE_SOUNDS)) {
+  sound.preload = "auto";
+  sound.load();
+}
+
+let audioContext: AudioContext | null = null;
+try {
+  if (typeof AudioContext !== "undefined") audioContext = new AudioContext();
+} catch {
+  // The HTMLAudio fallback still works if Web Audio is unavailable.
+}
+const moveBuffers = new Map<MoveSound, AudioBuffer>();
+if (audioContext) {
+  for (const [name, url] of Object.entries(MOVE_SOUND_URLS) as [MoveSound, string][]) {
+    void fetch(url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Move sound: HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then((data) => audioContext.decodeAudioData(data))
+      .then((buffer) => moveBuffers.set(name, buffer))
+      .catch(() => {
+        // Keep using the HTMLAudio fallback if Web Audio preload fails.
+      });
+  }
+}
+
+function playFallbackSound(kind: MoveSound): void {
+  const sound = MOVE_SOUNDS[kind];
   sound.currentTime = 0;
   void sound.play().catch(() => {
     // Browsers may block sound until the user interacts with the page.
   });
+}
+
+function startMoveBuffer(audioContext: AudioContext, kind: MoveSound): void {
+  const source = audioContext.createBufferSource();
+  source.buffer = moveBuffers.get(kind) as AudioBuffer;
+  source.connect(audioContext.destination);
+  source.start();
+}
+
+export function playMoveSound(move: ReturnType<Chess["move"]>, chess: Chess): void {
+  const kind: MoveSound = chess.isCheck() ? "check" : move.isCapture() ? "capture" : "move";
+  if (!audioContext) return playFallbackSound(kind);
+  if (audioContext.state === "running" && moveBuffers.has(kind)) return startMoveBuffer(audioContext, kind);
+  // Not running yet: ask it to resume (from the move gesture when there is
+  // one; later sounds then use Web Audio), but play this one now. Without a
+  // gesture, resume() can stay pending until the next tap, and a sound
+  // played then would come late.
+  if (audioContext.state !== "running") void audioContext.resume().catch(() => {});
+  playFallbackSound(kind);
 }
 
 /** A bare chessground board. Position/turn/dests are pushed in via api.set() by the caller. */
