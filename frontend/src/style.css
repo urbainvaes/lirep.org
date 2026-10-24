@@ -2440,17 +2440,17 @@ button.study-head__link:disabled:hover {
   opacity: 1;
 }
 
-/* The suggested moves' window. Its title, with the link to the
+/* The suggested moves' window. Its title, with a quiet link to the
    algorithm's documentation after it. */
-.suggest-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 2px;
+.suggest-doc {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 400;
 }
 
-.suggest-head .tool-settings__title {
-  margin: 0;
+.suggest-doc a {
+  color: var(--primary);
+  text-decoration: none;
 }
 
 /* The suggested moves' window's controls. */

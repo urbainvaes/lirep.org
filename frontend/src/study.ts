@@ -291,10 +291,7 @@ function renderEditor(
 
               <div id="tool-suggest" class="tool-panel tool-panel--settings" hidden>
                 <div class="tool-settings__group">
-                  <div class="suggest-head">
-                    <h3 class="tool-settings__title">Suggest moves</h3>
-                    <a class="btn btn-secondary btn-small" href="/doc/suggested-moves.html" target="_blank" rel="noopener" title="How the moves are chosen: the algorithm, in the documentation">How it works</a>
-                  </div>
+                  <h3 class="tool-settings__title">Suggest moves <span class="suggest-doc">(see <a href="/doc/suggested-moves.html" target="_blank" rel="noopener" title="How the moves are chosen: the algorithm, in the documentation">how it works</a>)</span></h3>
                   <p class="tool-settings__note">Adds your moves one at a time, each the one raising the expected score most, with the end-of-prep value set in the settings (<span id="suggest-valued"></span>). Nothing goes into the study until you add it. Fast, but not always the best: a move worth little alone, but much with the next one, is missed.</p>
                   <div class="suggest-goal" role="radiogroup" aria-label="How many moves">
                     <label class="tool-settings__radio"><input type="radio" name="suggest-goal" value="moves" checked />Add<input id="suggest-moves" type="number" min="1" max="200" value="5" aria-label="Number of moves" />moves</label>
