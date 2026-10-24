@@ -266,7 +266,10 @@ export function renderStudyCardWithActions(study: StudyCardData): string {
         ${
           study.archived
             ? `<button class="btn btn-secondary" type="button" data-restore-study="${study.id}" title="Back to your openings">Restore</button>`
-            : `<a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>`
+            : `<span class="btn-split">
+                <a class="btn btn-secondary btn-split__main" href="/practice-session.html?id=${study.id}">Practice</a>
+                <a class="btn btn-secondary btn-split__side" href="/practice-session.html?id=${study.id}&amp;mode=bullet" title="Bullet: your preparation against the clock" aria-label="Bullet practice on ${escapeHtml(study.name)}"><span data-icon="&#xe032;" aria-hidden="true"></span></a>
+              </span>`
         }
         <span class="study-card__icons">${duplicateButtonHtml(study)}${study.archived ? deleteButtonHtml(study) : archiveButtonHtml(study)}</span>
       </div>

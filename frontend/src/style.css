@@ -280,6 +280,32 @@ body {
   border-color: var(--text-dim);
 }
 
+/* Two buttons joined as one (a card's Practice, with Bullet as its narrow
+   right end, in the Lichess font's bullet icon). */
+.btn-split {
+  display: inline-flex;
+}
+
+.btn-split__main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.btn-split__side {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -1px;
+  padding-inline: 7px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* The hovered half's border shows whole, over its neighbour's. */
+.btn-split .btn:hover {
+  position: relative;
+  z-index: 1;
+}
+
 .btn-warning {
   background: #a5680f;
   color: var(--text-strong);
