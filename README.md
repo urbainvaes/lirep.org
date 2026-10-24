@@ -174,6 +174,13 @@ syncs that file so the remote runner can read its state-directory setting too.
 The older virtualenv-based approach under `deploy/backup-venv-approach/` is
 retained for reference and is superseded by the Guix setup.
 
+The mobile app (`mobile/`, served at `/m/`) is built and deployed on its own,
+without restarting the site: `deploy/build-mobile.sh` builds it here and puts
+it live (the nginx that `run-local.sh` starts serves `/m/` from the state
+directory), and `deploy/deploy-mobile.sh` does the same on the server. Its
+package is [`deploy/guix/lirep/mobile.scm`](deploy/guix/lirep/mobile.scm).
+See [mobile/README.md](mobile/README.md).
+
 ## Project layout
 
 ```text
@@ -181,6 +188,7 @@ backend/app/       FastAPI routes, SQLite storage, Explorer and stats logic
 backend/tests/     Backend tests
 frontend/          Multi-page TypeScript/Vite app and bundled Stockfish WASM
 frontend/doc/      In-app user guides
+mobile/            The mobile web app, at /m/ (see mobile/README.md)
 explorer/          Optional local Lichess Explorer and archive instructions
 deploy/            Guix packages and local/remote deployment scripts
 ```

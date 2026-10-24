@@ -57,7 +57,7 @@ esac
 echo "== Copying to the configured deployment target"
 rsync -a --delete $dry --itemize-changes \
   --exclude=/.git/ --exclude=node_modules/ --exclude=.venv/ \
-  --exclude=__pycache__/ --exclude=/frontend/dist/ \
+  --exclude=__pycache__/ --exclude=/frontend/dist/ --exclude=/mobile/dist/ \
   --exclude=/backend/.env --exclude='/backend/*.db*' \
   --exclude=/explorer/db --exclude=/explorer/data/ --exclude='/explorer/*.log' \
   --exclude=target/ --exclude='/Screenshot_*' \

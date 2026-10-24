@@ -64,6 +64,18 @@ http {
       etag off;
       if_modified_since off;
     }
+    # The mobile app (mobile/) at /m/: whatever deploy/build-mobile.sh last
+    # linked into the state directory, so it's updated without a restart.
+    # Its page is fetched afresh like the site's; its hashed files cached.
+    location ^~ /m/ {
+      root $state/mobile;
+      try_files \$uri \$uri/ /m/index.html;
+      location ~ (\.html|/)\$ {
+        add_header Cache-Control "no-cache";
+        etag off;
+        if_modified_since off;
+      }
+    }
     location /api/  { proxy_pass http://127.0.0.1:8000; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
     location /auth/ { proxy_pass http://127.0.0.1:8000; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
   }
