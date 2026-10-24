@@ -2,7 +2,10 @@
 // the same session cookie.
 
 import type { BulletStats } from "@web/bulletStats";
+import type { ExplorerSettings } from "@web/explorer";
 import type { StudyTree } from "@web/tree";
+
+import { send } from "./outbox";
 
 export interface StudyStats {
   winProbability?: number;
@@ -17,6 +20,7 @@ export interface Study {
   startNodeId: number | null;
   stats?: StudyStats | null;
   archived?: boolean;
+  explorerSettings?: ExplorerSettings | null;
 }
 
 export interface PracticeSummary {
@@ -60,20 +64,42 @@ export async function practiceQueue(id: number): Promise<number[]> {
   return (await get<{ nodeIds: number[] }>(`/api/studies/${id}/practice/queue`)).nodeIds;
 }
 
-/** Records a first answer; null if it couldn't be saved. */
-export async function recordAttempt(id: number, nodeId: number, correct: boolean): Promise<Attempt | null> {
-  try {
-    const res = await fetch(`/api/studies/${id}/practice/attempt`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId, correct }),
-    });
-    return res.ok ? ((await res.json()) as Attempt) : null;
-  } catch {
-    return null;
-  }
+/** Records a first answer: the server's result, "later" if it waits in
+ * the outbox (offline), or null if the server refused it. */
+export async function recordAttempt(id: number, nodeId: number, correct: boolean): Promise<Attempt | "later" | null> {
+  const result = await send(`/api/studies/${id}/practice/attempt`, {
+    nodeId,
+    correct,
+    answeredAt: new Date().toISOString(),
+  });
+  if (result.status === "offline") return "later";
+  return result.status === "sent" ? (result.data as Attempt) : null;
 }
+
+/** Records a Bullet run (see bulletRun.ts): the updated stats, or null
+ * (offline: it waits in the outbox). */
+export async function recordRun(id: number, run: object): Promise<BulletStats | null> {
+  const result = await send(`/api/studies/${id}/bullet/runs`, run);
+  return result.status === "sent" ? (result.data as BulletStats) : null;
+}
+
+/** A leaderboard's row (backend/app/community.py), by expected score or
+ * evaluation. */
+export interface Ranked {
+  rank: number | null;
+  id: number;
+  name: string;
+  side: "white" | "black";
+  owner: string | null;
+  mine: boolean;
+  winProbability?: number | null;
+  evalCp?: number | null;
+  badge?: StudyStats;
+}
+
+/** The leaderboard by expected score ("score") or evaluation ("eval"). */
+export const leaderboard = (by: "score" | "eval") =>
+  get<Ranked[]>(by === "score" ? "/api/community/openings" : "/api/community/openings-by-eval");
 
 /** Signing in with Lichess, then back to where the app was. */
 export function signInUrl(): string {

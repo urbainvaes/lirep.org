@@ -86,6 +86,7 @@ export interface RunEnd {
   played?: string; // a wrong move
   expected?: string; // the prepared move instead
   analysisUrl: string; // the run on Lichess's analysis board
+  line: string[]; // its moves from the initial position, a wrong one included
 }
 
 /** What a run's end shows: the evaluation there, and the last move's
@@ -105,6 +106,9 @@ export interface BulletCallbacks {
   onEnd(end: RunEnd): void;
   /** The study's Bullet stats, updated after a run is recorded. */
   onStats?(stats: BulletStats): void;
+  /** How a run reaches the server (the mobile app keeps it while offline):
+   * the updated stats, or null. By default, it's posted at once. */
+  sendRun?(studyId: number, run: object): Promise<BulletStats | null>;
 }
 
 /** A study's Bullet game, playing on `board` (whose moves must reach
@@ -447,23 +451,31 @@ export class BulletGame {
       played,
       expected,
       analysisUrl: lichessAnalysisUrl(line, line.length),
+      line,
     });
     void this.record(reason);
   }
 
   private async record(reason: EndReason): Promise<void> {
+    const run = {
+      success: reason === "finished",
+      reason,
+      moves: this.moves,
+      timeMs: Math.round(this.usedMs),
+      selection: this.selection,
+      finishedAt: new Date().toISOString(),
+    };
+    if (this.cb.sendRun) {
+      const stats = await this.cb.sendRun(this.study.id, run);
+      if (stats) this.cb.onStats?.(stats);
+      return;
+    }
     try {
       const res = await fetch(`/api/studies/${this.study.id}/bullet/runs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({
-          success: reason === "finished",
-          reason,
-          moves: this.moves,
-          timeMs: Math.round(this.usedMs),
-          selection: this.selection,
-        }),
+        body: JSON.stringify(run),
       });
       if (res.ok) this.cb.onStats?.((await res.json()) as BulletStats);
     } catch {

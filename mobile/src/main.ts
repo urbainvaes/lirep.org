@@ -4,13 +4,15 @@
 //   #/practice    practice: what's due, study by study
 //   #/practice/ID a practice session on one study
 //   #/bullet/ID   Bullet on one study
+//   #/community   the leaderboards (#/community/eval: by evaluation)
 
 import "@web/theme";
 import "./style.css";
 
 import { SignedOut, me, signInUrl } from "./api";
+import { flush, onWaiting } from "./outbox";
 import { renderBullet } from "./bullet";
-import { renderPracticeList, renderStudies } from "./lists";
+import { renderCommunity, renderPracticeList, renderStudies } from "./lists";
 import { renderSession } from "./session";
 
 const app = document.getElementById("app") as HTMLElement;
@@ -39,6 +41,7 @@ async function route(): Promise<void> {
     if (session) leave = await renderSession(app, Number(session[1]));
     else if (bullet) leave = await renderBullet(app, Number(bullet[1]));
     else if (hash.startsWith("#/practice")) await renderPracticeList(app);
+    else if (hash.startsWith("#/community")) await renderCommunity(app, hash === "#/community/eval" ? "eval" : "score");
     else await renderStudies(app);
   } catch (err) {
     if (err instanceof SignedOut) return signedOut();
@@ -52,7 +55,34 @@ async function route(): Promise<void> {
   }
 }
 
+// Offline, or answers waiting to be sent: a small note above the bottom bar.
+function showNetwork(): void {
+  const note = document.createElement("div");
+  note.className = "net";
+  note.setAttribute("role", "status");
+  document.body.append(note);
+  let waiting = 0;
+  const show = () => {
+    const parts = [navigator.onLine ? "" : "Offline", waiting ? `${waiting} to send` : ""].filter(Boolean);
+    note.textContent = parts.join(" · ");
+    note.hidden = !parts.length;
+  };
+  onWaiting((count) => {
+    waiting = count;
+    show();
+  });
+  window.addEventListener("online", show);
+  window.addEventListener("offline", show);
+}
+
 async function start(): Promise<void> {
+  // The service worker keeps the app for offline use (public/sw.js); not
+  // while developing, where it would serve stale files.
+  if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    void navigator.serviceWorker.register("/m/sw.js", { scope: "/m/" }).catch(() => {});
+  }
+  showNetwork();
+  void flush();
   try {
     if (!(await me()).authenticated) return signedOut();
   } catch {

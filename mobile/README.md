@@ -20,11 +20,21 @@ and the website always compute and record the same things.
   and the total due at the top.
 - **A practice session**, from either list: the board across the screen, the
   same queue and rules as on the website (`practice.md`), your answers
-  recorded the same way.
+  recorded the same way; a dot per answer (green, red), the board's flip, and
+  a brief "100%" the first time the study is fully known.
 - **Bullet**, from the bullet at the end of each row: the website's game
   (`frontend/src/bulletRun.ts`), with the clock and Start under the board and
   the options (the line's choice, auto-restart, loading missing Explorer
   data) as chips.
+- **Community:** the leaderboards, by expected score or evaluation, White's
+  then Black's; your studies marked. A row opens the study on the website.
+- **Analysis**, from the microscope in practice (always there; the
+  session pauses meanwhile) and after a Bullet run (its line, a wrong move
+  included): a layer over the screen, on the position and its line. ‹ › and
+  the row of moves step through it; your moves, on the board or tapped in
+  the Explorer or Stockfish's chips, replace the rest of the line (they
+  aren't saved in the study). Explorer and Stockfish are toggles, remembered
+  as on the website. The back arrow, or the phone's back, closes it.
 
 In the practice and Bullet screens, the board sits low on the screen, as in
 the Lichess app: the prompt or result just above it, the clock just below,
@@ -32,6 +42,26 @@ the buttons in a bar at the bottom.
 
 Archived studies are left out, as on the website's Practice page. Signing in
 goes through Lichess and comes back to the app (`/auth/login?next=/m/`).
+
+## Offline
+
+The app works offline, from what it last loaded:
+
+- Its service worker (`public/sw.js`, registered in production builds only)
+  keeps the app's page and files, the board's images and sounds, Stockfish,
+  and the API's answers (studies, practice, queues, leaderboards). Online,
+  the API answers come from the network, unless it takes over 4 seconds;
+  offline, from the copies. Signing out drops them.
+- Practice answers and Bullet runs made offline wait in an outbox
+  (`src/outbox.ts`, in the browser) and go out in order once the server
+  answers again, each with the time it happened (`answeredAt`,
+  `finishedAt`), which the server believes if it's in the last 7 days. A
+  note above the bottom bar says "Offline" and how many wait.
+- The Explorer's data and Stockfish's evaluations are the browser's caches,
+  as on the website.
+
+The site's nginx serves `sw.js` without validators, like the pages, so that
+browsers see a new one.
 
 ## Working on it
 
@@ -51,9 +81,13 @@ The app is built and deployed apart from the website, without restarting
 it:
 
 - `deploy/build-mobile.sh` builds it with Guix (`deploy/guix/lirep/mobile.scm`)
-  and puts it live on this machine, at `/m/` of the site that
-  `deploy/run-local.sh` runs: that nginx serves whatever build is linked in
-  the state directory.
+  and installs it in a Guix profile of its own,
+  `/var/guix/profiles/per-user/$USER/lirep-mobile`, which the state
+  directory's `mobile/m` links to and the site's nginx (`deploy/run-local.sh`)
+  serves at `/m/`. Installing switches the profile at once, so the new
+  version is live without a restart, and the profile keeps it from being
+  garbage-collected (a GC root under a private home would not, with an
+  unprivileged `guix-daemon`); older generations are deleted.
 - `deploy/deploy-mobile.sh` copies the app's sources (`mobile/`, the shared
   `frontend/src/`, `deploy/`) to the server and runs `build-mobile.sh` there.
   `-n` shows what would be copied.

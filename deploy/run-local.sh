@@ -70,7 +70,8 @@ http {
     location ^~ /m/ {
       root $state/mobile;
       try_files \$uri \$uri/ /m/index.html;
-      location ~ (\.html|/)\$ {
+      # Its service worker too: a browser keeps an old one otherwise.
+      location ~ (\.html|/|/sw\.js)\$ {
         add_header Cache-Control "no-cache";
         etag off;
         if_modified_since off;

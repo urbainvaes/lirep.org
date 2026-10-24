@@ -9,7 +9,9 @@ import { createBoard } from "@web/board";
 import { AUTO_RESTART_MS, BASE_MS, BulletGame, LOW_TIME_MS, type EndInfo, type LineSelection, type RunEnd } from "@web/bulletRun";
 import { escapeHtml } from "@web/layout";
 
-import { practiceSummary, study as loadStudy } from "./api";
+import { openAnalysis } from "./analysis";
+import { ANALYSIS_ICON, FLIP_ICON } from "./icons";
+import { practiceSummary, recordRun, study as loadStudy } from "./api";
 
 const SELECTIONS: LineSelection[] = ["explorer", "uniform", "cycle"];
 const SELECTION_SHORT: Record<LineSelection, string> = { explorer: "Explorer", uniform: "Uniform", cycle: "Cycle" };
@@ -56,10 +58,11 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
         </div>
       </div>
       <div class="session__toolbar bullet__options">
+        <button class="icon-button" type="button" id="flip" aria-label="Flip the board" title="Flip the board">${FLIP_ICON}</button>
         <button class="chip" type="button" id="selection" title="How the computer chooses the next line"></button>
         <button class="chip" type="button" id="auto" title="Start the next run by itself after a success" aria-pressed="false">↻ Auto</button>
         <button class="chip" type="button" id="load" hidden title="Fetch the Explorer's frequencies this browser lacks"></button>
-        <a class="chip" id="analysis" target="_blank" rel="noopener" hidden>Analysis</a>
+        <button class="icon-button" type="button" id="analysis" aria-label="Analysis of the run" title="Analysis" hidden>${ANALYSIS_ICON}</button>
       </div>
       <div class="done" id="done" hidden>
         <div class="done__mark">✓</div>
@@ -77,7 +80,8 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
   const selectionBtn = el("selection") as HTMLButtonElement;
   const autoBtn = el("auto") as HTMLButtonElement;
   const loadBtn = el("load") as HTMLButtonElement;
-  const analysisLink = el("analysis") as HTMLAnchorElement;
+  const analysisBtn = el("analysis") as HTMLButtonElement;
+  let lastLine: string[] = [];
   const doneEl = el("done");
   let restartTimer: number | undefined;
   let endRun = 0;
@@ -101,8 +105,8 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
         ? `Time · ${end.moves} moves`
         : `${end.played} → ${end.expected}`;
     resultEl.className = `session__prompt session__prompt--${end.reason === "finished" ? "good" : "bad"}`;
-    analysisLink.href = end.analysisUrl;
-    analysisLink.hidden = false;
+    lastLine = end.line;
+    analysisBtn.hidden = false;
     startBtn.hidden = false;
     startBtn.textContent = end.reason === "finished" ? "Start" : "Again";
     showOptions();
@@ -127,6 +131,7 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
       stats = updated;
       showStats();
     },
+    sendRun: recordRun,
   });
 
   function showOptions(): void {
@@ -146,7 +151,7 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
     startBtn.hidden = true;
     resultEl.textContent = "";
     evalEl.textContent = "";
-    analysisLink.hidden = true;
+    analysisBtn.hidden = true;
     await game.start();
   }
 
@@ -167,6 +172,17 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
     showOptions();
   });
   startBtn.addEventListener("click", () => void startRun());
+  analysisBtn.addEventListener("click", () => {
+    window.clearTimeout(restartTimer); // no auto-restart under the analysis
+    doneEl.hidden = true;
+    openAnalysis({
+      line: lastLine,
+      orientation: board.state.orientation,
+      side: study.side,
+      explorerSettings: study.explorerSettings,
+      onClose: () => {},
+    });
+  });
   doneEl.addEventListener("click", () => {
     window.clearTimeout(restartTimer);
     doneEl.hidden = true;
@@ -174,6 +190,9 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
 
   const board: Api = createBoard(el("board"), game.onMove, study.side);
   game.attach(board);
+  el("flip").addEventListener("click", () =>
+    board.set({ orientation: board.state.orientation === "white" ? "black" : "white" }),
+  );
   showStats();
   showOptions();
   void game.dataReady.then(showOptions);

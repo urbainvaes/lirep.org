@@ -5,11 +5,12 @@
 import { escapeHtml } from "@web/layout";
 import { evalPiece, pieceBadgeHtml, scoreTier } from "@web/scoreTiers";
 
-import { practiceSummary, studies, type PracticeSummary, type Study } from "./api";
+import { leaderboard, practiceSummary, studies, type PracticeSummary, type Ranked, type Study } from "./api";
 
-type Tab = "studies" | "practice";
+type Tab = "studies" | "practice" | "community";
 
 const STUDIES_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>`;
+const COMMUNITY_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
 const PRACTICE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>`;
 
 function shell(tab: Tab, title: string, aside: string, body: string): string {
@@ -25,6 +26,7 @@ function shell(tab: Tab, title: string, aside: string, body: string): string {
     <nav class="tabs" aria-label="Screens">
       ${link("studies", "#/", STUDIES_ICON, "Studies")}
       ${link("practice", "#/practice", PRACTICE_ICON, "Practice")}
+      ${link("community", "#/community", COMMUNITY_ICON, "Community")}
     </nav>
   `;
 }
@@ -102,5 +104,48 @@ export async function renderPracticeList(app: HTMLElement): Promise<void> {
     "Practice",
     totalDue ? `<b class="due">${totalDue} due</b>` : "",
     list.length ? grouped(ordered, practiceRow) : empty("No studies yet: create one on"),
+  );
+}
+
+const evalText = (cp: number) => `${cp >= 0 ? "+" : "−"}${Math.abs(cp / 100).toFixed(2)}`;
+
+/** The leaderboards, by expected score or evaluation (two chips switch),
+ * White's then Black's: rank, badge, name, value and author. A row opens
+ * the study on the website's read-only page. */
+export async function renderCommunity(app: HTMLElement, by: "score" | "eval"): Promise<void> {
+  const rows = await leaderboard(by);
+  const rowOf = (r: Ranked) => {
+    const stats = r.badge ?? { winProbability: r.winProbability ?? undefined, evalCp: r.evalCp ?? undefined };
+    const badge = pieceBadgeHtml(scoreTier(stats.winProbability ?? undefined, r.side), "sm", evalPiece(stats.evalCp ?? undefined));
+    const value = by === "score"
+      ? r.winProbability == null ? "—" : `${(r.winProbability * 100).toFixed(1)}%`
+      : r.evalCp == null ? "—" : evalText(r.evalCp);
+    return `
+      <li class="row${r.mine ? " row--mine" : ""}">
+        <a class="row__link" href="/opening.html?id=${r.id}">
+          <span class="row__rank">${r.rank ?? "–"}</span>
+          <span class="row__lead row__lead--small">${badge}</span>
+          <span class="row__text">
+            <span class="row__name">${escapeHtml(r.name)}</span>
+            <span class="row__sub"><b class="row__value">${value}</b>${r.owner ? ` · ${escapeHtml(r.owner)}` : ""}</span>
+          </span>
+        </a>
+      </li>
+    `;
+  };
+  const sides = (["white", "black"] as const)
+    .map((side) => {
+      const list = rows.filter((r) => r.side === side);
+      if (!list.length) return "";
+      return `<section class="group"><h2 class="group__title"><span class="side-dot side-dot--${side}" aria-hidden="true"></span>${side === "white" ? "White" : "Black"}</h2><ul class="rows">${list.map(rowOf).join("")}</ul></section>`;
+    })
+    .join("");
+  const chip = (to: "score" | "eval", label: string) =>
+    `<a class="chip${by === to ? " chip--on" : ""}" href="${to === "score" ? "#/community" : "#/community/eval"}"${by === to ? ' aria-current="page"' : ""}>${label}</a>`;
+  app.innerHTML = shell(
+    "community",
+    "Community",
+    "",
+    `<div class="list__chips">${chip("score", "Score")}${chip("eval", "Evaluation")}</div>${sides || `<p class="list__empty">No ranked studies yet.</p>`}`,
   );
 }

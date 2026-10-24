@@ -10,11 +10,14 @@ import type { Key } from "@lichess-org/chessground/types";
 import { applyBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "@web/board";
 import { escapeHtml } from "@web/layout";
 import { buildSteps, PRACTICE_ANIMATION_MS, type Step } from "@web/practiceSteps";
-import { lastMoveAt, positionAt } from "@web/tree";
+import { lastMoveAt, positionAt, sanPathTo } from "@web/tree";
 
+import { openAnalysis } from "./analysis";
+import { ANALYSIS_ICON, FLIP_ICON } from "./icons";
 import { practiceQueue, practiceSummary, recordAttempt, study as loadStudy } from "./api";
 
 const CORRECT_PAUSE_MS = 700;
+const CELEBRATION_MS = 1800;
 const ANSWER_PAUSE_MS = 1500;
 
 /** Renders the session; returns what to undo on leaving it. */
@@ -31,6 +34,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
         <span class="bar__aside" id="knowledge" title="Known"></span>
       </header>
       <div class="session__above">
+        <div class="dots" id="dots" aria-label="This session's answers"></div>
         <div class="session__status">
           <span class="session__prompt" id="prompt" aria-live="polite"></span>
           <span class="session__progress" id="progress"></span>
@@ -38,11 +42,17 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
       </div>
       <div class="session__board"><div id="board" class="board"></div></div>
       <div class="session__below">
-        <p class="session__warning" id="warning" hidden>Not saved: check your connection</p>
+        <p class="session__warning" id="warning" hidden>Not saved</p>
       </div>
       <div class="session__toolbar">
+        <button class="icon-button" type="button" id="flip" aria-label="Flip the board" title="Flip the board">${FLIP_ICON}</button>
+        <button class="icon-button" type="button" id="analysis" aria-label="Analysis" title="Analysis">${ANALYSIS_ICON}</button>
         <button class="button" type="button" id="answer" hidden>Show answer</button>
         <a class="button" href="#/practice" id="done" hidden>Done</a>
+      </div>
+      <div class="done" id="full" hidden>
+        <div class="done__mark">100%</div>
+        <div class="done__time">known</div>
       </div>
     </div>
   `;
@@ -70,16 +80,40 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     promptEl.className = `session__prompt${tone ? ` session__prompt--${tone}` : ""}`;
   }
 
+  // The study's knowledge, top right; reaching 100% for the first time in
+  // the session is celebrated, briefly, while practice goes on.
+  let celebrated: boolean | null = null; // null until first known
   async function showKnowledge(): Promise<void> {
+    let k: number | null | undefined;
     try {
-      const k = (await practiceSummary())[String(id)]?.aggregateKnowledge;
-      if (!left) knowledgeEl.textContent = k == null ? "" : `${Math.round(k * 100)}%`;
+      k = (await practiceSummary())[String(id)]?.aggregateKnowledge;
     } catch {
-      // Just not shown.
+      return; // Just not shown.
+    }
+    if (left) return;
+    const pct = k == null ? null : Math.round(k * 100);
+    knowledgeEl.textContent = pct === null ? "" : `${pct}%`;
+    if (celebrated === null) celebrated = pct === 100;
+    else if (!celebrated && pct === 100) {
+      celebrated = true;
+      el("full").hidden = false;
+      window.setTimeout(() => (el("full").hidden = true), CELEBRATION_MS);
     }
   }
 
+  // A dot per first answer: green right, red wrong; on one row, the oldest
+  // dropped when it's full.
+  function dot(correct: boolean): void {
+    const dots = el("dots");
+    const d = document.createElement("span");
+    d.className = `dots__dot dots__dot--${correct ? "good" : "bad"}`;
+    dots.append(d);
+    while (dots.scrollWidth > dots.clientWidth && dots.firstChild) dots.firstChild.remove();
+  }
+
+  let shownNode = start; // the position on the board
   function setPosition(nodeId: number, interactive: boolean): void {
+    shownNode = nodeId;
     const chess = positionAt(tree, nodeId);
     board.set({
       fen: chess.fen(),
@@ -89,9 +123,15 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     });
   }
 
+  // The session's next step, waiting a moment (paused by the analysis).
+  let pending: (() => void) | null = null;
   function later(fn: () => void, ms: number): void {
     window.clearTimeout(timer);
-    timer = window.setTimeout(fn, ms);
+    pending = fn;
+    timer = window.setTimeout(() => {
+      pending = null;
+      fn();
+    }, ms);
   }
 
   function ask(nodeId: number): void {
@@ -142,7 +182,9 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   async function firstAnswer(nodeId: number, correct: boolean): Promise<void> {
     const result = await recordAttempt(id, nodeId, correct);
     if (left) return;
+    // Offline, it waits to be sent: no warning, only the bar's count.
     el("warning").hidden = result !== null;
+    dot(correct);
     void showKnowledge();
     if (correct) return finish(nodeId, "Correct", "good", CORRECT_PAUSE_MS);
     graded = true;
@@ -171,6 +213,25 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     }
   }
 
+  el("flip").addEventListener("click", () =>
+    board.set({ orientation: board.state.orientation === "white" ? "black" : "white" }),
+  );
+  el("full").addEventListener("click", () => (el("full").hidden = true));
+  // The analysis, on the board's position: the session pauses meanwhile.
+  el("analysis").addEventListener("click", () => {
+    const resume = pending;
+    window.clearTimeout(timer);
+    pending = null;
+    openAnalysis({
+      line: sanPathTo(tree, shownNode),
+      orientation: board.state.orientation,
+      side: study.side,
+      explorerSettings: study.explorerSettings,
+      onClose: () => {
+        if (resume && !left) later(resume, 300);
+      },
+    });
+  });
   answerBtn.addEventListener("click", () => {
     if (awaiting !== null) finish(awaiting, tree.nodes[awaiting].san as string, "bad", ANSWER_PAUSE_MS);
   });
