@@ -51,16 +51,20 @@ export function openingMovesHtml(study: StudyCardData): string {
   const startId = study.startNodeId !== null && study.tree.nodes[study.startNodeId]
     ? study.startNodeId
     : study.tree.rootId;
-  const sans = sanPathTo(study.tree, startId);
+  return openingLineHtml(sanPathTo(study.tree, startId), study.side);
+}
 
+/** The moves to a study's starting point, a full move per line, the
+ * studied side's in its colour. */
+export function openingLineHtml(sans: string[], side: "white" | "black"): string {
   if (sans.length === 0) return '<span class="study-card__start">Starting position</span>';
 
   const rows: string[] = [];
   for (let i = 0; i < sans.length; i += 2) {
     const fullMove = Math.floor(i / 2) + 1;
-    const whiteMove = `<span class="tree-move ${study.side === "white" ? "tree-move--mine" : ""}">${escapeHtml(sans[i])}</span>`;
+    const whiteMove = `<span class="tree-move ${side === "white" ? "tree-move--mine" : ""}">${escapeHtml(sans[i])}</span>`;
     const blackMove = sans[i + 1]
-      ? `<span class="tree-move ${study.side === "black" ? "tree-move--mine" : ""}">${escapeHtml(sans[i + 1])}</span>`
+      ? `<span class="tree-move ${side === "black" ? "tree-move--mine" : ""}">${escapeHtml(sans[i + 1])}</span>`
       : "";
     rows.push(`<span class="study-card__move-line"><span class="tree-move-number">${fullMove}.</span> ${whiteMove}${blackMove ? ` ${blackMove}` : ""}</span>`);
   }
@@ -98,18 +102,94 @@ function copyName(name: string, studies: StudyCardData[]): string {
   }
 }
 
-function renderStudyCardContent(study: StudyCardData, headerExtra = ""): string {
-  const score = study.stats?.winProbability;
-  const scoreLabel = score === undefined ? "—" : `${(score * 100).toFixed(1)}%`;
+/** A study tree's size: its moves, and its lines (the moves that end one). */
+export function countMovesAndLines(tree: StudyTree): { moves: number; lines: number } {
+  const nodes = Object.values(tree.nodes);
+  return {
+    moves: nodes.length - 1,
+    lines: nodes.filter((node) => node.id !== tree.rootId && node.children.length === 0).length,
+  };
+}
 
+const EXPECTED_SCORE_TITLE =
+  "Expected score: win % + half of the draw % (a win counts 1, a draw 0.5), from real games in the Explorer, if you always play your prepared moves.";
+const EXPECTED_EVAL_TITLE =
+  "Expected evaluation: Stockfish's average evaluation at the end of your prep, in pawns for your side, with opponents replying as in the Explorer.";
+
+// Pawns for the studied side, with forced mates (capped near 100,000 cp)
+// spelled out, as on the Stats page.
+export function formatEval(cp: number): string {
+  if (Math.abs(cp) > 99_000) return cp > 0 ? "Forced mate" : "Forced mate against";
+  return `${cp > 0 ? "+" : ""}${(cp / 100).toFixed(2)}`;
+}
+
+/** "Expected result: 57.4% / +0.31", a dash for what isn't calculated yet;
+ * on a leaderboard, the value it ranks by in bold. */
+function expectedResultHtml(
+  stats: { winProbability?: number | null; evalCp?: number | null },
+  ranked?: "score" | "eval",
+): string {
+  const score = stats.winProbability ?? undefined;
+  const evalCp = stats.evalCp ?? undefined;
+  // Not calculated yet: a grey dash.
+  const value = (text: string | undefined, title: string, isRanked: boolean) => {
+    const variant = text === undefined
+      ? " study-card__result--missing"
+      : ranked === undefined ? "" : isRanked ? " study-card__result--ranked" : " study-card__result--unranked";
+    return `<span class="study-card__result${variant}" title="${escapeHtml(title)}">${text ?? "—"}</span>`;
+  };
+  return `<div class="study-card__score"><span>Expected result</span><span class="study-card__results">${value(
+    score === undefined ? undefined : `${(score * 100).toFixed(1)}%`,
+    EXPECTED_SCORE_TITLE,
+    ranked === "score",
+  )}<span class="study-card__results-sep">/</span>${value(
+    evalCp === undefined ? undefined : formatEval(evalCp),
+    EXPECTED_EVAL_TITLE,
+    ranked === "eval",
+  )}</span></div>`;
+}
+
+/** A card's body, the same on the home page and the leaderboards: the
+ * header (`titleHtml`, then `headerEnd` at its right), the expected result,
+ * the tree's size and the opening line. */
+export function studyCardBodyHtml(card: {
+  titleHtml: string;
+  headerEnd: string;
+  stats: { winProbability?: number | null; evalCp?: number | null };
+  /** On a leaderboard: the value it ranks by. */
+  ranked?: "score" | "eval";
+  moves: number;
+  lines: number;
+  /** The tree's size in a section of its own under the opening line (the
+   * home page), rather than under the expected result (the leaderboards). */
+  sizeBelowLine?: boolean;
+  startLine: string[];
+  side: "white" | "black";
+}): string {
+  const size = `${card.moves} ${card.moves === 1 ? "move" : "moves"} · ${card.lines} ${card.lines === 1 ? "line" : "lines"}`;
   return `
     <div class="study-card__header">
-      <h3>${escapeHtml(study.name)}</h3>
-      ${headerExtra}
+      <h3>${card.titleHtml}</h3>
+      ${card.headerEnd}
     </div>
-    <div class="study-card__score"><span title="Win % + half of the draw % (a win counts 1, a draw 0.5), from real games in the Explorer, if you always play your prepared moves.">Expected score</span><strong>${scoreLabel}</strong></div>
-    <div class="study-card__line">${openingMovesHtml(study)}</div>
+    ${expectedResultHtml(card.stats, card.ranked)}
+    ${card.sizeBelowLine ? "" : `<p class="study-card__meta">${size}</p>`}
+    <div class="study-card__line">${openingLineHtml(card.startLine, card.side)}</div>
+    ${card.sizeBelowLine ? `<p class="study-card__meta study-card__section">${size}</p>` : ""}
   `;
+}
+
+function renderStudyCardContent(study: StudyCardData, headerEnd: string): string {
+  const startId = study.startNodeId !== null && study.tree.nodes[study.startNodeId] ? study.startNodeId : study.tree.rootId;
+  return studyCardBodyHtml({
+    titleHtml: escapeHtml(study.name),
+    headerEnd,
+    stats: study.stats ?? {},
+    ...countMovesAndLines(study.tree),
+    sizeBelowLine: true,
+    startLine: sanPathTo(study.tree, startId),
+    side: study.side,
+  });
 }
 
 // Only when the study has games: a badge by the name (the Games page's book
@@ -122,13 +202,18 @@ function gamesBadgeHtml(study: StudyCardData): string {
     </a>`;
 }
 
-// The study's badge, as on its Stats page, linking there, at the top right
-// of the card: the piece of its expected evaluation (the king when not
-// calculated yet), in its tier's colour (grey when not calculated yet).
-function trophyLinkHtml(study: StudyCardData): string {
-  const score = study.stats?.winProbability;
-  const evalCp = study.stats?.evalCp;
-  const tier = scoreTier(score, study.side);
+// The study's badge, as on its Stats page, at the top right of the card:
+// the piece of its expected evaluation (the pawn when not calculated yet),
+// in its tier's colour (grey when not calculated yet). With `statsId`, it
+// links to that study's Stats page.
+export function studyBadgeHtml(
+  stats: { winProbability?: number | null; evalCp?: number | null },
+  side: "white" | "black",
+  statsId?: number,
+): string {
+  const score = stats.winProbability ?? undefined;
+  const evalCp = stats.evalCp ?? undefined;
+  const tier = scoreTier(score, side);
   const piece = evalPiece(evalCp);
   const scoreText = score === undefined
     ? "expected score not calculated yet"
@@ -136,8 +221,13 @@ function trophyLinkHtml(study: StudyCardData): string {
   const evalText = evalCp === undefined
     ? "expected evaluation not calculated yet"
     : `${PIECE_LABELS[piece]} · expected evaluation ${evalCp >= 0 ? "+" : "−"}${Math.abs(evalCp / 100).toFixed(2)}`;
+  const badge = pieceBadgeHtml(tier, "sm", piece);
+  if (statsId === undefined) {
+    const title = `${scoreText}; ${evalText}`;
+    return `<span class="study-card__trophy" title="${title}" aria-label="${title}">${badge}</span>`;
+  }
   const title = `${scoreText}; ${evalText} — click to see the stats`;
-  return `<a class="study-card__trophy" href="/stat.html?id=${study.id}" title="${title}" aria-label="${title}">${pieceBadgeHtml(tier, "sm", piece)}</a>`;
+  return `<a class="study-card__trophy" href="/stat.html?id=${statsId}" title="${title}" aria-label="${title}">${badge}</a>`;
 }
 
 /** A home-page card. An archived study's card has Restore in place of
@@ -145,7 +235,7 @@ function trophyLinkHtml(study: StudyCardData): string {
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
     <article class="study-card study-card--summary${study.archived ? " study-card--archived" : ""}">
-      ${renderStudyCardContent(study, `<span class="study-card__header-end">${gamesBadgeHtml(study)}${trophyLinkHtml(study)}</span>`)}
+      ${renderStudyCardContent(study, `<span class="study-card__header-end">${gamesBadgeHtml(study)}${studyBadgeHtml(study.stats ?? {}, study.side, study.id)}</span>`)}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
         ${

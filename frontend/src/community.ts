@@ -1,5 +1,6 @@
 import { LEAF_VALUE_LABELS, LIREP_DATASET, type LeafValue } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
+import { studyBadgeHtml, studyCardBodyHtml } from "./studyCard";
 
 interface Summary {
   players: number;
@@ -33,6 +34,14 @@ interface Opening {
   calculatedAt: string | null;
   moves: number;
   lines: number;
+  startLine: string[];
+  badge: Badge;
+}
+
+// The badge's expected score and evaluation, as calculated, ranked or not.
+interface Badge {
+  winProbability: number | null;
+  evalCp: number | null;
 }
 
 // A row of the leaderboard by expected evaluation (/api/community/openings-by-eval).
@@ -53,18 +62,11 @@ interface EvalOpening {
   calculatedAt: string | null;
   moves: number;
   lines: number;
+  startLine: string[];
+  badge: Badge;
 }
 
 type ExplorerSettingsRow = Pick<Opening, "source" | "database" | "minRating" | "speeds">;
-
-const percent = (value: number): string => `${(value * 100).toFixed(1)}%`;
-
-// Same format as on a study's Stats page: pawns from the studied side's point
-// of view, with forced mates (capped near 100,000 cp) spelled out.
-function formatEval(cp: number): string {
-  if (Math.abs(cp) > 99_000) return cp > 0 ? "Forced mate" : "Forced mate against";
-  return `${cp > 0 ? "+" : ""}${(cp / 100).toFixed(2)}`;
-}
 
 // The Explorer settings the score was calculated with: win probability only
 // means something next to the rating band and time controls behind it.
@@ -95,20 +97,13 @@ function renderStats(summary: Summary): string {
   `;
 }
 
-function actionHtml(opening: Pick<Opening, "id" | "mine">, signedIn: boolean): string {
+// A card's button: Import, or "Yours" on your own.
+function actionsHtml(opening: Pick<Opening, "id" | "mine">, signedIn: boolean): string {
   return opening.mine
     ? `<span class="community-yours">Yours</span>`
     : signedIn
       ? `<button class="btn btn-secondary" type="button" data-import="${opening.id}">Import</button>`
       : `<a class="btn btn-secondary" href="/auth/login">Sign in to import</a>`;
-}
-
-function openingCellHtml(opening: Pick<Opening, "id" | "mine" | "name" | "moves" | "lines">): string {
-  return `
-      <td>
-        <a class="opening-link" href="${opening.mine ? `/study.html?id=${opening.id}` : `/opening.html?id=${opening.id}`}"><strong>${escapeHtml(opening.name)}</strong></a>
-        <div class="community-sub">${opening.moves} ${opening.moves === 1 ? "move" : "moves"} · ${opening.lines} ${opening.lines === 1 ? "line" : "lines"}</div>
-      </td>`;
 }
 
 // The two leaderboards differ only in the metric they rank by; everything
@@ -117,13 +112,16 @@ interface Leaderboard<T> {
   id: string;
   title: string;
   description: string;
-  column: string;
-  value: (opening: T) => string;
+  /** The value of the expected result it ranks by, in bold on its cards. */
+  ranked: "score" | "eval";
   settings: (opening: T) => string;
   empty: (side: string) => string;
 }
 
-type LeaderboardRow = Pick<Opening, "id" | "mine" | "name" | "side" | "moves" | "lines" | "owner" | "anonymous"> & {
+type LeaderboardRow = Pick<
+  Opening,
+  "id" | "mine" | "name" | "side" | "moves" | "lines" | "startLine" | "badge" | "owner" | "anonymous"
+> & {
   rank: number | null;
 };
 
@@ -133,8 +131,7 @@ const BY_EXPECTED_SCORE: Leaderboard<Opening> = {
   description:
     "Ranked by the win percentage plus half of the draw percentage, if you always play the prepared moves and " +
     "opponents reply as in the Explorer.",
-  column: "Expected score",
-  value: (o) => (o.winProbability === null ? "—" : percent(o.winProbability)),
+  ranked: "score",
   // Scores whose lines' ends weren't valued with the Explorer's results say
   // how they were, with Stockfish's depth.
   settings: (o) =>
@@ -150,8 +147,7 @@ const BY_EXPECTED_EVALUATION: Leaderboard<EvalOpening> = {
   description:
     "Ranked by Stockfish's average evaluation at the end of prep, in pawns from the prepared side's point of " +
     "view, with opponents replying as in the Explorer. Only evaluations at depth 12 (Balanced) or more are ranked.",
-  column: "Expected evaluation",
-  value: (o) => formatEval(o.evalCp),
+  ranked: "eval",
   settings: (o) => `${settingsLabel(o)} · depth ${o.depth}`,
   empty: (side) => `No ranked openings for ${side} yet.`,
 };
@@ -163,16 +159,28 @@ function ownerHtml(opening: LeaderboardRow): string {
   return opening.anonymous ? `${link} <span class="community-anonymous">(anonymous)</span>` : link;
 }
 
-function renderRow<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T, signedIn: boolean): string {
+// A card as on the home page, with the rank before the name (which opens
+// the study, read-only), the Explorer settings the result was calculated
+// with, and at the bottom the author, then Import.
+function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T, signedIn: boolean): string {
   return `
-    <tr>
-      <td class="community-rank">${opening.rank ?? "–"}</td>
-      ${openingCellHtml(opening)}
-      <td>${ownerHtml(opening)}</td>
-      <td class="community-score">${board.value(opening)}</td>
-      <td class="community-settings">${board.settings(opening)}</td>
-      <td class="community-action">${actionHtml(opening, signedIn)}</td>
-    </tr>
+    <article class="study-card study-card--summary">
+      ${studyCardBodyHtml({
+        titleHtml: `<span class="study-card__rank">${opening.rank ?? "–"}</span> <a class="study-card__title-link" href="/opening.html?id=${opening.id}">${escapeHtml(opening.name)}</a>`,
+        headerEnd: studyBadgeHtml(opening.badge, opening.side, opening.mine ? opening.id : undefined),
+        stats: opening.badge,
+        ranked: board.ranked,
+        moves: opening.moves,
+        lines: opening.lines,
+        startLine: opening.startLine,
+        side: opening.side,
+      })}
+      <p class="study-card__meta study-card__section">${board.settings(opening)}</p>
+      <div class="study-card__footer">
+        <span class="study-card__author">by ${ownerHtml(opening)}</span>
+        ${actionsHtml(opening, signedIn)}
+      </div>
+    </article>
   `;
 }
 
@@ -186,14 +194,7 @@ function renderTable<T extends LeaderboardRow>(
   const sideName = side === "white" ? "White" : "Black";
   const body = group.length
     ? `
-      <div class="community-table-wrap">
-        <table class="community-table">
-          <thead>
-            <tr><th>#</th><th>Opening</th><th>By</th><th>${board.column}</th><th>Calculated with</th><th></th></tr>
-          </thead>
-          <tbody>${group.map((o) => renderRow(board, o, signedIn)).join("")}</tbody>
-        </table>
-      </div>`
+      <div class="studies-grid">${group.map((o) => renderCard(board, o, signedIn)).join("")}</div>`
     : `<div class="empty-state"><p>${board.empty(sideName)}</p></div>`;
   return `
     <section class="opening-group">
@@ -314,7 +315,7 @@ function render(
         </div>
       </div>
       <p class="community-note">
-        Each row shows the rating band and time controls it was calculated with, so compare rows with the same
+        Each card shows the rating band and time controls it was calculated with, so compare cards with the same
         settings; results from one player's games are not ranked. Studies are shared by default; authors can
         switch sharing off for any study on its page.
       </p>

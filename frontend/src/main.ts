@@ -14,24 +14,36 @@ function savedShowArchived(): boolean {
   }
 }
 
-// The archived studies, after the others: the switch that shows them (only
-// when there are some), then their own section, White's first.
+// The archived studies, after the others: their own section when shown,
+// by side as above (a side with none is left out), then the switch that
+// shows them (only when there are some), just above Import, so it stays in
+// place when switched.
 function archivedHtml(archived: StudyCardData[], shown: boolean): string {
   if (!archived.length) return "";
-  const cards = [...archived].sort((a, b) => (a.side === b.side ? 0 : a.side === "white" ? -1 : 1));
+  const sides = (["white", "black"] as const)
+    .map((side) => ({ side, cards: archived.filter((study) => study.side === side) }))
+    .filter(({ cards }) => cards.length)
+    .map(
+      ({ side, cards }) => `
+            <div class="opening-group__side">
+              <h4>Openings for ${side === "white" ? "White" : "Black"}</h4>
+              <div class="studies-grid">${cards.map(renderStudyCardWithActions).join("")}</div>
+            </div>`,
+    )
+    .join("");
   return `
-    <div class="archived-bar">
-      <button id="show-archived" class="study-switch" type="button" role="switch" aria-checked="${shown}"><span class="study-switch__track" aria-hidden="true"></span>Show archived (${archived.length})</button>
-    </div>
     ${
       shown
         ? `<section class="opening-group opening-group--archived">
             <h2>Archived</h2>
             <p class="opening-group__note">Kept, but off the Practice and Community pages. Restore one to bring it back; the bin deletes it for good.</p>
-            <div class="studies-grid">${cards.map(renderStudyCardWithActions).join("")}</div>
+            ${sides}
           </section>`
         : ""
     }
+    <div class="archived-bar">
+      <button id="show-archived" class="study-switch" type="button" role="switch" aria-checked="${shown}"><span class="study-switch__track" aria-hidden="true"></span>Show archived (${archived.length})</button>
+    </div>
   `;
 }
 

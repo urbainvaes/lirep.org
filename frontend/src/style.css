@@ -551,6 +551,14 @@ body {
   gap: 8px;
 }
 
+/* Cards in a row stretch to the tallest: the opening moves take the extra
+   height, so the space falls after them and what follows (the tree's size
+   or the Explorer settings, then the buttons) stays evenly spaced. */
+.study-card--summary .study-card__line {
+  flex-grow: 1;
+  justify-content: flex-start;
+}
+
 .study-card__header {
   display: flex;
   align-items: baseline;
@@ -572,7 +580,20 @@ body {
 }
 
 .opening-group--archived {
-  margin-top: 12px;
+  margin-top: 44px;
+}
+
+/* The archived section's sides, each under a smaller heading, as on the
+   leaderboards. */
+.opening-group__side + .opening-group__side {
+  margin-top: 24px;
+}
+
+.opening-group--archived h4 {
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom-width: 1px;
+  font-size: 0.95rem;
 }
 
 .opening-group__note {
@@ -685,9 +706,37 @@ body {
   font-size: 0.8rem;
 }
 
-.study-card__score strong {
+/* The expected result: score / evaluation. On a leaderboard, the one it
+   ranks by is bold and the other is not. */
+.study-card__results {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
   color: var(--primary);
   font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.study-card__result {
+  font-weight: 600;
+}
+
+.study-card__result--ranked {
+  font-weight: 700;
+}
+
+.study-card__result--unranked {
+  font-weight: 400;
+}
+
+.study-card__result--missing {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.study-card__results-sep {
+  color: var(--text-dim);
+  font-size: 0.9rem;
 }
 
 /* Only when the study has games: a badge by the name, linking to its Games
@@ -787,6 +836,73 @@ body {
   margin: 0;
   color: var(--text-dim);
   font-size: 0.8rem;
+}
+
+/* A leaderboard card (community.ts): its rank before the name, and its
+   author at the bottom. */
+.study-card__rank {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-right: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--card-nested-bg);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-align: center;
+  vertical-align: 0.1em;
+}
+
+.study-card__title-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.study-card__title-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+/* A section of its own under the opening line, past a line: the tree's
+   size on the home page, the Explorer settings on a leaderboard. */
+.study-card__section {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* At the bottom, under a line: the author, then Import (or "Yours") at
+   the right. Pushed to the bottom of the stretched card, like the home
+   cards' buttons. */
+.study-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.study-card__footer .btn {
+  font-size: 0.82rem;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
+/* "Yours" as tall as Import, so the cards in a row line up. */
+.study-card__footer .community-yours {
+  padding-block: 7px;
+  font-size: 0.82rem;
+  line-height: normal;
+}
+
+.study-card__author {
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
 }
 
 .study-card--new {

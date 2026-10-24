@@ -33,6 +33,32 @@ def _count_moves_and_lines(tree: dict) -> tuple[int, int]:
     return moves, lines
 
 
+def _start_line(study: dict) -> list[str]:
+    """The moves to the study's starting point (none from the initial
+    position), for its card's opening line."""
+    nodes = study["tree"].get("nodes", {})
+    node = nodes.get(str(study.get("startNodeId")))
+    sans: list[str] = []
+    while node is not None and node.get("san"):
+        sans.append(node["san"])
+        node = nodes.get(str(node.get("parentId")))
+    return sans[::-1]
+
+
+def _card_fields(study: dict) -> dict:
+    """What a leaderboard card shows besides its metric: the opening line,
+    the size of the tree, and the badge's expected score and evaluation (as
+    calculated, ranked or not)."""
+    stats = study.get("stats") or {}
+    moves, lines = _count_moves_and_lines(study["tree"])
+    return {
+        "moves": moves,
+        "lines": lines,
+        "startLine": _start_line(study),
+        "badge": {"winProbability": stats.get("winProbability"), "evalCp": stats.get("evalCp")},
+    }
+
+
 def _is_mine(owner: str, me: str | None) -> bool:
     return me is not None and owner.lower() == me.lower()
 
@@ -100,7 +126,6 @@ def _entry(
     # Scores saved before the choice existed used the Explorer's results.
     leaf = stats.get("leafValue") or "explorer"
     depth = stats.get("scoreDepth")
-    moves, lines = _count_moves_and_lines(study["tree"])
     reason = None
     if probability is None:
         reason = "Stats not calculated yet"
@@ -129,8 +154,7 @@ def _entry(
         "leafValue": leaf,
         "depth": depth if leaf != "explorer" else None,
         "calculatedAt": stats.get("winProbabilityCalculatedAt"),
-        "moves": moves,
-        "lines": lines,
+        **_card_fields(study),
         "rank": None,
     }
 
@@ -328,7 +352,6 @@ def _eval_entry(
         return None
     if settings["database"] == "player" or settings["source"] != ranked_source:
         return None
-    moves, lines = _count_moves_and_lines(study["tree"])
     return {
         "id": study["id"],
         "name": study["name"],
@@ -341,8 +364,7 @@ def _eval_entry(
         "minRating": settings["minRating"],
         "speeds": settings["speeds"] or [],
         "calculatedAt": stats.get("evalCalculatedAt"),
-        "moves": moves,
-        "lines": lines,
+        **_card_fields(study),
         "rank": None,
     }
 
