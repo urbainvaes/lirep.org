@@ -49,13 +49,22 @@ export const MIN_LEAF_GAMES = 100;
 // What it was before: Hybrid scores saved without their threshold used it.
 export const LEGACY_LEAF_GAMES = 50;
 
+// The third value is "Hybrid" everywhere; doc/expected-score.html says how
+// it works.
 export const LEAF_VALUE_LABELS: Record<LeafValue, string> = {
   explorer: "Explorer results",
   stockfish: "Stockfish",
-  "explorer-stockfish": `Explorer, Stockfish under ${MIN_LEAF_GAMES} games`,
+  "explorer-stockfish": "Hybrid",
 };
 
-/** One word each, for the editor's settings, with the label above as
+/** What each does, in a few words: the editor's settings' titles. */
+export const LEAF_VALUE_DESCRIPTIONS: Record<LeafValue, string> = {
+  explorer: "The Explorer's results",
+  stockfish: "Stockfish's evaluation, as an expected score",
+  "explorer-stockfish": `The Explorer's results, or Stockfish's evaluation under ${MIN_LEAF_GAMES} games`,
+};
+
+/** One word each, for the editor's settings, with the description above as
  * their title. */
 export const LEAF_VALUE_SHORT_LABELS: Record<LeafValue, string> = {
   explorer: "Explorer",

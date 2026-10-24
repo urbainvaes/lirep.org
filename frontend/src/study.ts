@@ -27,6 +27,7 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   explorerSummary,
   fetchExplorerDefaults,
+  LEAF_VALUE_DESCRIPTIONS,
   LEAF_VALUE_LABELS,
   LEAF_VALUE_SHORT_LABELS,
   bindExplorerSettingsForm,
@@ -286,7 +287,7 @@ function renderEditor(
                   <div class="tool-settings__radios" id="leaf-value-radios" role="radiogroup" aria-label="Value at the end of preparation">
                     ${(Object.keys(LEAF_VALUE_LABELS) as LeafValue[])
                       .map(
-                        (leaf) => `<label class="tool-settings__radio" title="${LEAF_VALUE_LABELS[leaf]}"><input type="radio" name="leaf-value" value="${leaf}"${(settings.leafValue ?? "explorer") === leaf ? " checked" : ""} />${LEAF_VALUE_SHORT_LABELS[leaf]}</label>`,
+                        (leaf) => `<label class="tool-settings__radio" title="${LEAF_VALUE_DESCRIPTIONS[leaf]}"><input type="radio" name="leaf-value" value="${leaf}"${(settings.leafValue ?? "explorer") === leaf ? " checked" : ""} />${LEAF_VALUE_SHORT_LABELS[leaf]}</label>`,
                       )
                       .join("")}
                   </div>
