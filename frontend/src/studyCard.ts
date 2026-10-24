@@ -163,10 +163,15 @@ export function studyCardBodyHtml(card: {
   /** The tree's size in a section of its own under the opening line (the
    * home page), rather than under the expected result (the leaderboards). */
   sizeBelowLine?: boolean;
+  /** After the size: the study's games, as a link to its Games page. */
+  games?: { count: number; href: string };
   startLine: string[];
   side: "white" | "black";
 }): string {
-  const size = `${card.moves} ${card.moves === 1 ? "move" : "moves"} · ${card.lines} ${card.lines === 1 ? "line" : "lines"}`;
+  const size = `${card.moves} ${card.moves === 1 ? "move" : "moves"} · ${card.lines} ${card.lines === 1 ? "line" : "lines"}`
+    + (card.games?.count
+      ? ` · <a class="study-card__games" href="${card.games.href}" title="Open the Games page">${card.games.count} ${card.games.count === 1 ? "game" : "games"}</a>`
+      : "");
   return `
     <div class="study-card__header">
       <h3>${card.titleHtml}</h3>
@@ -187,19 +192,10 @@ function renderStudyCardContent(study: StudyCardData, headerEnd: string): string
     stats: study.stats ?? {},
     ...countMovesAndLines(study.tree),
     sizeBelowLine: true,
+    games: study.gameCount ? { count: study.gameCount, href: `/games.html?id=${study.id}` } : undefined,
     startLine: sanPathTo(study.tree, startId),
     side: study.side,
   });
-}
-
-// Only when the study has games: a badge by the name (the Games page's book
-// icon and the count), linking to the Games page.
-function gamesBadgeHtml(study: StudyCardData): string {
-  if (!study.gameCount) return "";
-  const label = `${study.gameCount} game${study.gameCount === 1 ? "" : "s"}`;
-  return `<a class="study-card__games" href="/games.html?id=${study.id}" title="${label}: open the Games page" aria-label="${label}">
-      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>${study.gameCount}
-    </a>`;
 }
 
 // The study's badge, as on its Stats page, at the top right of the card:
@@ -235,7 +231,7 @@ export function studyBadgeHtml(
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
     <article class="study-card study-card--summary${study.archived ? " study-card--archived" : ""}">
-      ${renderStudyCardContent(study, `<span class="study-card__header-end">${gamesBadgeHtml(study)}${studyBadgeHtml(study.stats ?? {}, study.side, study.id)}</span>`)}
+      ${renderStudyCardContent(study, `<span class="study-card__header-end">${studyBadgeHtml(study.stats ?? {}, study.side, study.id)}</span>`)}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
         ${
