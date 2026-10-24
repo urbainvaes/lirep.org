@@ -1,3 +1,4 @@
+import Sortable from "sortablejs";
 import { escapeHtml } from "./layout";
 import { sanPathTo, type StudyTree } from "./tree";
 import { evalPiece, PIECE_LABELS, pieceBadgeHtml, scoreTier, TIER_LABELS } from "./scoreTiers";
@@ -259,7 +260,7 @@ export function studyBadgeHtml(
  * Practice, and the bin; an active one's, the archive box. */
 export function renderStudyCardWithActions(study: StudyCardData): string {
   return `
-    <article class="study-card study-card--summary${study.archived ? " study-card--archived" : ""}">
+    <article class="study-card study-card--summary${study.archived ? " study-card--archived" : ""}" data-study-id="${study.id}">
       ${renderStudyCardContent(study, `<span class="study-card__header-end">${studyBadgeHtml(study.stats ?? {}, study.side, study.id)}</span>`)}
       <div class="study-card__actions">
         <a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>
@@ -342,6 +343,81 @@ export function bindStudyDuplicate(
       window.alert("Could not duplicate the study. Please try again.");
     }
   });
+}
+
+/** Lets the home page's cards be dragged to reorder them, within their
+ * grid (a side, or the archive), as the games on a study's Games page.
+ * Returns the function that sets it up again after each render; the order
+ * is saved for all the owner's studies (see store.set_study_order). */
+export function bindStudyReorder(root: HTMLElement, studies: StudyCardData[], rerender: () => void): () => void {
+  // After a drop the card is usually under the pointer, and the browser
+  // turns the press and release into a click on whatever is there (Edit,
+  // Practice…): clicks right after a drag are ignored.
+  let justDragged = false;
+  root.addEventListener(
+    "click",
+    (event) => {
+      if (!justDragged) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true,
+  );
+
+  async function save(): Promise<void> {
+    // The cards' order on the page, then the studies not shown (the archive
+    // while hidden) in their order.
+    const shown = [...root.querySelectorAll<HTMLElement>("[data-study-id]")].map((card) => Number(card.dataset.studyId));
+    const byId = new Map(studies.map((study) => [study.id, study]));
+    const previous = [...studies];
+    const next = [
+      ...shown.map((id) => byId.get(id)).filter((study): study is StudyCardData => study !== undefined),
+      ...studies.filter((study) => !shown.includes(study.id)),
+    ];
+    if (next.every((study, i) => study === previous[i])) return;
+    studies.splice(0, studies.length, ...next);
+    try {
+      const res = await fetch("/api/studies/order", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: next.map((study) => study.id) }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      studies.splice(0, studies.length, ...previous);
+      rerender();
+      window.alert("Could not save the new order. Please try again.");
+    }
+  }
+
+  let sortables: Sortable[] = [];
+  return () => {
+    sortables.forEach((sortable) => sortable.destroy());
+    sortables = [...root.querySelectorAll<HTMLElement>(".studies-grid")].map((grid) => {
+      grid.classList.add("studies-grid--sortable");
+      return Sortable.create(grid, {
+        animation: 150,
+        // A short movement threshold keeps a click a click.
+        forceFallback: true,
+        fallbackTolerance: 5,
+        ghostClass: "studies-ghost",
+        draggable: "[data-study-id]",
+        // The copy's name, while duplicating, stays a text field.
+        filter: "input",
+        preventOnFilter: false,
+        // The New study card stays last.
+        onMove: (event) => !(event.related.classList.contains("study-card--new") && event.willInsertAfter),
+        onStart: () => {
+          justDragged = true;
+        },
+        onEnd: () => {
+          window.setTimeout(() => (justDragged = false), 50);
+          void save();
+        },
+      });
+    });
+  };
 }
 
 /** Archives or restores a study; false if the server refused. */

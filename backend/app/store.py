@@ -114,6 +114,10 @@ def init_db() -> None:
         # it's restored.
         if "archived_at" not in columns:
             conn.execute("ALTER TABLE studies ADD COLUMN archived_at TEXT")
+        # The study's place on the owner's home page, set by dragging its
+        # card (NULL: never placed; see list_studies).
+        if "position" not in columns:
+            conn.execute("ALTER TABLE studies ADD COLUMN position INTEGER")
 
         # Registration order: users.id is the user number, starting at 1. Lichess
         # usernames are case-insensitive. Accounts that existed before this table
@@ -587,7 +591,10 @@ def community_counts() -> dict[str, int]:
 def list_studies(owner: str) -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
-            f"SELECT {_COLUMNS} FROM studies WHERE owner = ? ORDER BY updated_at DESC",
+            # In the owner's order; studies never placed (new, imported or
+            # duplicated since the last reordering) first, the latest first.
+            f"SELECT {_COLUMNS} FROM studies WHERE owner = ?"
+            " ORDER BY position IS NOT NULL, position, updated_at DESC",
             (owner,),
         ).fetchall()
         counts = dict(
@@ -653,6 +660,17 @@ def set_study_archived(owner: str, study_id: int, archived: bool) -> bool:
             (1 if archived else 0, owner, study_id),
         )
     return cur.rowcount > 0
+
+
+def set_study_order(owner: str, study_ids: list[int]) -> None:
+    """Places the owner's studies in the order given (their cards dragged on
+    the home page). Ids that aren't the owner's are ignored; studies left out
+    keep their place."""
+    with _connect() as conn:
+        conn.executemany(
+            "UPDATE studies SET position = ? WHERE owner = ? AND id = ?",
+            [(position, owner, study_id) for position, study_id in enumerate(study_ids)],
+        )
 
 
 def duplicate_study(owner: str, study_id: int, name: str) -> dict[str, Any] | None:

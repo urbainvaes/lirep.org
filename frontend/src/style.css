@@ -577,6 +577,11 @@ body {
   gap: 8px;
 }
 
+/* The home page's cards can be dragged to reorder them. */
+.studies-grid--sortable [data-study-id] {
+  cursor: grab;
+}
+
 /* Cards in a row stretch to the tallest: the opening moves take the extra
    height, so the space falls after them and what follows (the tree's size
    or the Explorer settings, then the buttons) stays evenly spaced. */
@@ -6379,8 +6384,10 @@ details[open] > summary.tree-fold__head::before {
   opacity: 1;
 }
 
-/* Where the dragged card or section will land. */
-.games-ghost {
+/* Where the dragged card or section will land (here, or a study's card on
+   the home page). */
+.games-ghost,
+.studies-ghost {
   border-radius: 8px;
   outline: 2px dashed var(--primary);
   opacity: 0.5;

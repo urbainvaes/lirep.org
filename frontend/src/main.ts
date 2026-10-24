@@ -1,7 +1,18 @@
 import { bindZoom, renderLanding } from "./landing";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { studyFromFile } from "./studyFile";
-import { bindStudyArchive, bindStudyDelete, bindStudyDuplicate, bindTitleScroll, renderStudyCardWithActions, setArchived, renderStudyGroups, renderNewStudyCard, type StudyCardData } from "./studyCard";
+import {
+  bindStudyArchive,
+  bindStudyDelete,
+  bindStudyDuplicate,
+  bindStudyReorder,
+  bindTitleScroll,
+  renderNewStudyCard,
+  renderStudyCardWithActions,
+  renderStudyGroups,
+  setArchived,
+  type StudyCardData,
+} from "./studyCard";
 
 // Import a Lirep study file (see studyFile.ts) as a new study, then open it.
 const SHOW_ARCHIVED_KEY = "home-show-archived";
@@ -125,6 +136,8 @@ async function init(): Promise<void> {
   }
 
   let showArchived = savedShowArchived();
+  // Set up once the first render has defined `render`, and again after each.
+  let enableReorder = (): void => {};
   const render = (): void => {
     const active = studies.filter((study) => !study.archived);
     const archived = studies.filter((study) => study.archived);
@@ -134,7 +147,9 @@ async function init(): Promise<void> {
       importStudyHtml() +
       `<p id="archive-note" class="archive-note" role="status" aria-live="polite" hidden></p>`;
     bindStudyImport(grid);
+    enableReorder();
   };
+  enableReorder = bindStudyReorder(grid, studies, render);
   render();
   grid.addEventListener("click", (event) => {
     if (!(event.target as Element).closest("#show-archived")) return;

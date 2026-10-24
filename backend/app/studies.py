@@ -174,6 +174,21 @@ def set_archived(study_id: int, payload: ArchivedIn, request: Request) -> dict:
     return {"archived": payload.archived}
 
 
+class StudyOrderIn(BaseModel):
+    ids: list[int] = Field(max_length=10_000)
+
+
+# Before PUT /api/studies/{study_id}, which would otherwise take "order" for
+# a study id.
+@router.put("/api/studies/order")
+def set_study_order(payload: StudyOrderIn, request: Request) -> dict:
+    """The owner's studies in the order of their cards on the home page,
+    after one is dragged."""
+    owner = _require_owner(request)
+    store.set_study_order(owner, payload.ids)
+    return {"ok": True}
+
+
 class DuplicateIn(BaseModel):
     name: str
 
