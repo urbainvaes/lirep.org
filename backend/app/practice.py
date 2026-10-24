@@ -227,9 +227,26 @@ def practice_queue(study_id: int, request: Request) -> dict:
     return {"nodeIds": queue[:SESSION_SIZE]}
 
 
+# An answer or run sent late (the mobile app keeps them while offline) may
+# say when it happened: believed if it's in the past, within this long.
+LATE_ANSWER_MAX = timedelta(days=7)
+
+
+def _when(at: datetime | None) -> str:
+    """`at` if it's a believable past time, else now; as stored."""
+    now = datetime.now(UTC)
+    if at is not None:
+        at = at if at.tzinfo else at.replace(tzinfo=UTC)
+        if now - LATE_ANSWER_MAX <= at <= now + timedelta(minutes=1):
+            return min(at, now).isoformat()
+    return now.isoformat()
+
+
 class AttemptIn(BaseModel):
     nodeId: int
     correct: bool
+    # When it was answered, if earlier than now (sent late, see _when).
+    answeredAt: datetime | None = None
 
 
 @router.post("/api/studies/{study_id}/practice/attempt")
@@ -248,7 +265,7 @@ def record_attempt(study_id: int, payload: AttemptIn, request: Request) -> dict:
     states = store.get_practice_states(owner, study_id)
     prev = states.get(payload.nodeId)
     streak, tau_days = apply_answer(prev, payload.correct)
-    now = datetime.now(UTC).isoformat()
+    now = _when(payload.answeredAt)
     store.upsert_practice_state(owner, study_id, payload.nodeId, streak, tau_days, now)
     store.log_practice_answer(owner, study_id, payload.nodeId, payload.correct, now)
 
@@ -271,6 +288,8 @@ class BulletRunIn(BaseModel):
     # How the run's line was chosen (see bullet.md). Missing from pages
     # loaded before the choice existed: the Explorer's frequencies.
     selection: Literal["explorer", "uniform", "cycle"] = "explorer"
+    # When it ended, if earlier than now (sent late, see _when).
+    finishedAt: datetime | None = None
 
     @model_validator(mode="after")
     def _reason_matches(self) -> "BulletRunIn":
@@ -285,7 +304,7 @@ def record_bullet_run(study_id: int, payload: BulletRunIn, request: Request) -> 
     owner = _require_owner(request)
     if not store.get_study(owner, study_id):
         raise HTTPException(status_code=404, detail="not found")
-    now = datetime.now(UTC).isoformat()
+    now = _when(payload.finishedAt)
     store.log_bullet_run(
         owner, study_id, payload.success, payload.reason, payload.moves, payload.timeMs, now, payload.selection
     )
