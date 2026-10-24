@@ -4,10 +4,9 @@ import { Chess } from "chess.js";
 import { DEFAULT_SEARCH_DEPTH, Engine } from "./engine";
 import {
   EVAL_DEPTH_STORAGE_KEY,
-  EVAL_DEPTHS,
   evaluatePosition,
-  getSavedEvalDepth,
   openEvaluationCache,
+  studyDepth,
   type EvaluationCache,
 } from "./evalCache";
 import {
@@ -405,9 +404,10 @@ function readSettingsFromDom(): ExplorerSettings {
     enabled: true,
     source: database === "player" ? "lichess" : source,
     speeds: [...formSettings.speeds],
-    // The study's end-of-prep value, saved with its settings (shared with
-    // the editor's figures).
+    // The study's end-of-prep value and Stockfish depth, saved with its
+    // settings (shared with the editor).
     leafValue: readLeafValueFromDom(),
+    depth: readDepthFromDom(),
   };
 }
 
@@ -522,15 +522,6 @@ let settingsOpen = false;
 // (after each calculation); null until one is chosen.
 let chosenDepth: number | null = null;
 
-/** The depth of the study's latest calculation that used Stockfish: the
- * expected evaluation, or the expected score with Stockfish values. */
-function latestDepth(stats: StudyStats | null | undefined): number | null | undefined {
-  const scoreDepth = (stats?.leafValue ?? "explorer") !== "explorer" ? stats?.scoreDepth : null;
-  if (stats?.evalDepth && scoreDepth) {
-    return (stats.winProbabilityCalculatedAt ?? "") > (stats.evalCalculatedAt ?? "") ? scoreDepth : stats.evalDepth;
-  }
-  return stats?.evalDepth ?? scoreDepth;
-}
 let lastEvalRun: { required: number; computed: number } | null = null;
 
 // What remains of a Recalculate run when the page is redrawn between its
@@ -646,7 +637,7 @@ function renderPage(
             i === PIECES.length - 1 ? `under +${PIECES[i - 1].from.toFixed(2)}` : `+${p.from.toFixed(2)} or higher`
           }</span></div>`,
         ).join("")}
-        <p class="piece-legend__note">The same for both sides. Before the expected evaluation is calculated, the piece is the king.</p>
+        <p class="piece-legend__note">The same for both sides. Before the expected evaluation is calculated, the piece is the pawn.</p>
       </div>
 
       <section class="calc-settings">
@@ -771,13 +762,9 @@ function renderPage(
 
   const depthEl = document.getElementById("eval-depth") as HTMLSelectElement;
   // The depth of a run still going, while the page is redrawn between its
-  // parts; else the one chosen on this page; else that of the study's latest
-  // calculation with Stockfish, like the Explorer settings; else this
-  // browser's last choice, for a study never calculated.
-  const studyDepth = pending?.depth ?? chosenDepth ?? latestDepth(stats);
-  depthEl.value = String(
-    studyDepth && EVAL_DEPTHS.includes(studyDepth as (typeof EVAL_DEPTHS)[number]) ? studyDepth : getSavedEvalDepth(),
-  );
+  // parts; else the one chosen on this page; else the study's, like its
+  // Explorer settings.
+  depthEl.value = String(pending?.depth ?? chosenDepth ?? studyDepth(study.explorerSettings));
   depthEl.addEventListener("change", () => {
     chosenDepth = Number(depthEl.value);
     try {

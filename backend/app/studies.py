@@ -25,6 +25,10 @@ class ExplorerSettings(BaseModel):
     # the Stats page and in the editor's figures (see stats.LeafValue; kept
     # here as a literal to avoid a circular import).
     leafValue: Literal["explorer", "stockfish", "explorer-stockfish"] = "explorer"
+    # Stockfish's depth for the study's calculations, on the Stats page and
+    # in the editor's figures and suggestions. None on settings saved before
+    # it existed: the browser's default then.
+    depth: Literal[8, 12, 16] | None = None
 
     @model_validator(mode="before")
     @classmethod

@@ -43,8 +43,8 @@ import {
   EVAL_DEPTH_STORAGE_KEY,
   EVAL_DEPTHS,
   evaluatePosition,
-  getSavedEvalDepth,
   openEvaluationCache,
+  studyDepth,
   type EvaluationCache,
 } from "./evalCache";
 import { calculateExpectedScore } from "./expectedScore";
@@ -282,7 +282,7 @@ function renderEditor(
                 </div>
                 <div class="tool-settings__group" id="figures-depth-group">
                   <h3 class="tool-settings__title">Stockfish depth</h3>
-                  <p class="tool-settings__note">How deep Stockfish evaluates the lines' ends it values, here and on the Stats page. Evaluations already made in this browser at that depth are reused; Calculate makes the others.</p>
+                  <p class="tool-settings__note">How deep Stockfish evaluates the lines' ends it values: saved with the study, for its figures, its suggested moves and its Stats page. Evaluations already made in this browser at that depth are reused; Calculate makes the others.</p>
                   <div class="tool-settings__radios" id="figures-depth" role="radiogroup" aria-label="Stockfish depth">
                     ${EVAL_DEPTHS.map((d) => `<label class="tool-settings__radio"><input type="radio" name="figures-depth" value="${d}" />${d} · ${({ 8: "Quick", 12: "Balanced" } as Record<number, string>)[d] ?? "Thorough"}</label>`).join("")}
                   </div>
@@ -843,12 +843,10 @@ function renderEditor(
   let missing: readonly Missing[] = [];
   let missingEvaluations: readonly Missing[] = [];
 
-  // The figures' Stockfish values: from this browser's evaluation cache, the
-  // Stats page's, at the depth chosen in the settings, or else that of the
-  // study's last expected score with Stockfish values, or else the depth
-  // last chosen on a Stats page.
-  let chosenDepth: number | null = null; // chosen in the settings, here
-  const figuresDepth = () => chosenDepth ?? existing?.stats?.scoreDepth ?? getSavedEvalDepth();
+  // The figures' and suggestions' Stockfish values: from this browser's
+  // evaluation cache, the Stats page's, at the study's depth, set in the
+  // settings and saved with the study.
+  const figuresDepth = () => studyDepth(settings);
   let evaluationCachePromise: Promise<EvaluationCache> | null = null;
   const evaluationCache = () =>
     (evaluationCachePromise ??= fetchMe().then((me) => openEvaluationCache(me.username ?? "")));
@@ -1349,12 +1347,13 @@ function renderEditor(
   });
   depthRadios.addEventListener("change", (e) => {
     const value = (e.target as HTMLInputElement).value;
-    chosenDepth = Number(value);
+    settings.depth = Number(value);
     try {
       localStorage.setItem(EVAL_DEPTH_STORAGE_KEY, value);
     } catch {
-      // Keep the choice for this page even when browser storage is blocked.
+      // The study keeps it; this is only the default for new studies.
     }
+    scheduleAutoSave();
     void checkUnfetched();
   });
 

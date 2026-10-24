@@ -24,6 +24,10 @@ export interface ExplorerSettings {
    * the Stats page and in the editor's figures. Missing on settings saved
    * before it existed: "explorer". */
   leafValue?: LeafValue;
+  /** Stockfish's depth for the study's calculations (8, 12 or 16), on the
+   * Stats page and in the editor. Missing on settings saved before it
+   * existed: the browser's default then (see studyDepth). */
+  depth?: number | null;
 }
 
 export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {

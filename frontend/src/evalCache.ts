@@ -19,6 +19,14 @@ export function getSavedEvalDepth(): number {
   }
 }
 
+/** The Stockfish depth of a study's calculations: its own setting; for a
+ * study saved before it had one, this browser's last choice (its results
+ * at another depth then show as out of date). */
+export function studyDepth(settings: { depth?: number | null } | null | undefined): number {
+  const depth = settings?.depth;
+  return depth && (EVAL_DEPTHS as readonly number[]).includes(depth) ? depth : getSavedEvalDepth();
+}
+
 // Actual game-over positions on the board — checkmate gets a flat mate cap
 // (no distance), matching the backend's own terminal-position handling.
 // chess.js's isDraw() also covers stalemate, insufficient material,
