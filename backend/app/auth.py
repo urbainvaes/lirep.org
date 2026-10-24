@@ -71,12 +71,23 @@ def _lichess_error_detail(resp: httpx.Response) -> str:
     return f"HTTP {resp.status_code}: {detail}" if detail else f"HTTP {resp.status_code}"
 
 
+def _local_path(path: str | None) -> str | None:
+    """`path` if it's a path on this site ("/m/"), else None: a sign-in
+    must not be able to send anyone to another site afterwards."""
+    if not path or not path.startswith("/") or path.startswith("//") or "\\" in path:
+        return None
+    return path
+
+
 @router.get("/auth/login")
-def login(request: Request) -> RedirectResponse:
+def login(request: Request, next: str | None = None) -> RedirectResponse:
+    """`next`: where to land once signed in, a path on this site (the mobile
+    app's "/m/"); the home page by default."""
     verifier, challenge = _new_pkce_pair()
     state = secrets.token_urlsafe(16)
     request.session["oauth_verifier"] = verifier
     request.session["oauth_state"] = state
+    request.session["oauth_next"] = _local_path(next)
 
     params = {
         "response_type": "code",
@@ -181,7 +192,8 @@ async def callback(
     request.session["username"] = account["username"]
     request.session["title"] = account.get("title")
     touch_user(account["username"])
-    return RedirectResponse(FRONTEND_URL)
+    next_path = _local_path(request.session.pop("oauth_next", None))
+    return RedirectResponse(f"{FRONTEND_URL}{next_path}" if next_path else FRONTEND_URL)
 
 
 async def _revoke_lichess_token(token: str) -> None:
