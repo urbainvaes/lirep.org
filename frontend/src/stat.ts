@@ -518,7 +518,29 @@ function progressHtml(id: string): string {
 
 // Survive the re-render after a calculation finishes.
 let settingsOpen = false;
+// The Stockfish depth chosen on this page, kept when the page is redrawn
+// (after each calculation); null until one is chosen.
+let chosenDepth: number | null = null;
+
+/** The depth of the study's latest calculation that used Stockfish: the
+ * expected evaluation, or the expected score with Stockfish values. */
+function latestDepth(stats: StudyStats | null | undefined): number | null | undefined {
+  const scoreDepth = (stats?.leafValue ?? "explorer") !== "explorer" ? stats?.scoreDepth : null;
+  if (stats?.evalDepth && scoreDepth) {
+    return (stats.winProbabilityCalculatedAt ?? "") > (stats.evalCalculatedAt ?? "") ? scoreDepth : stats.evalDepth;
+  }
+  return stats?.evalDepth ?? scoreDepth;
+}
 let lastEvalRun: { required: number; computed: number } | null = null;
+
+// What remains of a Recalculate run when the page is redrawn between its
+// parts, with the settings it started with.
+type PendingRun = {
+  which: ("score" | "eval")[];
+  settings: ExplorerSettings;
+  depth: number;
+  leaf: LeafValue;
+};
 
 function renderPage(
   main: HTMLElement,
@@ -526,6 +548,7 @@ function renderPage(
   explorerDefaults: ExplorerDefaults | null,
   knowledge: number | null,
   cache: EvaluationCache,
+  pending?: PendingRun,
 ): void {
   const sideLabel = study.side === "white" ? "Playing White" : "Playing Black";
   const sidePawn = `<span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>`;
@@ -747,13 +770,16 @@ function renderPage(
   });
 
   const depthEl = document.getElementById("eval-depth") as HTMLSelectElement;
-  // The depth the expected evaluation was last calculated at, like the Explorer
-  // settings; this browser's last choice for a study never calculated.
-  const studyDepth = stats?.evalDepth ?? stats?.scoreDepth;
+  // The depth of a run still going, while the page is redrawn between its
+  // parts; else the one chosen on this page; else that of the study's latest
+  // calculation with Stockfish, like the Explorer settings; else this
+  // browser's last choice, for a study never calculated.
+  const studyDepth = pending?.depth ?? chosenDepth ?? latestDepth(stats);
   depthEl.value = String(
     studyDepth && EVAL_DEPTHS.includes(studyDepth as (typeof EVAL_DEPTHS)[number]) ? studyDepth : getSavedEvalDepth(),
   );
   depthEl.addEventListener("change", () => {
+    chosenDepth = Number(depthEl.value);
     try {
       localStorage.setItem(EVAL_DEPTH_STORAGE_KEY, depthEl.value);
     } catch {
@@ -930,34 +956,35 @@ function renderPage(
   }
 
   // Runs the requested calculations one after the other with the settings
-  // as they are now, then re-renders once; a failure stops the run and stays
-  // on screen next to its card.
-  async function run(which: ("score" | "eval")[]): Promise<void> {
-    const settings = readSettingsFromDom();
-    const depth = readDepthFromDom();
-    const leaf = readLeafValueFromDom();
-    let current = study;
+  // as they were when the button was pressed. The page is redrawn after each
+  // one, so that its result shows while the next runs; a failure stops the
+  // run and stays on screen next to its card.
+  async function run({ which, settings, depth, leaf }: PendingRun): Promise<void> {
+    const [id, ...rest] = which;
     setBusy(true);
-    for (const id of which) {
-      onRateLimited = (resumeAt) => {
-        const label = document.getElementById(`${id}-progress-label`) as HTMLElement;
-        const time = new Date(resumeAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        label.textContent = `Lichess asked to slow down; resuming at ${time}…`;
-      };
-      try {
-        current = id === "score"
-          ? await calculateScore(current, settings, leaf, depth)
-          : await calculateEvaluation(current, settings, depth);
-      } catch (err) {
-        showError(id, err);
-        setBusy(false);
-        return;
-      } finally {
-        onRateLimited = null;
-      }
+    onRateLimited = (resumeAt) => {
+      const label = document.getElementById(`${id}-progress-label`) as HTMLElement;
+      const time = new Date(resumeAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      label.textContent = `Lichess asked to slow down; resuming at ${time}…`;
+    };
+    let current: Study;
+    try {
+      current = id === "score"
+        ? await calculateScore(study, settings, leaf, depth)
+        : await calculateEvaluation(study, settings, depth);
+    } catch (err) {
+      showError(id, err);
+      setBusy(false);
+      return;
+    } finally {
+      onRateLimited = null;
     }
-    renderPage(main, current, explorerDefaults, knowledge, cache);
+    renderPage(main, current, explorerDefaults, knowledge, cache, rest.length ? { which: rest, settings, depth, leaf } : undefined);
   }
+
+  // Starts a run with the settings as they are now.
+  const start = (which: PendingRun["which"]) =>
+    void run({ which, settings: readSettingsFromDom(), depth: readDepthFromDom(), leaf: readLeafValueFromDom() });
 
   // The expected score's title opens its caveat.
   document.querySelectorAll<HTMLButtonElement>(".stat-result__toggle").forEach((toggle) => {
@@ -968,9 +995,15 @@ function renderPage(
     });
   });
 
-  document.getElementById("recalc-all")!.addEventListener("click", () => void run(["score", "eval"]));
-  document.getElementById("score-btn")!.addEventListener("click", () => void run(["score"]));
-  document.getElementById("eval-btn")!.addEventListener("click", () => void run(["eval"]));
+  document.getElementById("recalc-all")!.addEventListener("click", () => start(["score", "eval"]));
+  document.getElementById("score-btn")!.addEventListener("click", () => start(["score"]));
+  document.getElementById("eval-btn")!.addEventListener("click", () => start(["eval"]));
+
+  // The rest of a run that started before this page was drawn.
+  if (pending) {
+    (document.getElementById("recalc-status") as HTMLElement).textContent = "Calculating the expected evaluation…";
+    void run(pending);
+  }
 }
 
 async function init(): Promise<void> {
