@@ -40,6 +40,14 @@ http {
   access_log $state/logs/access.log;
   include $nginx/share/nginx/conf/mime.types;
   types { application/manifest+json webmanifest; }
+  # Text compresses several-fold (the studies' JSON, the scripts): much
+  # quicker on a phone's connection.
+  gzip on;
+  gzip_types application/json application/javascript text/css image/svg+xml application/manifest+json;
+  # Also through the server's front proxy, which by default forwards with
+  # HTTP/1.0 (and may add a Via header).
+  gzip_http_version 1.0;
+  gzip_proxied any;
   client_body_temp_path $state/tmp/body;
   proxy_temp_path $state/tmp/proxy;
   fastcgi_temp_path $state/tmp/fcgi;
