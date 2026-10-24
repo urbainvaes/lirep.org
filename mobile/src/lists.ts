@@ -121,7 +121,7 @@ export async function renderCommunity(app: HTMLElement, by: "score" | "eval"): P
       ? r.winProbability == null ? "—" : `${(r.winProbability * 100).toFixed(1)}%`
       : r.evalCp == null ? "—" : evalText(r.evalCp);
     return `
-      <li class="row${r.mine ? " row--mine" : ""}">
+      <li class="row">
         <a class="row__link" href="/opening.html?id=${r.id}">
           <span class="row__rank">${r.rank ?? "–"}</span>
           <span class="row__lead row__lead--small">${badge}</span>

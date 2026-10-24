@@ -304,10 +304,6 @@ a {
   color: var(--text-strong);
 }
 
-.row--mine {
-  box-shadow: inset 3px 0 0 var(--primary);
-}
-
 .list__chips {
   display: flex;
   gap: 8px;
