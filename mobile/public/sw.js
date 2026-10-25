@@ -7,15 +7,31 @@
 //   once fetched, then served from the copy.
 // - The API's answers (studies, practice, queues): from the network, else,
 //   offline or after a few seconds without an answer, the copy kept.
-//   Signing out (a 401) drops them.
+//   Signing out (a 401 or a signed-out /api/me answer) drops them.
 // - Sign-in, and anything sent (answers, runs: see src/outbox.ts), go to
 //   the network only.
 
-const VERSION = 1;
+const VERSION = 2;
 const SHELL = `lirep-m-shell-${VERSION}`;
 const ASSETS = `lirep-m-assets-${VERSION}`;
 const DATA = `lirep-m-data-${VERSION}`;
 const API_TIMEOUT_MS = 4000;
+let dataGeneration = 0;
+let signedOut = false;
+
+function mayStore(response) {
+  return !/\bno-store\b/i.test(response.headers.get("Cache-Control") || "");
+}
+
+function cachedApi(path) {
+  return /^\/api\/(me|studies(?:\/\d+(?:\/practice\/queue)?)?|practice\/summary|community\/openings(?:-by-eval)?)$/.test(path);
+}
+
+async function dropData() {
+  signedOut = true;
+  dataGeneration += 1;
+  await caches.delete(DATA);
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL).then((cache) => cache.addAll(["/m/", "/m/manifest.webmanifest"])).catch(() => {}));
@@ -36,21 +52,49 @@ async function fromCacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  if (response.ok || response.type === "opaque") {
+  if ((response.ok || response.type === "opaque") && mayStore(response)) {
     const copy = response.clone();
     caches.open(ASSETS).then((cache) => cache.put(request, copy));
   }
   return response;
 }
 
-async function fromNetworkFirst(request, cacheName, timeoutMs, fallback) {
+async function fromNetworkFirst(request, cacheName, timeoutMs, fallback, event) {
   const cache = await caches.open(cacheName);
-  const network = fetch(request).then((response) => {
-    if (response.ok) cache.put(request, response.clone());
-    else if (response.status === 401) caches.delete(DATA);
+  const generation = dataGeneration;
+  const isData = cacheName === DATA;
+  const network = fetch(request).then(async (response) => {
+    if (isData && response.status === 401) {
+      await dropData();
+      return response;
+    }
+    if (isData && new URL(request.url).pathname === "/api/me" && response.ok) {
+      const me = await response.clone().json();
+      if (me.authenticated === false) {
+        await dropData();
+        return response;
+      }
+      if (me.authenticated === true && generation === dataGeneration) signedOut = false;
+    }
+    try {
+      if (!mayStore(response)) await cache.delete(request);
+      else if (response.ok && (!isData || (!signedOut && generation === dataGeneration))) {
+        await cache.put(request, response.clone());
+        // A simultaneous sign-out may have happened while put() was pending.
+        if (isData && (signedOut || generation !== dataGeneration)) await cache.delete(request);
+      }
+    } catch {
+      // A full/blocked cache must not hide a successful network answer.
+    }
     return response;
   });
   network.catch(() => {}); // answered from the copy: a late failure is no matter
+  event?.waitUntil(network.catch(() => {}));
+  const cached = async (key) => {
+    if (isData && (signedOut || generation !== dataGeneration)) return undefined;
+    const response = await cache.match(key);
+    return isData && (signedOut || generation !== dataGeneration) ? undefined : response;
+  };
   const timeout = timeoutMs
     ? new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))
     : new Promise(() => {});
@@ -58,9 +102,9 @@ async function fromNetworkFirst(request, cacheName, timeoutMs, fallback) {
     const first = await Promise.race([network, timeout]);
     if (first) return first;
     // Too slow: the copy if there is one, else keep waiting.
-    return (await cache.match(request)) ?? (await network);
+    return (await cached(request)) ?? (await network);
   } catch {
-    return (await cache.match(request)) ?? (fallback && (await cache.match(fallback))) ?? Response.error();
+    return (await cached(request)) ?? (fallback && (await cached(fallback))) ?? Response.error();
   }
 }
 
@@ -72,7 +116,9 @@ self.addEventListener("fetch", (event) => {
   if (url.origin === self.location.origin) {
     if (url.pathname.startsWith("/auth/")) return;
     if (url.pathname.startsWith("/api/")) {
-      event.respondWith(fromNetworkFirst(request, DATA, API_TIMEOUT_MS));
+      // Credentials and unknown future endpoints are network-only, even if
+      // they happen to return a successful GET.
+      if (cachedApi(url.pathname)) event.respondWith(fromNetworkFirst(request, DATA, API_TIMEOUT_MS, undefined, event));
       return;
     }
     if (/^\/(m\/assets|fonts|engine)\//.test(url.pathname) || /^\/(icon-|favicon|apple-touch-icon)/.test(url.pathname)) {
@@ -80,7 +126,7 @@ self.addEventListener("fetch", (event) => {
       return;
     }
     if (request.mode === "navigate" || url.pathname.startsWith("/m/")) {
-      event.respondWith(fromNetworkFirst(request, SHELL, 0, "/m/"));
+      event.respondWith(fromNetworkFirst(request, SHELL, 0, "/m/", event));
     }
     return;
   }

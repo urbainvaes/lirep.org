@@ -64,7 +64,8 @@ let flushing: Promise<void> | null = null;
 
 /** Sends what's waiting, oldest first, until done or still offline. */
 export function flush(): Promise<void> {
-  flushing ??= (async () => {
+  // Schedule the drain after assigning its promise, even when it is empty.
+  flushing ??= Promise.resolve().then(async () => {
     try {
       for (let items = read(); items.length; items = read()) {
         if ((await post(items[0])).status === "offline") return;
@@ -73,7 +74,7 @@ export function flush(): Promise<void> {
     } finally {
       flushing = null;
     }
-  })();
+  });
   return flushing;
 }
 
