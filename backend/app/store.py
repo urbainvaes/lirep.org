@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 from collections.abc import Callable
@@ -9,6 +10,9 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .config import DEFAULT_EXPLORER_SOURCE, SERVER_CACHE_USERS, USER_ALIASES
+from .study_tree import InvalidTree, validate_tree
+
+logger = logging.getLogger(__name__)
 
 # LIREP_DB_PATH lets a deployment keep the database outside the source tree.
 DB_PATH = Path(os.getenv("LIREP_DB_PATH") or Path(__file__).resolve().parent.parent / "lirep.db")
@@ -307,6 +311,7 @@ def moves_fingerprint(tree: dict[str, Any], start_node_id: int | None) -> str:
     the starting point. Comments and node ids don't count. Each result stores
     the fingerprint it was calculated from, so the Stats page can tell when
     the moves changed since."""
+    validate_tree(tree)
     nodes = tree["nodes"]
 
     def serialize(node_id: int) -> str:
@@ -334,6 +339,7 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
     if explorer_settings["source"] == "lirep" and explorer_settings["database"] == "masters":
         explorer_settings["database"] = "lichess"
     tree = json.loads(row["tree"])
+    validate_tree(tree, row["side"] or DEFAULT_SIDE)
     return {
         "id": row["id"],
         "name": row["name"],
@@ -351,6 +357,17 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def _read_study(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    """Quarantine malformed legacy rows from readers, without deleting them."""
+    if row is None:
+        return None
+    try:
+        return _row_to_study(row)
+    except (InvalidTree, json.JSONDecodeError, RecursionError) as exc:
+        logger.warning("Skipping invalid study %s: %s", row["id"], exc)
+        return None
 
 
 _COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, shared, archived_at, created_at, updated_at"
@@ -562,7 +579,10 @@ def list_shared_studies() -> list[tuple[str, dict[str, Any]]]:
         rows = conn.execute(f"SELECT owner, {_COLUMNS} FROM studies WHERE shared = 1 AND archived_at IS NULL").fetchall()
         counts = dict(conn.execute("SELECT study_id, COUNT(*) FROM study_games GROUP BY study_id").fetchall())
     # The leaderboards' cards show how many games a study has.
-    return [(row["owner"], {**_row_to_study(row), "gameCount": counts.get(row["id"], 0)}) for row in rows]
+    return [
+        (row["owner"], {**study, "gameCount": counts.get(row["id"], 0)})
+        for row in rows if (study := _read_study(row)) is not None
+    ]
 
 
 def get_shared_study(study_id: int) -> tuple[str, dict[str, Any]] | None:
@@ -570,7 +590,8 @@ def get_shared_study(study_id: int) -> tuple[str, dict[str, Any]] | None:
         row = conn.execute(
             f"SELECT owner, {_COLUMNS} FROM studies WHERE id = ? AND shared = 1 AND archived_at IS NULL", (study_id,)
         ).fetchone()
-    return (row["owner"], _row_to_study(row)) if row else None
+    study = _read_study(row)
+    return (row["owner"], study) if study is not None else None
 
 
 def community_counts() -> dict[str, int]:
@@ -610,7 +631,10 @@ def list_studies(owner: str) -> list[dict[str, Any]]:
             ).fetchall()
         )
     # The home page's cards show how many games a study has.
-    return [{**_row_to_study(row), "gameCount": counts.get(row["id"], 0)} for row in rows]
+    return [
+        {**study, "gameCount": counts.get(row["id"], 0)}
+        for row in rows if (study := _read_study(row)) is not None
+    ]
 
 
 def get_study(owner: str, study_id: int) -> dict[str, Any] | None:
@@ -619,7 +643,7 @@ def get_study(owner: str, study_id: int) -> dict[str, Any] | None:
             f"SELECT {_COLUMNS} FROM studies WHERE owner = ? AND id = ?",
             (owner, study_id),
         ).fetchone()
-    return _row_to_study(row) if row else None
+    return _read_study(row)
 
 
 def delete_study(owner: str, study_id: int) -> bool:
@@ -641,11 +665,13 @@ def create_study(
     start_node_id: int | None = None,
     shared: bool = True,
 ) -> dict[str, Any]:
+    tree_json = json.dumps(tree)
+    validate_tree(json.loads(tree_json), side)
     with _connect() as conn:
         cur = conn.execute(
             "INSERT INTO studies (owner, name, tree, explorer_settings, side, start_node_id, shared)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (owner, name, json.dumps(tree), json.dumps(explorer_settings), side, start_node_id, 1 if shared else 0),
+            (owner, name, tree_json, json.dumps(explorer_settings), side, start_node_id, 1 if shared else 0),
         )
         study_id = cur.lastrowid
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
@@ -682,6 +708,10 @@ def duplicate_study(owner: str, study_id: int, name: str) -> dict[str, Any] | No
     games. Private (so it doesn't appear twice on the leaderboards) and
     without the practice history, which starts afresh. None if not found."""
     with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        source = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE owner = ? AND id = ?", (owner, study_id)).fetchone()
+        if _read_study(source) is None:
+            return None
         cur = conn.execute(
             """
             INSERT INTO studies (owner, name, tree, explorer_settings, side, stats, evals, start_node_id, shared, game_sections)
@@ -713,6 +743,8 @@ def update_study(
     side: str,
     start_node_id: int | None = None,
 ) -> dict[str, Any] | None:
+    tree_json = json.dumps(tree)
+    validate_tree(json.loads(tree_json), side)
     with _connect() as conn:
         cur = conn.execute(
             """
@@ -720,7 +752,7 @@ def update_study(
             SET name = ?, tree = ?, explorer_settings = ?, side = ?, start_node_id = ?, updated_at = datetime('now')
             WHERE owner = ? AND id = ?
             """,
-            (name, json.dumps(tree), json.dumps(explorer_settings), side, start_node_id, owner, study_id),
+            (name, tree_json, json.dumps(explorer_settings), side, start_node_id, owner, study_id),
         )
         if cur.rowcount == 0:
             return None
@@ -763,7 +795,9 @@ def merge_study_stats(
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE owner = ? AND id = ?", (owner, study_id)).fetchone()
         if row is None:
             return None
-        study = _row_to_study(row)
+        study = _read_study(row)
+        if study is None:
+            return None
         if study["movesFingerprint"] != expected_moves_fingerprint or study["side"] != expected_side:
             raise StudyStatsConflict()
         stats = json.loads(row["stats"]) if row["stats"] else {}
