@@ -28,7 +28,10 @@
   --bad: #e05252;
   --warn: #e0a53f;
   --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Half the phone's bottom inset (the home indicator, the gesture bar):
+     enough to keep clear of it, without a band of empty space under the
+     bars. */
+  --safe-bottom: calc(env(safe-area-inset-bottom, 0px) / 2);
   color-scheme: dark;
 }
 
@@ -522,8 +525,8 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  min-height: calc(60px + var(--safe-bottom));
-  padding: 8px 16px calc(8px + var(--safe-bottom));
+  min-height: 60px;
+  padding: 8px 16px max(8px, var(--safe-bottom));
   background: var(--panel-bg);
   border-top: 1px solid var(--border);
 }
