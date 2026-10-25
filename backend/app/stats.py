@@ -61,9 +61,15 @@ Share = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 LeafValue = Literal["explorer", "stockfish", "explorer-stockfish"]
 
 
-class ExpectedScoreIn(BaseModel):
+class CalculationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # The browser's actual calculation snapshot, not the latest study at save time.
+    movesFingerprint: str = Field(pattern=r"^[0-9a-f]{16}$")
+    side: Literal["white", "black"]
+
+
+class ExpectedScoreIn(CalculationInput):
     # Missing from pages loaded before Stockfish could value lines' ends,
     # which send only the win and loss probabilities.
     score: Share | None = None
@@ -116,30 +122,40 @@ class ExpectedScoreIn(BaseModel):
 EVAL_METHOD = 3
 
 
-class ExpectedEvalIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class ExpectedEvalIn(CalculationInput):
     evalCp: float = Field(strict=True, ge=-100_000, le=100_000, allow_inf_nan=False)
     evalMisses: int = Field(strict=True, ge=0)
     # Stockfish depth the end-of-prep positions were evaluated at; the
     # community leaderboard only ranks expected evaluations at depth 12 or more.
     depth: int | None = Field(default=None, strict=True, ge=1, le=99)
-    explorerSettings: ExplorerSettings | None = None
+    explorerSettings: ExplorerSettings
     # Missing from pages loaded before method 2: method 1.
     method: int = Field(default=1, strict=True, ge=1, le=EVAL_METHOD)
+
+
+def _save_stats(owner: str, study_id: int, payload: CalculationInput, updates: dict) -> dict:
+    try:
+        updated = store.merge_study_stats(
+            owner, study_id, updates,
+            expected_moves_fingerprint=payload.movesFingerprint,
+            expected_side=payload.side,
+        )
+    except store.StudyStatsConflict:
+        raise HTTPException(status_code=409, detail="Study changed. Reload the page and recalculate stats.") from None
+    if updated is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return updated
 
 
 @router.post("/api/studies/{study_id}/expected-score")
 def save_expected_score(study_id: int, request: Request, payload: ExpectedScoreIn) -> dict:
     owner = _require_owner(request)
-    study = store.get_study(owner, study_id)
-    if study is None:
-        raise HTTPException(status_code=404, detail="not found")
     settings = payload.explorerSettings.model_dump()
     is_player = settings["database"] == "player"
-    updated = store.merge_study_stats(
+    return _save_stats(
         owner,
         study_id,
+        payload,
         {
             # "winProbability" is the expected score: wins plus half the draws.
             "winProbability": payload.score,
@@ -151,7 +167,7 @@ def save_expected_score(study_id: int, request: Request, payload: ExpectedScoreI
             "stockfishLeaves": payload.stockfishLeaves,
             "coverage": payload.coverage,
             "winProbabilityCalculatedAt": datetime.now(UTC).isoformat(),
-            "winProbabilityMovesFingerprint": study["movesFingerprint"],
+            "winProbabilityMovesFingerprint": payload.movesFingerprint,
             # One player's games exist only on Lichess's Explorer.
             "source": "lichess" if is_player else settings["source"],
             "database": settings["database"],
@@ -161,24 +177,17 @@ def save_expected_score(study_id: int, request: Request, payload: ExpectedScoreI
             "nodesEvaluated": payload.nodesEvaluated,
             "explorerCalls": payload.explorerCalls,
         },
-        # Recalculating with other settings makes them the study's settings.
-        explorer_settings=settings,
     )
-    if updated is None:
-        raise HTTPException(status_code=404, detail="not found")
-    return updated
 
 
 @router.post("/api/studies/{study_id}/expected-eval")
 def save_expected_eval(study_id: int, request: Request, payload: ExpectedEvalIn) -> dict:
     owner = _require_owner(request)
-    study = store.get_study(owner, study_id)
-    if study is None:
-        raise HTTPException(status_code=404, detail="not found")
-    settings = payload.explorerSettings.model_dump() if payload.explorerSettings is not None else study["explorerSettings"]
-    updated = store.merge_study_stats(
+    settings = payload.explorerSettings.model_dump()
+    return _save_stats(
         owner,
         study_id,
+        payload,
         {
             "evalCp": payload.evalCp,
             "evalMisses": payload.evalMisses,
@@ -186,7 +195,7 @@ def save_expected_eval(study_id: int, request: Request, payload: ExpectedEvalIn)
             "evalOrigin": "local",
             "evalDepth": payload.depth,
             "evalMethod": payload.method,
-            "evalMovesFingerprint": study["movesFingerprint"],
+            "evalMovesFingerprint": payload.movesFingerprint,
             # Kept apart from source/database/minRating/speeds, which describe
             # the expected score: the two can be calculated with different
             # Explorer settings.
@@ -198,8 +207,4 @@ def save_expected_eval(study_id: int, request: Request, payload: ExpectedEvalIn)
                 "player": settings.get("player") if settings["database"] == "player" else None,
             },
         },
-        explorer_settings=settings if payload.explorerSettings is not None else None,
     )
-    if updated is None:
-        raise HTTPException(status_code=404, detail="not found")
-    return updated

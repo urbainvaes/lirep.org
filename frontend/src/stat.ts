@@ -892,6 +892,8 @@ function renderPage(
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({
+        movesFingerprint: current.movesFingerprint,
+        side: current.side,
         score: result.score,
         winRate: result.winRate,
         lossProbability: result.lossProbability,
@@ -905,6 +907,7 @@ function renderPage(
         explorerSettings: settings,
       }),
     });
+    if (res.status === 409) throw new Error("Study changed. Reload the page and recalculate stats.");
     if (!res.ok) throw new Error("Could not save the expected score");
     return res.json();
   }
@@ -940,8 +943,12 @@ function renderPage(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ evalCp, evalMisses, depth, explorerSettings: settings, method: EVAL_METHOD }),
+      body: JSON.stringify({
+        movesFingerprint: current.movesFingerprint, side: current.side,
+        evalCp, evalMisses, depth, explorerSettings: settings, method: EVAL_METHOD,
+      }),
     });
+    if (res.status === 409) throw new Error("Study changed. Reload the page and recalculate stats.");
     if (!res.ok) throw new Error("Could not save expected evaluation");
     lastEvalRun = { required, computed };
     return res.json();

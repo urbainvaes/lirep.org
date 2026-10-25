@@ -742,24 +742,33 @@ def update_explorer_settings(owner: str, study_id: int, explorer_settings: dict[
     return _row_to_study(row)
 
 
+class StudyStatsConflict(Exception):
+    """A calculation's inputs no longer match the study."""
+
+
 def merge_study_stats(
-    owner: str, study_id: int, updates: dict[str, Any], *, explorer_settings: dict[str, Any] | None = None
+    owner: str,
+    study_id: int,
+    updates: dict[str, Any],
+    *,
+    expected_moves_fingerprint: str,
+    expected_side: str,
 ) -> dict[str, Any] | None:
-    """Merge against the latest row inside one transaction, preserving other stats jobs' results."""
+    """Validate calculation inputs and merge results in one write transaction.
+
+    Calculation settings belong to the result, not the editable study settings.
+    """
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT stats FROM studies WHERE owner = ? AND id = ?", (owner, study_id)).fetchone()
+        row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE owner = ? AND id = ?", (owner, study_id)).fetchone()
         if row is None:
             return None
+        study = _row_to_study(row)
+        if study["movesFingerprint"] != expected_moves_fingerprint or study["side"] != expected_side:
+            raise StudyStatsConflict()
         stats = json.loads(row["stats"]) if row["stats"] else {}
         stats.update(updates)
-        if explorer_settings is None:
-            conn.execute("UPDATE studies SET stats = ? WHERE owner = ? AND id = ?", (json.dumps(stats), owner, study_id))
-        else:
-            conn.execute(
-                "UPDATE studies SET stats = ?, explorer_settings = ?, updated_at = datetime('now') WHERE owner = ? AND id = ?",
-                (json.dumps(stats), json.dumps(explorer_settings), owner, study_id),
-            )
+        conn.execute("UPDATE studies SET stats = ? WHERE owner = ? AND id = ?", (json.dumps(stats), owner, study_id))
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
     assert row is not None
     return _row_to_study(row)
