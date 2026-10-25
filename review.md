@@ -20,6 +20,15 @@ Logout bypasses the worker under `/auth/`. Subsequently `/api/me` returns HTTP 2
 
 **Suggestion:** Use an explicit cache allowlist; exclude credentials and `no-store` responses. Namespace private data by verified account and explicitly purge it on logout, deletion and account changes. Recognize `authenticated: false`, not just 401.
 
+**Rebuttal (not P1; P3 at most).** The facts are right, the impact is overstated:
+
+- The cached token is dead after sign-out: `/auth/logout` revokes it at Lichess (`_revoke_lichess_token`), and its only scope is `preference:read`. Revoking it some other way (on Lichess) leaves a copy that is equally dead.
+- The mobile app has no sign-out of its own: signing out happens on the website, whose pages the worker (scope `/m/`) doesn't control. What stays is the copy of the last answers, the same thing the worker exists to keep.
+- Another account seeing it needs a second person signing in to Lirep in the same browser profile, then opening the mobile app offline or on a connection slower than 4 s; online, every answer comes from the network. On a personal phone, the usual case for an installed web app, that doesn't happen.
+- The studies kept are, by default, shared with the community anyway.
+
+Worth doing because it is cheap: don't keep `/api/lichess-token` (or any `no-store` answer), and drop the data cache when `/api/me` says `authenticated: false`. Per-account namespacing is not worth its complexity.
+
 ### 2. An empty startup flush prevents later offline events from syncing
 
 **Location:** [mobile/src/outbox.ts](mobile/src/outbox.ts#L66); [mobile/src/main.ts](mobile/src/main.ts#L85).
