@@ -9,6 +9,8 @@
 import "@web/theme";
 import "./style.css";
 
+import { applyBoardTheme } from "@web/board";
+
 import { SignedOut, me, prefetch, signInUrl } from "./api";
 import { flush, onWaiting } from "./outbox";
 import { renderBullet } from "./bullet";
@@ -83,6 +85,9 @@ async function start(): Promise<void> {
   }
   showNetwork();
   void flush();
+  // Every screen's board: the theme kept from last time at once, then the
+  // current one.
+  void applyBoardTheme();
   try {
     if (!(await me()).authenticated) return signedOut();
   } catch {

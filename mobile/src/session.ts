@@ -7,7 +7,7 @@
 import type { Api } from "@lichess-org/chessground/api";
 import type { Key } from "@lichess-org/chessground/types";
 
-import { applyBoardTheme, computeDests, createBoard, playMoveSound, toColor } from "@web/board";
+import { computeDests, createBoard, playMoveSound, toColor } from "@web/board";
 import { escapeHtml } from "@web/layout";
 import { buildSteps, PRACTICE_ANIMATION_MS, type Step } from "@web/practiceSteps";
 import { lastMoveAt, positionAt, sanPathTo } from "@web/tree";
@@ -74,7 +74,6 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
 
   const board: Api = createBoard(el("board"), onMove, study.side);
   board.set({ animation: { duration: PRACTICE_ANIMATION_MS } });
-  void applyBoardTheme();
 
   function prompt(text: string, tone: "" | "good" | "bad" = ""): void {
     promptEl.textContent = text;

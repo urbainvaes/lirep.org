@@ -171,12 +171,34 @@ export function applyLichessBoardTheme(theme: string, pieceSet: string): void {
   styleEl.textContent = rules.join("\n");
 }
 
+// The theme last read, kept in this browser: applied at once, before the
+// board is first drawn, while the server asks Lichess for the current one
+// (which takes a moment, and would show chessground's default meanwhile).
+const BOARD_THEME_STORAGE_KEY = "lirep-board-theme";
+
 export async function applyBoardTheme(): Promise<void> {
+  let kept: string | null = null;
+  try {
+    kept = localStorage.getItem(BOARD_THEME_STORAGE_KEY);
+    if (kept) {
+      const { theme, pieceSet } = JSON.parse(kept);
+      applyLichessBoardTheme(theme, pieceSet);
+    }
+  } catch {
+    // Blocked storage or a bad entry: wait for the server's.
+  }
   try {
     const res = await fetch("/api/board-theme", { credentials: "same-origin" });
     if (!res.ok) return;
     const { theme, pieceSet } = await res.json();
+    const current = JSON.stringify({ theme, pieceSet });
+    if (current === kept) return;
     applyLichessBoardTheme(theme, pieceSet);
+    try {
+      localStorage.setItem(BOARD_THEME_STORAGE_KEY, current);
+    } catch {
+      // Applied for this page all the same.
+    }
   } catch {
     // Network error / backend not running: chessground's bundled default look stays.
   }
