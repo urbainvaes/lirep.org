@@ -205,7 +205,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     }
     prepEl.innerHTML = `${commentHtml}<div class="prep__replies">${sans
       .map((san) => `<button class="prep__move" type="button" data-san="${escapeHtml(san)}">${escapeHtml(san)}<span class="prep__share" data-share="${escapeHtml(san)}"></span></button>`)
-      .join("")}</div><p class="analysis__note" id="an-unprepared" hidden></p>`;
+      .join("")}</div><p class="prep__legend" id="an-unprepared" hidden></p>`;
     void showShares(chess, sans, run);
   }
 
@@ -223,10 +223,12 @@ export function openAnalysis(o: AnalysisOptions): () => void {
       const shareEl = prepEl.querySelector<HTMLElement>(`[data-share="${CSS.escape(san)}"]`);
       if (shareEl) shareEl.textContent = `${Math.round(share * 100)}%`;
     }
-    const unprepared = el("an-unprepared");
-    if (unprepared && 1 - covered >= 0.005) {
-      unprepared.hidden = false;
-      unprepared.textContent = `Not prepared: ${Math.round((1 - covered) * 100)}% of games`;
+    // The legend: these are how often each reply is played (the Explorer's
+    // percentages are scores), and how often none of them is.
+    const legend = el("an-unprepared");
+    if (legend) {
+      legend.hidden = false;
+      legend.textContent = `% of games playing each${1 - covered >= 0.005 ? ` · not prepared: ${Math.round((1 - covered) * 100)}%` : ""}`;
     }
   }
 
@@ -299,7 +301,11 @@ export function openAnalysis(o: AnalysisOptions): () => void {
       explorerEl.innerHTML = `<p class="analysis__note">No games</p>`;
       return;
     }
-    explorerEl.innerHTML = rows
+    // A legend first: the percentage is a score, not how often it's played.
+    const head = `<div class="explorer-row explorer-row--head" aria-hidden="true">
+      <span>Move</span><span class="explorer-row__share" title="Expected score for ${o.side === "white" ? "White" : "Black"}: wins plus half the draws">Score</span><span></span><span class="explorer-row__games">Games</span>
+    </div>`;
+    explorerEl.innerHTML = head + rows
       .slice(0, EXPLORER_ROWS)
       .map((m) => {
         const games = m.white + m.draws + m.black;

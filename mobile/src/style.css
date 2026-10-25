@@ -877,6 +877,25 @@ button.bar__back {
   text-align: right;
 }
 
+/* The expected score, set apart from the prep buttons' frequencies. */
+.explorer-row__share {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+/* The legend over the rows. */
+.explorer-row.explorer-row--head {
+  padding: 0 0 3px;
+  cursor: default;
+}
+
+.explorer-row--head span {
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
 .explorer-row__bar {
   display: flex;
   height: 10px;
@@ -1001,6 +1020,12 @@ button.bar__back {
   border-color: var(--primary);
   color: var(--primary);
   font-size: 1.1rem;
+}
+
+.prep__legend {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 0.7rem;
 }
 
 .prep__share {
