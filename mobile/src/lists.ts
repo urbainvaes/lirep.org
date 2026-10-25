@@ -82,13 +82,12 @@ function knowledgeRing(knowledge: number | null): string {
   return `<span class="ring" style="--pct:${pct}" aria-label="${pct}% known">${pct}</span>`;
 }
 
-/** Practice: what's due in all, then each study's knowledge and dues, the
- * studies with something due first. */
+/** Practice: what's due in all, then each study's knowledge and dues, in
+ * the Studies tab's order. */
 export async function renderPracticeList(app: HTMLElement): Promise<void> {
   const [list, summaries] = await Promise.all([studies(), practiceSummary()]);
   const summary = (study: Study): PracticeSummary | undefined => summaries[String(study.id)];
   const due = (study: Study) => summary(study)?.dueCount ?? 0;
-  const ordered = [...list.filter((s) => due(s) > 0), ...list.filter((s) => due(s) === 0)];
   const totalDue = list.reduce((n, study) => n + due(study), 0);
   const practiceRow = (study: Study) => {
     const s = summary(study);
@@ -103,7 +102,7 @@ export async function renderPracticeList(app: HTMLElement): Promise<void> {
     "practice",
     "Practice",
     totalDue ? `<b class="due">${totalDue} due</b>` : "",
-    list.length ? grouped(ordered, practiceRow) : empty("No studies yet: create one on"),
+    list.length ? grouped(list, practiceRow) : empty("No studies yet: create one on"),
   );
 }
 

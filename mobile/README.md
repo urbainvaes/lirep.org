@@ -16,8 +16,8 @@ and the website always compute and record the same things.
 - **Studies** (the website's home page): each study with its badge and its
   expected score and evaluation, White's then Black's, in your order.
 - **Practice** (the website's Practice page): each study's knowledge, as a
-  ring, and its positions due and new; the studies with something due first,
-  and the total due at the top.
+  ring, and its positions due and new, in the same order as Studies, and the
+  total due at the top.
 - **A practice session**, from either list: the board across the screen, the
   same queue and rules as on the website (`practice.md`), your answers
   recorded the same way; a dot per answer (green, red), the board's flip, and

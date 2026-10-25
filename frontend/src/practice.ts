@@ -108,24 +108,13 @@ async function init(): Promise<void> {
     return;
   }
 
-  // Weakest first: least knowledge (never-practiced counts as 0), then most
-  // due; studies with nothing to practice go last.
-  const sortKey = (study: StudyCardData): [number, number, number] => {
-    const summary = summaries[String(study.id)];
-    if (!summary || summary.totalItems === 0) return [1, 0, 0];
-    return [0, summary.aggregateKnowledge ?? 0, -summary.dueCount];
-  };
-  const sorted = [...studies].sort((a, b) => {
-    const [ka, kb] = [sortKey(a), sortKey(b)];
-    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2] || a.name.localeCompare(b.name);
-  });
-
   const knowledge = Object.fromEntries(
     Object.entries(summaries).map(([id, summary]) => [id, summary.totalItems ? summary.aggregateKnowledge : null]),
   );
   grid.innerHTML =
     (activity ? renderPracticeOverview(activity, studies, knowledge) : "") +
-    renderStudyGroups(sorted, (study) => renderCard(study, summaries), "practice-grid");
+    // In the home page's order (the account's, set by dragging there).
+    renderStudyGroups(studies, (study) => renderCard(study, summaries), "practice-grid");
   // On a narrow screen the calendar scrolls; start on the recent weeks.
   const scroll = grid.querySelector(".activity__scroll");
   if (scroll) scroll.scrollLeft = scroll.scrollWidth;
