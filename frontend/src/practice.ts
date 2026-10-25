@@ -11,12 +11,14 @@ interface PracticeSummary {
   bullet?: BulletStats;
 }
 
-function knowledgeLabel(summary: PracticeSummary): string {
-  if (summary.totalItems === 0) return "—";
-  return `${Math.round((summary.aggregateKnowledge ?? 0) * 100)}%`;
+// The knowledge, top right, as a ring that fills up (as in the mobile app).
+function knowledgeRing(summary: PracticeSummary): string {
+  if (summary.totalItems === 0) return "";
+  const pct = Math.round((summary.aggregateKnowledge ?? 0) * 100);
+  return `<span class="knowledge-ring" style="--pct:${pct}" title="Knowledge: ${pct}%" aria-label="Knowledge: ${pct}%">${pct}</span>`;
 }
 
-// Under Knowledge, the same way: Bullet runs that reached the end of the
+// Under the title: Bullet runs that reached the end of the
 // preparation out of all runs (the last ones in the title).
 function bulletRowHtml(bullet: BulletStats | undefined): string {
   const title = bullet?.runs
@@ -39,10 +41,7 @@ function renderCard(study: StudyCardData, summaries: Record<string, PracticeSumm
   const content = `
       <div class="study-card__header">
         <h3>${escapeHtml(study.name)}</h3>
-      </div>
-      <div class="study-card__score">
-        <span>Knowledge</span>
-        <strong>${knowledgeLabel(summary)}</strong>
+        ${knowledgeRing(summary)}
       </div>
       ${bulletRowHtml(summary.bullet)}
       <div class="practice-card__counts">
