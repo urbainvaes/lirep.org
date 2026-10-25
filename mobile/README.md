@@ -15,8 +15,14 @@ and the website always compute and record the same things.
 
 - **Studies** (the website's home page): each study with its badge and its
   expected score and evaluation, White's then Black's, in your order. Tap
-  the row or chart icon for saved stats, freshness labels and links to the
-  website's full Stats page and editor.
+  the row for the study itself, or the chart icon for saved stats, freshness
+  labels and links to the website's full Stats page and editor.
+- **A study**, read-only: the analysis below as a screen, from the study's
+  starting point, along its prep: your prepared move as a button (and a blue
+  arrow), or the opponent's prepared replies as buttons, in the study's
+  order, with how often each is played when the Explorer's answer is already
+  in the browser; a move's comment above them. Moves off the prep are greyed,
+  with "Back to prep".
 - **Practice** (the website's Practice page): each study's knowledge, as a
   ring, and its positions due and new, in the same order as Studies, and the
   total due at the top.
@@ -36,7 +42,8 @@ and the website always compute and record the same things.
   the row of moves step through it; your moves, on the board or tapped in
   the Explorer or Stockfish's chips, replace the rest of the line (they
   aren't saved in the study). Explorer and Stockfish are toggles, remembered
-  as on the website. The back arrow, or the phone's back, closes it.
+  as on the website. The study's prep shows there too, as in a study. The
+  back arrow, or the phone's back, closes it.
 
 In the practice and Bullet screens, the board sits low on the screen, as in
 the Lichess app: the prompt or result just above it, the clock just below,

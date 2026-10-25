@@ -259,6 +259,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
       orientation: board.state.orientation,
       side: study.side,
       explorerSettings: study.explorerSettings,
+      tree,
       onClose: () => {
         if (resume && !left) later(resume, 300);
       },

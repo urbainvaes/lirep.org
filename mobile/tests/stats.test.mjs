@@ -49,11 +49,12 @@ function fixture() {
   };
 }
 
-test("Studies opens stats via row and chart; Practice keeps practice and Bullet", async () => {
+test("Studies opens the study via the row and stats via the chart; Practice keeps practice and Bullet", async () => {
   const { lists } = screens(fixture());
   const app = { innerHTML: "" };
   await lists.renderStudies(app);
-  assert.equal((app.innerHTML.match(/href="#\/stats\/42"/g) ?? []).length, 2);
+  assert.equal((app.innerHTML.match(/href="#\/stats\/42"/g) ?? []).length, 1);
+  assert.equal((app.innerHTML.match(/href="#\/study\/42"/g) ?? []).length, 1);
   assert.match(app.innerHTML, /aria-label="Stats for My &lt;opening&gt;"/);
   assert.doesNotMatch(app.innerHTML, /#\/bullet\/42|#\/practice\/42/);
   await lists.renderPracticeList(app);
@@ -72,7 +73,7 @@ test("stats shows saved results, unambiguous Black evaluation and website action
   assert.match(app.innerHTML, /Black is better/);
   assert.match(app.innerHTML, /aria-label="Gold Knight"/);
   assert.match(app.innerHTML, /piece-badge--gold/);
-  for (const href of ["/stat.html?id=42", "/study.html?id=42", "#/practice/42"]) {
+  for (const href of ["/stat.html?id=42", "/study.html?id=42", "#/practice/42", "#/study/42"]) {
     assert.ok(app.innerHTML.includes(`href="${href}"`));
   }
   assert.match(app.innerHTML, /Back to Studies/);

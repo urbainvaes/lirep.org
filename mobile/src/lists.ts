@@ -1,6 +1,7 @@
 // The two list screens, under a tab bar: the studies (as on the website's
 // home page) and practice (as on its Practice page). Each row opens a
-// stats overview in Studies, or a practice session and Bullet in Practice.
+// study's moves in Studies (its stats from the icon at the end), or a
+// practice session and Bullet in Practice.
 
 import { escapeHtml } from "@web/layout";
 import { evalPiece, formatExpectedEval, pieceBadgeHtml, scoreTier } from "@web/scoreTiers";
@@ -37,7 +38,7 @@ const bulletLink = (study: Study) =>
 const statsLink = (study: Study) =>
   `<a class="row__action" href="#/stats/${study.id}" aria-label="Stats for ${escapeHtml(study.name)}" title="Stats"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v17h17M9 15v-4M14 15V7M19 15V4"/></svg></a>`;
 
-function row(study: Study, lead: string, sub: string, destination: "stats" | "practice"): string {
+function row(study: Study, lead: string, sub: string, destination: "study" | "practice"): string {
   return `
     <li class="row">
       <a class="row__link" href="#/${destination}/${study.id}">
@@ -47,7 +48,7 @@ function row(study: Study, lead: string, sub: string, destination: "stats" | "pr
           <span class="row__sub">${sub}</span>
         </span>
       </a>
-      ${destination === "stats" ? statsLink(study) : bulletLink(study)}
+      ${destination === "study" ? statsLink(study) : bulletLink(study)}
     </li>
   `;
 }
@@ -75,7 +76,7 @@ export async function renderStudies(app: HTMLElement): Promise<void> {
       score === undefined ? "—" : `${(score * 100).toFixed(1)}%`,
       evalCp === undefined ? "—" : formatExpectedEval(evalCp, study.side),
     ].join(" · ");
-    return row(study, badge, result, "stats");
+    return row(study, badge, result, "study");
   };
   app.innerHTML = shell("studies", "Studies", "", list.length ? grouped(list, studyRow) : empty("No studies yet: create one on"));
 }

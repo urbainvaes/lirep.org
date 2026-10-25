@@ -90,6 +90,7 @@ export async function renderStats(app: HTMLElement, id: number, isCurrent = () =
       <p class="stats__note">${study.side === "white" ? "White" : "Black"} repertoire · ${moves} ${moves === 1 ? "move" : "moves"} · ${lines} ${lines === 1 ? "line" : "lines"}</p>
       ${scoreCard}${evalCard}
       <a class="button button--primary" href="#/practice/${study.id}">Practice</a>
+      <a class="button" href="#/study/${study.id}">Browse the moves</a>
       <a class="button" href="/stat.html?id=${study.id}">Full stats on website</a>
       <a class="button" href="/study.html?id=${study.id}">Edit on website</a>
       <p class="stats__note">Saved results are shown here. Calculate or refresh them on the website.</p>

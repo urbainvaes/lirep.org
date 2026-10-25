@@ -940,3 +940,62 @@ button.bar__back {
   margin: 0 0 12px;
   color: var(--text-dim);
 }
+
+/* ---- The prep, in the analysis (analysis.ts), and the study view --------- */
+
+/* The study view: the analysis as a screen, not a layer. */
+.analysis.analysis--screen {
+  position: static;
+}
+
+/* Moves off the study's tree. */
+.analysis__move--off {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.prep {
+  margin-bottom: 10px;
+}
+
+.prep__comment {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.prep__replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prep__move {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text-strong);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Your prepared move: the one way on, across the width. */
+.prep__move--own {
+  justify-content: center;
+  width: 100%;
+  border-color: var(--primary);
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+.prep__share {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}

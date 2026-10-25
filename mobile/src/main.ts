@@ -1,6 +1,7 @@
 // Lirep's mobile app (see mobile/README.md): the studies and practice, for a
 // phone, at /m/. Screens by the address's #fragment:
 //   #/            the studies
+//   #/study/ID    a study, read-only: its moves, along the prep
 //   #/stats/ID    a study's saved stats
 //   #/practice    practice: what's due, study by study
 //   #/practice/ID a practice session on one study
@@ -18,6 +19,7 @@ import { renderBullet } from "./bullet";
 import { renderCommunity, renderPracticeList, renderStudies } from "./lists";
 import { renderSession } from "./session";
 import { renderStats } from "./stats";
+import { renderStudyView } from "./studyView";
 
 const app = document.getElementById("app") as HTMLElement;
 // What the current screen leaves behind (a board, timers), undone before
@@ -42,9 +44,11 @@ async function route(): Promise<void> {
   const session = hash.match(/^#\/practice\/(\d+)$/);
   const bullet = hash.match(/^#\/bullet\/(\d+)$/);
   const stats = hash.match(/^#\/stats\/(\d+)$/);
+  const view = hash.match(/^#\/study\/(\d+)$/);
   try {
     if (session) leave = await renderSession(app, Number(session[1]));
     else if (bullet) leave = await renderBullet(app, Number(bullet[1]));
+    else if (view) leave = await renderStudyView(app, Number(view[1]));
     else if (stats) await renderStats(app, Number(stats[1]), () => location.hash === hash);
     else if (hash.startsWith("#/practice")) await renderPracticeList(app);
     else if (hash.startsWith("#/community")) await renderCommunity(app, hash === "#/community/eval" ? "eval" : "score");
