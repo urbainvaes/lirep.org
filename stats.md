@@ -131,8 +131,9 @@ offers Quick (depth 8), Balanced (12), and Thorough (16, the default); live
 Study and Practice analysis remain at depth 16. UCI scores are relative to
 the side to move, so the browser converts them to **White's point of view**
 before caching `[FEN, depth] -> cp`.
-The weighted result is then converted to the studied side's point of view
-and displayed in pawns (`cp / 100`). Engine-reported mates use a
+The weighted result is then converted to the studied side's point of view,
+saved and ranked as such, and displayed in pawns (`cp / 100`) from White's
+point of view (`formatExpectedEval`), as on Lichess. Engine-reported mates use a
 distance-sensitive value near the `±100,000` cap. The cap is a finite
 stand-in for a decisive result when averaging with ordinary cp values.
 

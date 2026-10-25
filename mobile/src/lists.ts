@@ -3,7 +3,7 @@
 // practice session; the bullet at its end opens Bullet.
 
 import { escapeHtml } from "@web/layout";
-import { evalPiece, pieceBadgeHtml, scoreTier } from "@web/scoreTiers";
+import { evalPiece, formatExpectedEval, pieceBadgeHtml, scoreTier } from "@web/scoreTiers";
 
 import { leaderboard, practiceSummary, studies, type PracticeSummary, type Ranked, type Study } from "./api";
 
@@ -70,7 +70,7 @@ export async function renderStudies(app: HTMLElement): Promise<void> {
     const badge = pieceBadgeHtml(scoreTier(score, study.side), "", evalPiece(evalCp));
     const result = [
       score === undefined ? "—" : `${(score * 100).toFixed(1)}%`,
-      evalCp === undefined ? "—" : `${evalCp >= 0 ? "+" : "−"}${Math.abs(evalCp / 100).toFixed(2)}`,
+      evalCp === undefined ? "—" : formatExpectedEval(evalCp, study.side),
     ].join(" · ");
     return row(study, badge, result);
   };
@@ -106,8 +106,6 @@ export async function renderPracticeList(app: HTMLElement): Promise<void> {
   );
 }
 
-const evalText = (cp: number) => `${cp >= 0 ? "+" : "−"}${Math.abs(cp / 100).toFixed(2)}`;
-
 /** The leaderboards, by expected score or evaluation (two chips switch),
  * White's then Black's: rank, badge, name, value and author. A row opens
  * the study on the website's read-only page. */
@@ -118,7 +116,7 @@ export async function renderCommunity(app: HTMLElement, by: "score" | "eval"): P
     const badge = pieceBadgeHtml(scoreTier(stats.winProbability ?? undefined, r.side), "sm", evalPiece(stats.evalCp ?? undefined));
     const value = by === "score"
       ? r.winProbability == null ? "—" : `${(r.winProbability * 100).toFixed(1)}%`
-      : r.evalCp == null ? "—" : evalText(r.evalCp);
+      : r.evalCp == null ? "—" : formatExpectedEval(r.evalCp, r.side);
     return `
       <li class="row">
         <a class="row__link" href="/opening.html?id=${r.id}">

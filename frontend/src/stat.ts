@@ -28,6 +28,7 @@ import { calculateExpectedScore, MATE_SCORE_CP } from "./expectedScore";
 import {
   BLACK_TIER_OFFSET,
   evalPiece,
+  formatExpectedEval,
   PIECE_LABELS,
   PIECES,
   pieceBadgeHtml,
@@ -121,12 +122,6 @@ async function loadPracticeKnowledge(studyId: number): Promise<number | null> {
   } catch {
     return null;
   }
-}
-
-function formatEval(cp: number): string {
-  if (Math.abs(cp) > MATE_SCORE_CP - 1000) return cp > 0 ? "Forced mate" : "Forced mate against";
-  const pawns = cp / 100;
-  return `${pawns > 0 ? "+" : ""}${pawns.toFixed(2)}`;
 }
 
 // Told when a calculation's Explorer requests wait out a Lichess rate-limit
@@ -587,7 +582,7 @@ function renderPage(
        <p class="stat-card__meta">Not calculated yet.</p>`;
 
   const evalHtml = stats?.evalCp !== undefined
-    ? `<div class="stat-detail__score">${formatEval(stats.evalCp)}</div>
+    ? `<div class="stat-detail__score">${formatExpectedEval(stats.evalCp, study.side)}</div>
        <p class="stat-card__meta">Calculated with ${stats.evalSettings ? `${explorerSummary(stats.evalSettings)} · ` : ""}${
          stats.evalDepth ? `Stockfish depth ${stats.evalDepth} · ` : ""
        }${formatDate(stats.evalCalculatedAt ?? "")}${
@@ -631,13 +626,15 @@ function renderPage(
         ).join("")}
         <div class="piece-legend__row">${pieceBadgeHtml("none", "sm", piece)}<span>No tier — under ${tierThreshold(TIERS[TIERS.length - 1].white, study.side)}%, below ${sideName}'s average</span></div>
         <p class="piece-legend__note">Bronze is about ${sideName}'s average score in the Explorer; ${study.side === "white" ? "Black's" : "White's"} thresholds are ${BLACK_TIER_OFFSET} points ${study.side === "white" ? "lower" : "higher"}.</p>
-        <p class="piece-legend__title">The piece: by expected evaluation, in pawns for ${sideName}</p>
+        <p class="piece-legend__title">The piece: by expected evaluation, in pawns from White's point of view</p>
         ${PIECES.map(
           (p, i) => `<div class="piece-legend__row">${pieceBadgeHtml(tier, "sm", p.piece)}<span>${p.label} — ${
-            i === PIECES.length - 1 ? `under +${PIECES[i - 1].from.toFixed(2)}` : `+${p.from.toFixed(2)} or higher`
+            i === PIECES.length - 1
+              ? `${study.side === "white" ? "under" : "above"} ${formatExpectedEval(PIECES[i - 1].from * 100, study.side)}`
+              : `${formatExpectedEval(p.from * 100, study.side)} or ${study.side === "white" ? "higher" : "lower"}`
           }</span></div>`,
         ).join("")}
-        <p class="piece-legend__note">The same for both sides. Before the expected evaluation is calculated, the piece is the pawn.</p>
+        <p class="piece-legend__note">The same for both sides, with the sign reversed for Black. Before the expected evaluation is calculated, the piece is the pawn.</p>
       </div>
 
       <section class="calc-settings">

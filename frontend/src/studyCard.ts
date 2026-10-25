@@ -2,7 +2,7 @@ import Sortable from "sortablejs";
 import { escapeHtml } from "./layout";
 import { playSans, type MiniBoard } from "./miniBoard";
 import { sanPathTo, type StudyTree } from "./tree";
-import { evalPiece, PIECE_LABELS, pieceBadgeHtml, scoreTier, TIER_LABELS } from "./scoreTiers";
+import { evalPiece, formatExpectedEval, PIECE_LABELS, pieceBadgeHtml, scoreTier, TIER_LABELS } from "./scoreTiers";
 
 export interface StudyCardData {
   id: number;
@@ -116,19 +116,13 @@ export function countMovesAndLines(tree: StudyTree): { moves: number; lines: num
 const EXPECTED_SCORE_TITLE =
   "Expected score: win % + half of the draw % (a win counts 1, a draw 0.5), from real games in the Explorer, if you always play your prepared moves.";
 const EXPECTED_EVAL_TITLE =
-  "Expected evaluation: Stockfish's average evaluation at the end of your prep, in pawns for your side, with opponents replying as in the Explorer.";
-
-// Pawns for the studied side, with forced mates (capped near 100,000 cp)
-// spelled out, as on the Stats page.
-export function formatEval(cp: number): string {
-  if (Math.abs(cp) > 99_000) return cp > 0 ? "Forced mate" : "Forced mate against";
-  return `${cp > 0 ? "+" : ""}${(cp / 100).toFixed(2)}`;
-}
+  "Expected evaluation: Stockfish's average evaluation at the end of your prep, in pawns from White's point of view (negative when Black is better), with opponents replying as in the Explorer.";
 
 /** "Expected result: 57.4% / +0.31", a dash for what isn't calculated yet;
  * on a leaderboard, the value it ranks by in bold. */
 function expectedResultHtml(
   stats: { winProbability?: number | null; evalCp?: number | null },
+  side: "white" | "black",
   ranked?: "score" | "eval",
 ): string {
   const score = stats.winProbability ?? undefined;
@@ -145,7 +139,7 @@ function expectedResultHtml(
     EXPECTED_SCORE_TITLE,
     ranked === "score",
   )}<span class="study-card__results-sep">/</span>${value(
-    evalCp === undefined ? undefined : formatEval(evalCp),
+    evalCp === undefined ? undefined : formatExpectedEval(evalCp, side),
     EXPECTED_EVAL_TITLE,
     ranked === "eval",
   )}</span></div>`;
@@ -179,7 +173,7 @@ export function studyCardBodyHtml(card: {
       <h3 title="${escapeHtml(card.titleText)}"><span class="study-card__title-text">${card.titleHtml}</span></h3>
       ${card.headerEnd}
     </div>
-    ${expectedResultHtml(card.stats, card.ranked)}
+    ${expectedResultHtml(card.stats, card.side, card.ranked)}
     ${card.afterResult ?? ""}
     ${card.board ? cardBoardHtml(card.startLine, card.board.mainLine, card.side) : `<div class="study-card__line">${openingLineHtml(card.startLine, card.side)}</div>`}
     ${card.size ? `<p class="study-card__meta study-card__section">${studySizeHtml(card.size)}</p>` : ""}
@@ -284,7 +278,7 @@ export function studyBadgeHtml(
     : `${TIER_LABELS[tier]} · expected score ${(score * 100).toFixed(1)}%`;
   const evalText = evalCp === undefined
     ? "expected evaluation not calculated yet"
-    : `${PIECE_LABELS[piece]} · expected evaluation ${evalCp >= 0 ? "+" : "−"}${Math.abs(evalCp / 100).toFixed(2)}`;
+    : `${PIECE_LABELS[piece]} · expected evaluation ${formatExpectedEval(evalCp, side)}`;
   const badge = pieceBadgeHtml(tier, "sm", piece);
   if (statsId === undefined) {
     const title = `${scoreText}; ${evalText}`;

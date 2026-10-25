@@ -53,6 +53,15 @@ export function evalPiece(evalCp: number | undefined): EvalPiece {
   return PIECES.find((p) => evalCp / 100 >= p.from)!.piece;
 }
 
+/** The expected evaluation `evalCp` (centipawns for the studied side `side`)
+ * as shown: pawns from White's point of view, as on Lichess (−0.40 is
+ * Black's advantage), forced mates (capped near 100,000 cp) spelled out. */
+export function formatExpectedEval(evalCp: number, side: "white" | "black"): string {
+  const cp = side === "white" ? evalCp : -evalCp;
+  if (Math.abs(cp) > 99_000) return cp > 0 ? "White mates" : "Black mates";
+  return `${cp > 0 ? "+" : cp < 0 ? "−" : ""}${Math.abs(cp / 100).toFixed(2)}`;
+}
+
 export function pieceBadgeHtml(tier: ScoreTier, size: "" | "sm" = "", piece: EvalPiece = "king"): string {
   const sizeClass = size ? ` piece-badge--${size}` : "";
   // U+FE0E: the glyph's text form; the pawn's emoji form would ignore the

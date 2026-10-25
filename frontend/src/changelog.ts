@@ -55,7 +55,7 @@ function piecesFigure(): string {
       <thead><tr><th>Piece</th><th>Expected evaluation</th><th>From Legendary to no tier</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <figcaption>The piece, from the expected evaluation in pawns for the studied side; its colour stays the expected score's tier.</figcaption>
+    <figcaption>The piece, from the expected evaluation in pawns for the studied side (shown from White's point of view: for Black, −1.00 or less is the king); its colour stays the expected score's tier.</figcaption>
   </figure>`;
 }
 

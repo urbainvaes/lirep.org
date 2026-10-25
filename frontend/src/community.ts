@@ -192,8 +192,8 @@ const BY_EXPECTED_EVALUATION: Leaderboard<EvalOpening> = {
   id: "leaderboard-eval",
   title: "By expected evaluation",
   description:
-    "Ranked by Stockfish's average evaluation at the end of prep, in pawns from the prepared side's point of " +
-    "view, with opponents replying as in the Explorer. Only evaluations at depth 12 (Balanced) or more are ranked.",
+    "Ranked by Stockfish's average evaluation at the end of prep, best for the prepared side first, in pawns " +
+    "from White's point of view (negative when Black is better), with opponents replying as in the Explorer. Only evaluations at depth 12 (Balanced) or more are ranked.",
   ranked: "eval",
   settings: (o) => [...explorerSettings(o), { name: "Stockfish", text: `depth ${o.depth}` }],
   empty: (side) => `No ranked openings for ${side} yet.`,
