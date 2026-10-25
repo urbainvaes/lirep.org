@@ -32,18 +32,12 @@ unsound: losing more than so many centipawns against its best. Only the
 positions next to the repertoire are needed, so it is fast, but not always
 optimal: a move worth little alone, but much with the next one, is missed.
 
---exact finds the best repertoire instead. Both the cost (your moves) and
-the value add up over the tree's branches, so it is solved from the leaves
-up: for every position, the best value with 0, 1, 2, ... of your moves. At
-your turn: stop, or play one of your candidates (one move). At the
-opponent's: split the moves between the replies (a knapsack over them,
-weighted by how often each is played). The candidates are the same; to keep
-it finite, a line also ends --max-plies deep (20 plies from move 1 by
-default) or where fewer than --min-reach of the games reach it. It needs
-the explorer for every position within those limits, so it is much slower
-(a cached second run is quick), and prints the best value for each number
-of moves, then the repertoire of the size asked for (or the smallest
-reaching the target).
+--lookahead K looks further: each unanswered reply is answered in the best
+way with up to K of your moves (in the reply's own subtree: moves in
+different branches add up independently, so they are found one after the
+other anyway), and the addition with the most gain per move is made, all
+its moves at once. --lookahead 1 (the default) is the plain greedy; each
+step up needs the explorer a little deeper under each reply looked at.
 
 All the parameters, with their defaults and what they mean, are in the
 PARAMETERS block below; each can be changed on the command line.
@@ -83,9 +77,9 @@ export LICHESS_TOKEN=lip_..., or the token in ~/.config/lirep/lichess-token):
   # Moves added until the repertoire reaches 56%, written as a Lirep study file:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --target 0.56 \\
       --out alapin.lirep.json
-  # The best repertoire with 20 moves, not one move at a time (slower):
+  # 20 moves, each addition looking two moves ahead:
   tools/optimal_repertoire.py --moves "e4 c5 c3" --side white --moves-budget 20 \\
-      --exact
+      --lookahead 2
 """
 
 from __future__ import annotations
@@ -143,10 +137,9 @@ RATING_GROUPS = (0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500)
 CANDIDATES = 6      # --candidates: your most played moves considered in a position
 MIN_REACH = 0.002   # --min-reach: a reply reached by fewer than this share of the
                     # games at the start isn't answered (0.002 = 0.2%)
-MAX_MOVES = 150     # --max-moves: with --target, the most moves added (with
-                    # --exact, the largest repertoire considered)
-MAX_PLIES = 20      # --max-plies: with --exact, the deepest position searched,
-                    # in plies from move 1 (greedy needs no such limit)
+MAX_MOVES = 150     # --max-moves: with --target, the most moves added
+LOOKAHEAD = 1       # --lookahead: your moves an addition may have (1: the plain
+                    # greedy, one move at a time)
 MAX_LOSS = None     # --max-loss: leave out your moves losing more than this
                     # many centipawns against Stockfish's best (evaluations
                     # within +/- MATE_CAP); None: any move (Stockfish then
@@ -406,18 +399,6 @@ class Objective:
         cap = 100 * self.a.mate_cap
         return max(-cap, min(cap, cp if self.side == chess.WHITE else -cp))
 
-    def unsound(self, board: chess.Board, uci: str) -> bool:
-        """Your move `uci` loses more than --max-loss against Stockfish's best."""
-        if self.a.max_loss is None:
-            return False
-        after = board.copy()
-        after.push_uci(uci)
-        loss = self.cp(board) - self.cp(after)
-        if loss > self.a.max_loss:
-            detail(f"left out: {line_of(after)} loses {loss:.0f} centipawns")
-            return True
-        return False
-
 
 class Evaluator:
     """Stockfish evaluations (White's point of view, in centipawns, mates as
@@ -539,6 +520,7 @@ class Greedy:
         self.s, self.board, self.side, self.tree, self.a = objective, board, side, tree, a
         self.upper = a.mate_cap if isinstance(objective, EvaluationObjective) else 1.0  # the best value possible
         self.options: dict[str, list[tuple[float, str]]] = {}  # FEN -> your candidates' values, best first
+        self.ahead: dict[tuple[str, float], Node] = {}  # --lookahead: (FEN, reach) -> its search
 
     # -- Values ---------------------------------------------------------------
 
@@ -637,30 +619,71 @@ class Greedy:
         fen = board.fen()
         if fen not in self.options:
             _, moves = self.listed(board)
-            played = sorted((m for m in moves if games_of(m) >= self.a.min_games), key=lambda m: -games_of(m))
-            ucis = []
-            for m in played:
-                if len(ucis) == self.a.candidates:
-                    break
-                if not self.s.unsound(board, m["uci"]):
-                    ucis.append(m["uci"])
-            ucis += [u for u in self.s.extra_candidates(board) if u not in ucis and not self.s.unsound(board, u)]
             rows = {m["uci"]: m for m in moves}
             values = []
-            for uci in ucis:
+            for uci in self.candidate_moves(board):
                 after = board.copy()
                 after.push_uci(uci)
                 values.append((self.end_value(rows.get(uci), after), board.san(chess.Move.from_uci(uci))))
             self.options[fen] = sorted(values, reverse=True)
         return self.options[fen]
 
-    def best_addition(self):
-        """The addition raising the value most: (gain, position's replies
-        dict, reply's san, your move's san, board after your move), and how
-        many replies were examined out of how many. The replies are looked
-        at by their best possible gain, stopping when it can't beat the best
-        found (only those need explorer data). At the start, your move with
-        nothing prepared yet: your first move (reply None)."""
+    def candidate_moves(self, board: chess.Board) -> list[str]:
+        """Your candidate moves at `board` (UCI): your most played, sound
+        ones, and the objective's extra ones."""
+        _, moves = self.listed(board)
+        played = sorted((m for m in moves if games_of(m) >= self.a.min_games), key=lambda m: -games_of(m))
+        ucis = []
+        for m in played:
+            if len(ucis) == self.a.candidates:
+                break
+            if not self.unsound(board, m["uci"]):
+                ucis.append(m["uci"])
+        return ucis + [u for u in self.s.extra_candidates(board) if u not in ucis and not self.unsound(board, u)]
+
+    def answers(self, after: chess.Board, reach: float, row: dict, left: int) -> list[tuple[int, float, dict]]:
+        """The ways to answer the opponent's move that led to `after` (its
+        explorer row `row`, reached by `reach` of the games): (your moves,
+        the value there, the moves as {san: subtree}), with at most `left`
+        moves. Plain greedy: your best candidate, the line ending with it.
+        With --lookahead K: the best answer with 1, 2, ... K moves."""
+        if self.a.lookahead <= 1:
+            return [(1, value, {san: {}}) for value, san in self.candidates(after)[:1]]
+        key = (after.fen(), reach)
+        if key not in self.ahead:
+            self.ahead[key] = Lookahead(self, self.a.lookahead).own(
+                after, reach, self.a.lookahead, (row["white"], row["draws"], row["black"]))
+        node = self.ahead[key]
+        best = _prefix_max(node.answered)[0]
+        out = []
+        for c in range(1, min(self.a.lookahead, left) + 1):
+            tree = own_solution(node, c)
+            moves = count_own(tree, True)
+            if tree and moves == c:  # with fewer moves, already listed
+                out.append((moves, best[c], tree))
+        return out
+
+    def unsound(self, board: chess.Board, uci: str) -> bool:
+        """Your move `uci` loses more than --max-loss against Stockfish's best."""
+        if self.a.max_loss is None:
+            return False
+        after = board.copy()
+        after.push_uci(uci)
+        loss = self.s.cp(board) - self.s.cp(after)
+        if loss > self.a.max_loss:
+            detail(f"left out: {line_of(after)} loses {loss:.0f} centipawns")
+            return True
+        return False
+
+    def best_addition(self, left: int):
+        """The addition with the most gain per move (with the plain greedy,
+        one move: the most gain): (gain, position's replies dict, reply's
+        san, your moves as {san: subtree}, board after the reply, number of
+        moves), and how many replies were examined out of how many. The
+        replies are looked at by their best possible gain, stopping when it
+        can't beat the best found (only those need explorer data). At the
+        start, your move with nothing prepared yet: your first move (reply
+        None). At most `left` moves."""
         if self.board.turn == self.side and not self.tree:
             doing("Looking for the next move: trying your first moves")
             now = self.total()
@@ -669,7 +692,7 @@ class Greedy:
                 done = self.board.copy()
                 done.push_san(san)
                 ranked.append((value - now, done))
-                best = best or (value - now, self.tree, None, san, done)
+                best = best or (value - now, self.tree, None, {san: {}}, self.board, 1)
             return best, ranked[:3], 1, 1
         frontier = []
         for board, sub, reach, ended in self.positions():
@@ -698,22 +721,23 @@ class Greedy:
                 frontier.append((reach * (base + p * self.upper - old), reach, p, base, old, board, sub, m))
         frontier.sort(key=lambda f: -f[0])
         doing(f"Looking for the next move: {len(frontier)} unanswered replies, most promising first")
-        best, ranked, examined = None, [], 0
+        # A reply's bound is on its gain, so on its gain per move too.
+        best, rate, ranked, examined = None, NEG, [], 0
         for bound, reach, p, base, old, board, sub, m in frontier:
-            if best and bound <= best[0]:
+            if best and bound <= rate:
                 break
             examined += 1
             after = board.copy()
             after.push_uci(m["uci"])
             doing(f"Looking for the next move: trying answers to {line_of(after)} "
                   f"(reply {examined} of at most {len(frontier)})")
-            for value, san in self.candidates(after)[:1]:
+            for moves, value, tree in self.answers(after, reach * p, m, left):
                 gain = reach * (base + p * value - old)
                 done = after.copy()
-                done.push_san(san)
-                ranked.append((gain, done))
-                if best is None or gain > best[0]:
-                    best = (gain, sub, m["san"], san, done)
+                done.push_san(next(iter(tree)))
+                ranked.append((gain / moves, done))
+                if best is None or gain / moves > rate:
+                    best, rate = (gain, sub, m["san"], tree, after, moves), gain / moves
         ranked.sort(key=lambda r: -r[0])
         return best, ranked[:3], examined, len(frontier)
 
@@ -726,20 +750,21 @@ class Greedy:
         added = 0
         while (target is None or value < target - 1e-12) and added < budget:
             doing(f"Looking for move {added + 1}: listing the replies the repertoire leaves unanswered", milestone=True)
-            best, ranked, examined, size = self.best_addition()
+            best, ranked, examined, size = self.best_addition(budget - added)
             if best is None or best[0] <= 1e-12:
                 log("no addition raises the value any more: stopping")
                 break
-            gain, sub, reply, san, done = best
+            gain, sub, reply, tree, after, moves = best
             if reply is None:
-                sub[san] = {}
+                sub.update(tree)
             else:
-                sub[reply] = {san: {}}
-            added += 1
+                sub[reply] = tree
+            added += moves
             new = self.total()
-            log(f"move {added}: {line_of(done)}  ->  {name} {fmt(new)} ({change(new - value)})")
+            label = f"move {added}" if moves == 1 else f"moves {added - moves + 1}-{added}"
+            log(f"{label}: {'; '.join(own_lines(after, tree))}  ->  {name} {fmt(new)} ({change(new - value)})")
             if len(ranked) > 1:
-                detail("         next best: " + "; ".join(f"{line_of(b)} {change(g)}" for g, b in ranked[1:]))
+                detail("         next best (per move): " + "; ".join(f"{line_of(b)} {change(g)}" for g, b in ranked[1:]))
             if abs(new - value - gain) > 1e-9:
                 log(f"         (the gain was expected to be {change(gain)})")
             value = new
@@ -748,41 +773,35 @@ class Greedy:
         return added
 
 
-# ---- Exact ------------------------------------------------------------------
+# ---- Lookahead --------------------------------------------------------------
 
 
 @dataclass
 class Node:
-    """A position in the search. Values are for budgets c = 0..B: the best
-    value with at most c of your moves memorized from here on.
+    """A position in a lookahead search. Values are for c = 0..K: the best
+    value with at most c of your moves from here on.
 
     Your turn (own): `stop` if the opponent's move that led here stays
-    unanswered (worth that move's own results), `answered[c]` if you answer it
-    with one of your moves (NEG if impossible), `best[c]` the better of the two
-    (or `answered` alone when the base repertoire answers it).
+    unanswered (worth its own results), `answered[c]` if you answer it with
+    one of your moves (NEG if impossible), through `moves` (san, explorer
+    row, the opponent's turn after it or None) and, for each c, `choice`
+    (move index, "end" or "go", moves for the opponent's turn).
 
-    The opponent's turn: `none` if none of the replies is answered (each worth
-    its own results), `going[c]` if at least one is, `best[c]` the better.
-    """
+    The opponent's turn: `none` if none of the replies is answered,
+    `going[c]` if at least one is, through `replies` (san, share, your
+    turn after it) and, for each reply and c, `steps` (moves given to it,
+    the previous state "none"/"some", the reply "ans"/"unans")."""
 
     board: chess.Board
     own: bool
     stop: float = NEG
-    best: list[float] = field(default_factory=list)
     answered: list[float] = field(default_factory=list)
-    # Your turn: candidates (san, explorer row or None, child), and for each
-    # budget the chosen (candidate index, "end" or "go", budget for the child).
-    moves: list[tuple[str, dict | None, "Node"]] = field(default_factory=list)
+    moves: list[tuple[str, dict | None, "Node | None"]] = field(default_factory=list)
     choice: list[tuple[int, str, int] | None] = field(default_factory=list)
-    forced: bool = False  # the base repertoire answers here (kept, free)
-    # The opponent's turn.
     none: float = NEG
     going: list[float] = field(default_factory=list)
     replies: list[tuple[str, float, "Node"]] = field(default_factory=list)
-    # For each reply, for each budget: (budget given to it, previous state
-    # "none"/"some", the reply "ans"/"unans").
     steps: list[list[tuple[int, str, str] | None]] = field(default_factory=list)
-    kept: dict | None = None  # base lines under a position without games
 
 
 def _prefix_max(values: list[float]) -> tuple[list[float], list[int]]:
@@ -794,252 +813,94 @@ def _prefix_max(values: list[float]) -> tuple[list[float], list[int]]:
     return out, arg
 
 
-class Exact:
-    """The best repertoire for each number of your moves (--exact): every
-    repertoire within the limits is valued, from the leaves up. Both the
-    cost (your moves) and the value add up over the tree's branches, so for
-    every position the best value with 0, 1, 2, ... of your moves follows
-    from its children's: at your turn, stop, or play one of your candidates
-    (one move); at the opponent's, split the moves between the replies (a
-    knapsack over them, weighted by how often each is played). Values are
-    the objective's, as in Greedy. To keep it finite, only your candidates
-    are tried (as in Greedy), and a line ends where fewer than --min-reach
-    of the games reach it, or --max-plies deep. Unlike Greedy, it needs the
-    explorer for every position within those limits: much slower, but
-    optimal."""
+class Lookahead:
+    """--lookahead K: the best way to answer one of the opponent's moves
+    with up to K of your moves, from the leaves up: for each position, the
+    best value with at most c of your moves. At your turn: leave the move
+    unanswered, or answer it with one of your candidates (one move), the
+    line ending there or going on. At the opponent's: split the moves
+    between the replies (a knapsack over them, weighted by how often each
+    is played). Values and candidates are Greedy's; replies reached by
+    fewer than --min-reach of the games aren't answered."""
 
-    def __init__(self, objective: Objective, side: chess.Color, args: argparse.Namespace, budget: int):
-        self.s, self.explorer, self.side, self.a = objective, objective.explorer, side, args
-        self.budget = budget
-        self.root_ply = 0  # the trace's indentation counts plies from here
-        self.positions = 0
+    def __init__(self, greedy: Greedy, budget: int):
+        self.g, self.budget = greedy, budget
 
-    def fmt(self, v: float) -> str:
-        return self.s.fmt(v) if v > NEG else "none"
-
-    def say(self, board: chess.Board, message: str) -> None:
-        """A line of the trace, indented by the position's depth."""
-        if VERBOSE:
-            log("  " * (board.ply() - self.root_ply) + message)
-
-    def curve(self, values: list[float]) -> str:
-        """The best value by number of moves, where it improves: '0: 52%, 1: 53%'."""
-        parts, last = [], NEG
-        for c, v in enumerate(_prefix_max(values)[0]):
-            if v > last + 1e-12:
-                parts.append(f"{c}: {self.fmt(v)}")
-                last = v
-        return ", ".join(parts) or "none"
-
-    def value(self, board: chess.Board, white: int, draws: int, black: int) -> float:
-        return self.s.value(board, white, draws, black)
-
-    def end_value(self, row: dict | None, child: Node) -> float:
-        """A line ending with your move: the objective's value, or what the
-        opponent's replies to it give."""
-        value = self.s.end_value(row, child.board)
-        return child.none if value is None else value
-
-    def node(self, board: chess.Board, reach: float, plies: int, base: dict | None = None,
-             games: tuple[int, int, int] | None = None) -> Node:
-        """`base`: the base repertoire from here ({san: subtree}), if any:
-        its moves of yours are kept, at no cost, and its lines are followed
-        however deep or rare. `games`: the results of the opponent's move
-        that led here, its worth if left unanswered (without it, at the
-        start: the position's own results)."""
-        self.positions += 1
-        doing(f"Searching: position {self.positions:,}, {line_of(board)}")
-        whose = "your move" if board.turn == self.side else "their move"
-        self.say(board, f"> {line_of(board)}: {whose}, reached by {reach:.2%} of the games"
-                 + (" (in the base)" if base else "") + f" [position {self.positions}]")
-        if board.turn == self.side and games and not base and (
-                reach < self.a.min_reach or plies >= self.a.max_plies):
-            # The line ends here, worth the opponent's move's own results:
-            # the position's explorer data wouldn't be used, so isn't asked for.
-            node = Node(board, True, stop=self.value(board, *games))
-            node.answered, node.best = [NEG] * (self.budget + 1), [node.stop] * (self.budget + 1)
-            self.say(board, "  stops here: " + (f"fewer than {self.a.min_reach:.1%} of the games reach it"
-                                                if reach < self.a.min_reach else f"{self.a.max_plies} plies deep")
-                     + f"; left unanswered {self.fmt(node.stop)} (no request needed)")
-            return node
-        data = self.explorer.get(board)
-        listed = [m for m in data["moves"] if m["white"] + m["draws"] + m["black"] > 0]
-        if board.turn == self.side:
-            node = self._own(board, reach, plies, base, games or (data["white"], data["draws"], data["black"]), listed)
-            self.say(board, f"< {line_of(board)}: left unanswered {self.fmt(node.stop)}; "
-                            f"best by moves {self.curve(node.best)}")
-        else:
-            node = self._opponent(board, reach, plies, base, data, listed)
-            self.say(board, f"< {line_of(board)}: with no reply answered {self.fmt(node.none)}; "
-                            f"best by moves {self.curve(node.best)}")
-        return node
-
-    def _own(self, board, reach, plies, base, games, listed) -> Node:
-        B = self.budget
-        node = Node(board, True, stop=self.value(board, *games))
-        rows = {m["san"]: m for m in listed}
-        if base:
-            san = next(iter(base))  # one move of yours per position
-            child_board = board.copy()
-            child_board.push_san(san)
-            self.say(board, f"  base move {san}: kept, free")
-            child = self._child(child_board, reach, plies + 1, base[san])
-            node.moves.append((san, rows.get(san), child))
-            node.forced = True
-            goes_on = child.kept is not None or any(r.forced for _, _, r in child.replies)
-            end = self.end_value(rows.get(san), child)
-            going = _prefix_max(child.going)[0]
-            values, node.choice = [], []
-            for c in range(B + 1):
-                if goes_on or going[c] > end:
-                    values.append(going[c])
-                    node.choice.append((0, "go", c))
-                else:
-                    values.append(end)
-                    node.choice.append((0, "end", 0))
-            node.answered = values
-            node.best = list(values)
-            return node
-
-        deep = reach < self.a.min_reach or plies >= self.a.max_plies
-        if not deep:
-            played = sorted((m for m in listed if games_of(m) >= self.a.min_games), key=lambda m: -games_of(m))
-            candidates = []
-            for m in played:
-                if len(candidates) == self.a.candidates:
-                    break
-                if not self.s.unsound(board, m["uci"]):
-                    candidates.append(m)
-            ucis = [m["uci"] for m in candidates]
-            extra = [u for u in self.s.extra_candidates(board) if u not in ucis and not self.s.unsound(board, u)]
-            ucis += extra
-            rare = sum(1 for m in listed if games_of(m) < self.a.min_games)
-            self.say(board, "  candidates: "
-                     + (", ".join(f"{m['san']} ({games_of(m):,} games)" for m in candidates)
-                        or "none")
-                     + "".join(f", {board.san(chess.Move.from_uci(u))} (Stockfish)" for u in extra)
-                     + (f"; {rare} moves left out, under {self.a.min_games} games" if rare else ""))
-            for uci in ucis:
-                move = chess.Move.from_uci(uci)
-                san = board.san(move)
-                child_board = board.copy()
-                child_board.push(move)
-                node.moves.append((san, rows.get(san), self._child(child_board, reach, plies + 1, None)))
-        else:
-            self.say(board, "  stops here: " + (f"fewer than {self.a.min_reach:.1%} of the games reach it"
-                                                if reach < self.a.min_reach else f"{self.a.max_plies} plies deep"))
+    def own(self, board: chess.Board, reach: float, depth: int, games: tuple[int, int, int]) -> Node:
+        """Your turn, after an opponent's move with results `games`, reached
+        by `reach` of the games; `depth`: your moves that may still follow
+        in a line, this one included."""
+        g, B = self.g, self.budget
+        node = Node(board, True, stop=g.s.value(board, *games))
+        if depth > 0 and reach >= g.a.min_reach:
+            _, listed = g.listed(board)
+            rows = {m["uci"]: m for m in listed}
+            for uci in g.candidate_moves(board):
+                after = board.copy()
+                after.push_uci(uci)
+                child = self.opponent(after, reach, depth - 1) if depth > 1 else None
+                node.moves.append((board.san(chess.Move.from_uci(uci)), rows.get(uci), child))
         answered, choice = [NEG] * (B + 1), [None] * (B + 1)
-        for i, (_, row, child) in enumerate(node.moves):
-            end = self.end_value(row, child)
-            going = _prefix_max(child.going)[0]
+        for i, (san, row, child) in enumerate(node.moves):
+            after = board.copy()
+            after.push_san(san)
+            end = g.end_value(row, after)
+            going = _prefix_max(child.going)[0] if child else [NEG] * (B + 1)
             for c in range(1, B + 1):
                 if end > answered[c]:
                     answered[c], choice[c] = end, (i, "end", 0)
                 if going[c - 1] > answered[c]:
                     answered[c], choice[c] = going[c - 1], (i, "go", c - 1)
         node.answered, node.choice = answered, choice
-        node.best = [max(node.stop, a) for a in answered]
         return node
 
-    def _child(self, board, reach, plies, base) -> Node:
-        """The opponent's turn after one of your moves."""
-        return self.node(board, reach, plies, base)
-
-    def _opponent(self, board, reach, plies, base, data, listed) -> Node:
-        B = self.budget
+    def opponent(self, board: chess.Board, reach: float, depth: int) -> Node:
+        """The opponent's turn, after one of your moves."""
+        g, B = self.g, self.budget
         node = Node(board, False)
-        total = sum(m["white"] + m["draws"] + m["black"] for m in listed)
-        if not total:  # no games here: the position's worth, whatever follows
-            self.say(board, "  no games here: worth the position's own value, whatever follows")
-            node.none = self.value(board, data["white"], data["draws"], data["black"])
-            node.going = [node.none] * (B + 1)
-            node.best = list(node.going)
-            node.kept = {s: t for s, t in (base or {}).items() if t}
+        data, listed = g.listed(board)
+        total = sum(games_of(m) for m in listed)
+        if not total:  # no games here: the position's worth, nothing to answer
+            node.none = g.s.value(board, data["white"], data["draws"], data["black"])
+            node.going = [NEG] * (B + 1)
             return node
-        deep = reach < self.a.min_reach or plies >= self.a.max_plies
-        notes = []
         for m in listed:
             p = games_of(m) / total
-            if (base or {}).get(m["san"]):
-                notes.append(f"{m['san']} {p:.1%} (base)")
-            elif deep or reach * p < self.a.min_reach:
-                notes.append(f"{m['san']} {p:.1%} (ends: " + (f"{self.a.max_plies} plies" if plies >= self.a.max_plies
-                             else f"{reach * p:.2%} of the games") + ")")
-            else:
-                notes.append(f"{m['san']} {p:.1%}")
-        self.say(board, f"  {total:,} games, replies: " + ", ".join(notes))
-        for m in listed:
-            p = (m["white"] + m["draws"] + m["black"]) / total
-            child = board.copy()
-            child.push_uci(m["uci"])
-            sub = (base or {}).get(m["san"])
-            results = (m["white"], m["draws"], m["black"])
-            if not sub and (deep or reach * p < self.a.min_reach):
-                leaf = Node(child, True, stop=self.value(child, *results))
-                leaf.answered, leaf.best = [NEG] * (B + 1), [leaf.stop] * (B + 1)
-                node.replies.append((m["san"], p, leaf))
-            else:
-                node.replies.append((m["san"], p, self.node(child, reach * p, plies + 1, sub or None, results)))
-        # Base lines the explorer has no games for: kept, with no weight.
-        for san, sub in (base or {}).items():
-            if sub and san not in {r[0] for r in node.replies}:
-                child = board.copy()
-                child.push_san(san)
-                node.replies.append((san, 0.0, self.node(child, 0.0, plies + 1, sub, (0, 0, 0))))
-
+            after = board.copy()
+            after.push_uci(m["uci"])
+            node.replies.append((m["san"], p, self.own(after, reach * p, depth, (m["white"], m["draws"], m["black"]))))
         # Knapsack over the replies, keeping "none answered" apart.
         none, some = 0.0, [NEG] * (B + 1)
         for _, p, child in node.replies:
-            unans = NEG if child.forced else child.stop
-            ans = child.answered
+            unans, ans = child.stop, child.answered
             nxt, step = [NEG] * (B + 1), [None] * (B + 1)
             for c in range(B + 1):
-                if unans > NEG and some[c] > NEG and some[c] + p * unans > nxt[c]:
+                if some[c] > NEG and some[c] + p * unans > nxt[c]:
                     nxt[c], step[c] = some[c] + p * unans, (0, "some", "unans")
                 for k in range(c + 1):
                     if ans[k] > NEG and some[c - k] > NEG and some[c - k] + p * ans[k] > nxt[c]:
                         nxt[c], step[c] = some[c - k] + p * ans[k], (k, "some", "ans")
-                if none > NEG and ans[c] > NEG and none + p * ans[c] > nxt[c]:
+                if ans[c] > NEG and none + p * ans[c] > nxt[c]:
                     nxt[c], step[c] = none + p * ans[c], (c, "none", "ans")
             some = nxt
-            none = none + p * unans if none > NEG and unans > NEG else NEG
+            none += p * unans
             node.steps.append(step)
-        node.none = none
-        node.going = some
-        node.best = [max(none, g) for g in _prefix_max(some)[0]]
+        node.none, node.going = none, some
         return node
 
 
-def solution(node: Node, budget: int) -> dict:
-    """The chosen tree with at most `budget` moves, as {san: subtree}: your
-    moves, and the opponent replies answered by one of yours."""
-    if node.own:
-        if node.forced or node.answered[budget] >= node.stop:
-            return _own_solution(node, budget)
+def own_solution(node: Node, budget: int) -> dict:
+    """Your moves answering at `node` with at most `budget` of them, as
+    {san: subtree}; {} if leaving it unanswered is as good."""
+    values, arg = _prefix_max(node.answered)
+    if values[budget] <= node.stop or node.choice[arg[budget]] is None:
         return {}
-    if node.kept is not None:
-        return node.kept
-    if node.none >= _prefix_max(node.going)[0][budget]:
-        return {}
-    return _opponent_solution(node, budget)
-
-
-def _own_solution(node: Node, budget: int) -> dict:
-    if node.forced:
-        i, mode, k = node.choice[budget]
-    else:
-        values, arg = _prefix_max(node.answered)
-        budget = arg[budget]
-        if node.choice[budget] is None:
-            return {}
-        i, mode, k = node.choice[budget]
+    i, mode, k = node.choice[arg[budget]]
     san, _, child = node.moves[i]
     return {san: {} if mode == "end" else _opponent_solution(child, k)}
 
 
 def _opponent_solution(node: Node, budget: int) -> dict:
-    if node.kept is not None:
-        return node.kept
     budget = _prefix_max(node.going)[1][budget]
     out: dict = {}
     state = "some"
@@ -1049,11 +910,25 @@ def _opponent_solution(node: Node, budget: int) -> dict:
         k, state, mode = step[budget]
         budget -= k
         if mode == "ans":
-            sub = _own_solution(child, k)
+            sub = own_solution(child, k)
             if sub:
                 out[san] = sub
     return out
 
+
+def own_lines(board: chess.Board, tree: dict) -> list[str]:
+    """The lines to each of your moves in `tree` ({san: subtree}, your turn
+    at `board`)."""
+    out = []
+    for san, sub in tree.items():
+        after = board.copy()
+        after.push_san(san)
+        out.append(line_of(after))
+        for reply, deeper in sub.items():
+            next_board = after.copy()
+            next_board.push_san(reply)
+            out += own_lines(next_board, deeper)
+    return out
 
 
 # ---- The repertoire ---------------------------------------------------------
@@ -1163,15 +1038,13 @@ def _run(a, make_objective, extra_parameters, board, prefix, side, base, explore
           + ("off" if explorer.cache_path is None else f"{explorer.cache_path} ({len(explorer.disk):,} answers, "
              f"kept {a.cache_days:g} days)"))
     print(f"  candidates: {a.candidates} per position, replies down to {a.min_reach:.1%} of games"
-          + (f", {a.max_plies} plies deep (exact)" if a.exact else ""))
+          + (f"; looking {a.lookahead} moves ahead" if a.lookahead > 1 else ""))
     for line in extra_parameters:
         print(f"  {line}")
     if base is not None:
         print(f"  base:       {a.base}, {count_own(base, board.turn == side)} of your moves, kept")
     print(flush=True)
     objective = make_objective(explorer, side)
-    if a.exact:
-        return _run_exact(a, objective, board, prefix, side, base, explorer)
     tree = json.loads(json.dumps(base)) if base else {}
     greedy = Greedy(objective, board, side, tree, a)
     added = greedy.run(a.target, a.moves_budget if a.moves_budget is not None else a.max_moves)
@@ -1183,45 +1056,6 @@ def _run(a, make_objective, extra_parameters, board, prefix, side, base, explore
     total = sum(games_of(m) for m in moves)
     finish(a, tree, board, side, base, prefix, {m["san"]: games_of(m) / total for m in moves} if total else {},
            f"{a.moves or 'Repertoire'}, {objective.name} with {added} new moves")
-
-
-def _run_exact(a, objective, board, prefix, side, base, explorer) -> None:
-    """--exact: every repertoire within the limits, then the best of the
-    size asked for (or the smallest reaching the target)."""
-    fmt, name = objective.fmt, objective.name
-    budget = a.moves_budget if a.moves_budget is not None else a.max_moves
-    search = Exact(objective, side, a, budget)
-    search.root_ply = board.ply()
-    if VERBOSE:
-        print("The search: '>' enters a position, '<' leaves it with the best value found there for each number of "
-              "your moves (only where it improves).\n", flush=True)
-    doing("Searching every repertoire within the limits (the whole tree first, then the best for each size)",
-          milestone=True)
-    root = search.node(board, 1.0, len(prefix), base)
-    explorer.save()
-    log("search done")
-    print(f"\n{search.positions:,} positions searched: {explorer.queries:,} explorer requests, "
-          f"{explorer.from_cache:,} answers from the cache, in {time.monotonic() - START:.0f} s.\n")
-    print(f"Best {name} by number of new moves of yours:")
-    best = _prefix_max(root.best)[0]
-    for c in range(len(best)):
-        if c <= 10 or c % 5 == 0 or c == len(best) - 1:
-            print(f"  {c:3d} moves: {fmt(best[c])}")
-    if a.moves_budget is not None:
-        size = a.moves_budget
-        print(f"\nBest repertoire with at most {size} new moves: {name} {fmt(best[size])}.\n")
-        title = f"{a.moves or 'Repertoire'}, best {name} with {size} moves (exact)"
-    else:
-        size = next((c for c, v in enumerate(best) if v >= a.target - 1e-12), None)
-        if size is None:
-            print(f"\n{fmt(a.target)} isn't reachable within {budget} moves (best: {fmt(best[-1])}). "
-                  "Try more candidates, a larger --max-moves or --max-plies, or a smaller --min-reach.")
-            sys.exit(1)
-        print(f"\nSmallest repertoire reaching {fmt(a.target)}: {size} new moves, {name} {fmt(best[size])}.\n")
-        title = f"{a.moves or 'Repertoire'}, smallest for {name} {fmt(a.target)} (exact)"
-    tree = solution(root, size)
-    replies = {san: p for san, p, _ in root.replies} if not root.own else {}
-    finish(a, tree, board, side, base, prefix, replies, title)
 
 
 def finish(a, tree: dict, board: chess.Board, side: chess.Color, base: dict | None, prefix: list[str],
@@ -1288,13 +1122,10 @@ def main() -> None:
     parser.add_argument("--candidates", type=int, default=CANDIDATES, help="Your most played moves considered per position.")
     parser.add_argument("--min-reach", type=float, default=MIN_REACH,
                         help="Replies reached by fewer games than this share aren't answered.")
-    parser.add_argument("--max-moves", type=int, default=MAX_MOVES,
-                        help="With --target: the most moves added (with --exact, the largest repertoire considered).")
-    parser.add_argument("--exact", action="store_true",
-                        help="The best repertoire, not one move at a time: every repertoire within --min-reach and "
-                             "--max-plies is valued. Much slower (the explorer for every position within them).")
-    parser.add_argument("--max-plies", type=int, default=MAX_PLIES,
-                        help=f"With --exact: the deepest position searched, in plies from move 1 (default {MAX_PLIES}).")
+    parser.add_argument("--max-moves", type=int, default=MAX_MOVES, help="With --target: the most moves added.")
+    parser.add_argument("--lookahead", type=int, default=LOOKAHEAD, metavar="K",
+                        help=f"Answer each reply in the best way with up to K of your moves, and add the answer with "
+                             f"the most gain per move (default {LOOKAHEAD}: one move at a time).")
     parser.add_argument("--max-loss", default=MAX_LOSS, metavar="CP",
                         help="Leave out your moves losing more than CP centipawns against Stockfish's best, or "
                              "by name: " + ", ".join(f"{k} ({v})" for k, v in LOSS_LEVELS.items())
@@ -1335,6 +1166,8 @@ def main() -> None:
             a.pool += f" ({floor} isn't a group boundary)"
     else:
         a.pool = f"rating groups {a.ratings}"
+    if a.lookahead < 1:
+        parser.error("--lookahead: at least 1")
     if a.max_loss == "any":
         a.max_loss = None
     if a.max_loss is not None:
