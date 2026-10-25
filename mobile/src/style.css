@@ -964,10 +964,17 @@ button.bar__back {
   font-size: 0.9rem;
 }
 
+/* The opponent's replies, on one row that scrolls sideways, as
+   Stockfish's moves do. */
 .prep__replies {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.prep__replies .prep__move {
+  flex: none;
 }
 
 .prep__move {

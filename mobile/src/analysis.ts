@@ -204,7 +204,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
       return;
     }
     prepEl.innerHTML = `${commentHtml}<div class="prep__replies">${sans
-      .map((san) => `<button class="prep__move" type="button" data-san="${escapeHtml(san)}">${number}${escapeHtml(san)}<span class="prep__share" data-share="${escapeHtml(san)}"></span></button>`)
+      .map((san) => `<button class="prep__move" type="button" data-san="${escapeHtml(san)}">${escapeHtml(san)}<span class="prep__share" data-share="${escapeHtml(san)}"></span></button>`)
       .join("")}</div><p class="analysis__note" id="an-unprepared" hidden></p>`;
     void showShares(chess, sans, run);
   }
