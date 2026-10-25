@@ -278,7 +278,8 @@ LICHESS_USERS_URL = "https://lichess.org/api/users"
 TOP_PLAYERS_SPEEDS = ("bullet", "blitz", "rapid")
 TOP_PLAYERS_SIZE = 10
 TOP_PLAYERS_TTL_SECONDS = 60 * 60
-_top_players: dict | None = None
+# Cache raw Lichess data, never rendered identities/privacy decisions.
+_top_players: list[dict] | None = None
 _top_players_at = 0.0
 _top_players_lock = asyncio.Lock()
 
@@ -305,36 +306,37 @@ async def top_players() -> dict:
     global _top_players, _top_players_at
     async with _top_players_lock:
         if _top_players is None or time.monotonic() - _top_players_at > TOP_PLAYERS_TTL_SECONDS:
-            names = _names()
             usernames = [u["username"] for u in store.list_users()]
             try:
                 users = await _fetch_lichess_users(usernames) if usernames else []
             except (httpx.HTTPError, ValueError):
-                if _top_players is not None:
-                    return _top_players  # stale is better than nothing
-                raise HTTPException(status_code=502, detail="Lichess is unavailable")
-            board: dict[str, list[dict]] = {}
-            for speed in TOP_PLAYERS_SPEEDS:
-                rated = []
-                for u in users:
-                    perf = u.get("perfs", {}).get(speed)
-                    if u.get("disabled") or u.get("tosViolation") or not perf or not perf.get("games") or perf.get("prov"):
-                        continue
-                    if u["username"].lower() in names.anonymous:
-                        rounded = perf["rating"] // 100 * 100
-                        rated.append({"username": None, "title": u.get("title"), "rating": rounded, "roundedDown": True})
-                    elif u["username"].lower() in names.aliases:
-                        rounded = perf["rating"] // 100 * 100
-                        alias = names.aliases[u["username"].lower()]
-                        rated.append({"username": alias, "title": None, "rating": rounded, "roundedDown": True})
-                    else:
-                        rated.append({"username": u["username"], "title": u.get("title"), "rating": perf["rating"], "roundedDown": False})
-                # Named players first among equal ratings, so an anonymous
-                # 2100+ sits below a named 2100.
-                rated.sort(key=lambda r: (r["rating"], not r["roundedDown"]), reverse=True)
-                board[speed] = rated[:TOP_PLAYERS_SIZE]
-            _top_players, _top_players_at = board, time.monotonic()
-    return _top_players
+                if _top_players is None:
+                    raise HTTPException(status_code=502, detail="Lichess is unavailable") from None
+                # Stale ratings are fine, but still apply today's privacy below.
+            else:
+                _top_players, _top_players_at = users, time.monotonic()
+        names = _names()
+        registered = {u["username"].lower() for u in store.list_users()}
+        board: dict[str, list[dict]] = {}
+        for speed in TOP_PLAYERS_SPEEDS:
+            rated = []
+            for u in _top_players:
+                username = u["username"].lower()
+                perf = u.get("perfs", {}).get(speed)
+                if username not in registered or u.get("disabled") or u.get("tosViolation") or not perf or not perf.get("games") or perf.get("prov"):
+                    continue
+                if username in names.anonymous:
+                    rounded = perf["rating"] // 100 * 100
+                    rated.append({"username": None, "title": u.get("title"), "rating": rounded, "roundedDown": True})
+                elif username in names.aliases:
+                    rounded = perf["rating"] // 100 * 100
+                    rated.append({"username": names.aliases[username], "title": None, "rating": rounded, "roundedDown": True})
+                else:
+                    rated.append({"username": u["username"], "title": u.get("title"), "rating": perf["rating"], "roundedDown": False})
+            # Re-rank after rounding, with named players first on a tie.
+            rated.sort(key=lambda r: (r["rating"], not r["roundedDown"]), reverse=True)
+            board[speed] = rated[:TOP_PLAYERS_SIZE]
+    return board
 
 
 @router.get("/api/community/studies/{study_id}")
