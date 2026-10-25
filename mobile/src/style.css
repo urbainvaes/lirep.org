@@ -68,6 +68,9 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
+  /* No bounce, and nothing carried over from a list that reached its end:
+     the app's bars stay where they are. */
+  overscroll-behavior: none;
 }
 
 a,
@@ -753,6 +756,31 @@ a {
 /* The screen below doesn't scroll behind the layer. */
 body.has-layer {
   overflow: hidden;
+}
+
+/* The analysis (and the study view) doesn't move under the finger: only its
+   lists scroll (the moves, the replies, Stockfish and the Explorer), each
+   within itself. */
+.analysis {
+  touch-action: none;
+}
+
+.analysis__moves,
+.analysis__engine,
+.prep__replies {
+  overscroll-behavior: contain;
+  touch-action: pan-x;
+}
+
+.analysis__below {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+/* Nor do a session's bars. */
+.session .bar,
+.session__toolbar {
+  touch-action: none;
 }
 
 button.bar__back {
