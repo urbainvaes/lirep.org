@@ -70,6 +70,16 @@ def _main_line(study: dict) -> list[str]:
     return sans
 
 
+def _freshness_reason(study: dict, metric: Literal["winProbability", "eval"]) -> str | None:
+    """Only verified-current results may rank; legacy results need recalculation."""
+    fingerprint = (study.get("stats") or {}).get(f"{metric}MovesFingerprint")
+    if not fingerprint or not study.get("movesFingerprint"):
+        return "Freshness unknown; recalculate stats"
+    if fingerprint != study["movesFingerprint"]:
+        return "Out of date: moves or starting point changed"
+    return None
+
+
 def _card_fields(study: dict) -> dict:
     """What a leaderboard card shows besides its metric: the opening line and
     the main line after it (its board), the size of the tree and its number
@@ -89,6 +99,8 @@ def _card_fields(study: dict) -> dict:
             "winProbability": stats.get("winProbability"),
             "evalCp": stats.get("evalCp"),
             "evalDepth": stats.get("evalDepth"),
+            "scoreFreshnessReason": _freshness_reason(study, "winProbability") if stats.get("winProbability") is not None else None,
+            "evalFreshnessReason": _freshness_reason(study, "eval") if stats.get("evalCp") is not None else None,
         },
     }
 
@@ -163,6 +175,10 @@ def _entry(
     reason = None
     if probability is None:
         reason = "Stats not calculated yet"
+    elif freshness_reason := _freshness_reason(study, "winProbability"):
+        reason = freshness_reason
+        if not any_source:
+            probability = None
     elif any_source:
         pass  # a profile shows every score, however it was calculated
     elif (stats.get("database") or settings.get("database")) == "player":
@@ -377,6 +393,8 @@ def _eval_entry(
     an older method than EVAL_METHOD, or Explorer settings the score
     leaderboard leaves out too."""
     stats = study.get("stats") or {}
+    if _freshness_reason(study, "eval") is not None:
+        return None
     eval_cp = stats.get("evalCp")
     depth = stats.get("evalDepth")
     settings = stats.get("evalSettings")

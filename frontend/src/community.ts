@@ -47,6 +47,8 @@ interface Badge {
   winProbability: number | null;
   evalCp: number | null;
   evalDepth: number | null;
+  scoreFreshnessReason: string | null;
+  evalFreshnessReason: string | null;
 }
 
 // A row of the leaderboard by expected evaluation (/api/community/openings-by-eval).
@@ -217,7 +219,9 @@ function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T,
         headerEnd: studyBadgeHtml(opening.badge, opening.side, opening.mine ? opening.id : undefined),
         stats: opening.badge,
         ranked: board.ranked,
-        afterResult: `<details class="study-card__meta study-card__settings">
+        afterResult: `${opening.badge.scoreFreshnessReason ? `<p class="study-card__meta">Expected score: ${escapeHtml(opening.badge.scoreFreshnessReason)}</p>` : ""}
+          ${opening.badge.evalFreshnessReason ? `<p class="study-card__meta">Expected evaluation: ${escapeHtml(opening.badge.evalFreshnessReason)}</p>` : ""}
+          <details class="study-card__meta study-card__settings">
           <summary>Calculation settings</summary>
           <div class="study-card__settings-list">${settingsHtml(board.settings(opening))}</div>
         </details>`,

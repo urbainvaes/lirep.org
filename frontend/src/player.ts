@@ -37,7 +37,8 @@ function render(main: HTMLElement, data: PlayerResponse): void {
         <td><span class="side-pawn side-pawn--${s.side}">${s.side === "white" ? "♙" : "♟"}</span>
           <a class="opening-link" href="${s.mine ? `/study.html?id=${s.id}` : `/opening.html?id=${s.id}`}"><strong>${escapeHtml(s.name)}</strong></a>
           <div class="community-sub">${s.moves} ${s.moves === 1 ? "move" : "moves"} · ${s.lines} ${s.lines === 1 ? "line" : "lines"}</div></td>
-        <td class="community-score">${s.winProbability === null ? "—" : `${(s.winProbability * 100).toFixed(1)}%`}</td>
+        <td class="community-score">${s.winProbability === null ? "—" : `${(s.winProbability * 100).toFixed(1)}%`}
+          ${s.reason ? `<div class="community-sub">${escapeHtml(s.reason)}</div>` : ""}</td>
       </tr>`,
     )
     .join("");
