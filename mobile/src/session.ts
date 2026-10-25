@@ -101,12 +101,14 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     }
   }
 
-  // A dot per first answer: green right, red wrong; on one row, the oldest
-  // dropped when it's full.
-  function dot(correct: boolean): void {
+  // A dot per first answer: red wrong; green right, paler while the
+  // position's streak is short of the 3 that make it known (offline, the
+  // streak isn't known yet: plain green). On one row, the oldest dropped
+  // when it's full.
+  function dot(correct: boolean, streak?: number): void {
     const dots = el("dots");
     const d = document.createElement("span");
-    d.className = `dots__dot dots__dot--${correct ? "good" : "bad"}`;
+    d.className = `dots__dot dots__dot--${correct ? "good" : "bad"}${correct && streak ? ` dots__dot--streak${Math.min(streak, 3)}` : ""}`;
     dots.append(d);
     while (dots.scrollWidth > dots.clientWidth && dots.firstChild) dots.firstChild.remove();
   }
@@ -184,7 +186,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     if (left) return;
     // Offline, it waits to be sent: no warning, only the bar's count.
     el("warning").hidden = result !== null;
-    dot(correct);
+    dot(correct, typeof result === "object" && result ? result.streak : undefined);
     void showKnowledge();
     if (correct) return finish(nodeId, "Correct", "good", CORRECT_PAUSE_MS);
     graded = true;

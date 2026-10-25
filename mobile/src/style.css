@@ -493,6 +493,16 @@ a {
   background: var(--good);
 }
 
+/* Right answers by the position's streak: 1 and 2 of the 3 that make it
+   known, paler. */
+.dots__dot--streak1 {
+  background: color-mix(in srgb, var(--good) 45%, var(--page-bg));
+}
+
+.dots__dot--streak2 {
+  background: color-mix(in srgb, var(--good) 72%, var(--page-bg));
+}
+
 .dots__dot--bad {
   background: var(--bad);
 }
