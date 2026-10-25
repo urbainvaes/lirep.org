@@ -44,21 +44,6 @@ Illegal SAN passes validation and later crashes practice traversal. Multiple own
 
 **Suggestion:** Validate all node shapes first, then perform a bounded traversal from the root. Reject cycles, unreachable nodes, duplicate edges and excessive size/depth. Replay moves to validate legality and side constraints before writing. Add bounded failure handling for already-stored invalid rows.
 
-### 4. Old calculations are stamped with the current study's fingerprint
-
-**Location:** [stats.py](backend/app/stats.py#L133) and [stats.py](backend/app/stats.py#L173); [frontend/src/stat.ts](frontend/src/stat.ts#L890).
-
-The browser calculates from its loaded tree but submits no input
-fingerprint/version. The backend reads the latest study and stamps that
-fingerprint onto the submitted result. An edit in another tab during
-calculation—or before calculation on an older Stats page—makes results for old
-moves appear current. Saving also writes the calculation's settings over the
-study's latest settings.
-
-**Evidence:** Reproduced loading tree A, updating to B, then submitting A's result: it received B's fingerprint. Both calculation endpoints use this pattern.
-
-**Suggestion:** Send the actual input fingerprint and study revision. Check them against the stored row inside the result-saving transaction and reject stale input with a conflict response. Do not implicitly overwrite newer settings.
-
 ### 5. Anonymity changes do not hide cached public identity promptly
 
 **Location:** [community.py](backend/app/community.py#L281); [auth.py](backend/app/auth.py#L325).
@@ -81,16 +66,6 @@ The top-players cache stores already-rendered usernames and exact ratings for an
 
 **Suggestion:** Remove Bullet rows in the existing account-deletion transaction. Cover every account-owned table in a deletion regression.
 
-### 7. Community continues ranking obsolete statistics after edits
-
-**Location:** [community.py](backend/app/community.py#L143) and [community.py](backend/app/community.py#L371).
-
-Eligibility checks source, database and engine depth/method but never compares the saved metric's fingerprint with `study.movesFingerprint`. After changing moves or the starting point, the previous result remains ranked against a different repertoire. Stats can label it stale while Community still ranks it.
-
-**Evidence:** Reproduced saving a score, editing moves, confirming fingerprint mismatch and observing `_entry()` retain ranking eligibility. Evaluation has the same missing check.
-
-**Suggestion:** Centralize freshness checks for both metrics and exclude mismatched results from rankings. Explicitly decide how fingerprint-less legacy results are handled. Keep stale values visibly labeled for reference.
-
 ### 8. Autosave silently overwrites another tab's changes
 
 **Location:** [studies.py](backend/app/studies.py#L233), [store.py](backend/app/store.py#L706), [frontend/src/study.ts](frontend/src/study.ts#L545).
@@ -110,20 +85,6 @@ If a POST commits but its response is lost, the outbox queues it again. Attempts
 **Evidence:** Reproduced identical attempt submissions advancing the streak from 1 to 2. Network-loss and multiple-tab triggers were traced in source.
 
 **Suggestion:** Persist a UUID with each event before sending and enforce uniqueness per account. Deduplication, grading and logging must commit together. Coordinate draining across tabs too.
-
-### 10. Practice state and activity logging are not updated atomically
-
-**Location:** [practice.py](backend/app/practice.py#L265), [store.py](backend/app/store.py#L820), [store.py](backend/app/store.py#L835).
-
-Reading prior state, updating it and inserting the log use separate
-connections/transactions. Concurrent answers can read the same state and
-overwrite each other's grading changes while both logs remain. A failure
-between the state write and log insertion also leaves inconsistent
-state/activity totals.
-
-**Evidence:** Reproduced concurrent correct answers synchronized after reading the same state: both doubled stability from 2 to 4 days, whereas sequential grading would reach 8. Both requests succeeded.
-
-**Suggestion:** Perform state read, grading, deduplication and logging in one store operation with a SQLite write transaction such as `BEGIN IMMEDIATE`. Serialization of individual writes does not protect the current multi-transaction operation.
 
 ### 11. Delayed answers can overwrite newer practice state
 
@@ -186,14 +147,6 @@ Both projects report TS7022 implicit-`any` errors for `rowStartId`, `node`, `pos
 **Suggestion:** Add explicit types to break the inference cycle, expose a desktop `check` script and require type checks alongside production builds.
 
 ## Low priority — P3 suggestions and inconsistencies
-
-### 17. The documented backend test command discovers no tests
-
-**Location:** [README.md](README.md), local-development instructions/project layout; `backend/tests/` is absent.
-
-The advertised command reports **0 tests**, `NO TESTS RAN`, and exits with status 5 in this checkout. There is no project-owned regression suite covering the persistence/offline issues above.
-
-**Suggestion:** Restore/add focused tests for grading transactions, replay, account deletion, tree integrity and result freshness. Cover logout/account changes and reconnect behavior in browser tests. Update documentation and make empty discovery fail in automation. Attach these regressions to the higher-priority fixes rather than postponing their validation.
 
 ### 18. Desktop practice lacks mobile's accessible feedback announcements
 
