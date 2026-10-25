@@ -1,82 +1,226 @@
-# Code audit — bugs and QoL gaps
+# Code audit
 
-Findings from a full read-through of the backend (`backend/app/*.py`) and frontend
-(`frontend/src/*.ts`) source, cross-checked against `practice.md`, `stats.md`,
-`starting-point.md`, and `explorer-cache.md` to exclude anything that's already a
-documented, deliberate simplification. Each item points at the exact code and
-describes a concrete trigger, not a hypothetical.
+Reviewed **2026-10-26**, against the current working tree, including uncommitted changes. Findings and suggestions are ordered from high to low priority. This replaces the older review, which referenced removed code such as `jobs.py`.
 
-Everything with a clear, low-risk fix has already been fixed (see git log) and
-removed from this list. What's left below are the ones that need a real design
-decision or carry enough risk that they're better left for a deliberate choice
-rather than a drive-by fix.
+Scope: first-party backend routes and persistence; desktop editing, imports, statistics and practice; mobile routing, API access, offline storage and service worker; selected build/deployment configuration. Generated bundles, bundled Stockfish and the vendored Explorer were not audited internally. This was a source review with targeted reproductions, not exhaustive browser/device or security testing.
 
-## Bugs
+**Evidence:** “Reproduced” means exercised locally with temporary SQLite databases or JavaScript harnesses running the actual source with mocked browser/network interfaces. “Source inspection” means traced in code without an end-to-end reproduction.
 
-### Low severity
+## High priority — P1
 
-- **`studies.py` `PUT /api/studies/{study_id}` — no optimistic concurrency
-  check.** Always overwrites unconditionally based on owner+id, with no
-  version/`updated_at` comparison against what the client last loaded. Two tabs
-  editing the same study (easy to do — one for browsing, one for editing) will
-  have one save silently clobber the other's edits with no warning. Fixing
-  this properly means adding a version/timestamp column and a conflict
-  response the frontend actually surfaces to the user — a real feature, not a
-  one-line fix.
+### 1. Private API responses and OAuth tokens persist in a shared mobile cache
 
-- **`practice.py` `record_attempt` — read-then-write race on `practice_state`
-  with no locking.** Two concurrent attempts for the same node (e.g. the same
-  session open in two tabs landing on the same due item) can both read the
-  same prior state; whichever write lands second silently overwrites the
-  first's grading update, dropping one answer's effect. Low impact (a dropped
-  update, not corruption) and a genuinely rare trigger (SQLite's own
-  connection-per-request already serializes most of this) — a real fix needs
-  either a DB-level transaction with a row lock or an atomic read-modify-write,
-  and it's not obviously worth the complexity at this app's scale.
+**Location:** [mobile/public/sw.js](mobile/public/sw.js#L46), especially lines 49–50 and 73–75; [auth.py](backend/app/auth.py#L252).
 
-- **`jobs.py` `_prune()` (`:19-27`) only runs from `create_job()`, not on a
-  timer.** If the app runs a long time with jobs created only occasionally,
-  finished entries past `_JOB_TTL_SECONDS` linger in memory until the next job
-  happens to be created. Harmless at the documented single-user scale — fixing
-  it would mean adding a background timer task for a problem that doesn't
-  currently cause any observable issue, so left as-is rather than fixed
-  speculatively.
+The worker caches every successful GET under `/api/`, including `/api/lichess-token`, despite that endpoint returning `Cache-Control: no-store`. These explicit Cache Storage writes do not automatically honor that directive. Private data is keyed by URL with no account namespace.
 
-## Quality-of-life gaps
+Logout bypasses the worker under `/auth/`. Subsequently `/api/me` returns HTTP 200 with `authenticated: false`, which does not trigger the worker's 401-only deletion. Private studies and any fetched token remain stored. A later account on the same browser can receive the previous account's cached data when a request fails or exceeds four seconds. Revoking a token does not remove its cached response.
 
-- **No way to "peek" at a practice position without a graded wrong answer
-  first.** `frontend/src/practice-session.ts` only reveals the "Show answer"
-  button after a first attempt has already been graded wrong (`:157-159`,
-  `:366-367`, `:463-465`) — which resets streak/stability via `apply_answer`.
-  A user who's genuinely blank on a position and wants to peek rather than
-  guess-and-get-graded has no option to do that without a real penalty. Left
-  open since it's a real UX/design tradeoff (should peeking be free, or cost
-  something less than a full wrong answer?), not a bug to just patch over.
+**Evidence:** Reproduced storing a dummy `no-store` token, then retrieving it and private study data offline after a signed-out `/api/me`. Cross-account fallback follows from the shared URL keys; it was not exercised in a real browser.
 
-- **No `aria-live` anywhere in the practice session view.** The prompt result
-  text ("Correct!", "Not quite — try again", "The move was X") and new
-  practice-history entries all update via plain `textContent`/`innerHTML` with
-  no `aria-live` region, so screen-reader users get no announcement of a
-  graded result or a new history row — they'd have to manually re-navigate to
-  notice anything happened. The 100%-celebration overlay is similarly silent
-  and doesn't move focus into it. `stat.ts`'s eval-count span already uses
-  `aria-live="polite"` elsewhere in the codebase, so this is an inconsistency,
-  not a project-wide gap.
+**Suggestion:** Use an explicit cache allowlist; exclude credentials and `no-store` responses. Namespace private data by verified account and explicitly purge it on logout, deletion and account changes. Recognize `authenticated: false`, not just 401.
 
-- **`frontend/src/stat.ts` `init()` — legacy-eval migration loop re-runs on
-  every page load.** It iterates every entry in `study.evals.byNode` and does
-  an awaited IndexedDB `cache.get()`/`cache.set()` per entry, sequentially,
-  before `renderPage()` runs — for a large study, this repeats a full
-  migration pass on every single visit (nothing marks it done or clears
-  `study.evals`), delaying first render each time even when nothing is
-  actually stale.
+### 2. An empty startup flush prevents later offline events from syncing
 
-## Notes on what was checked and found correct
+**Location:** [mobile/src/outbox.ts](mobile/src/outbox.ts#L66); [mobile/src/main.ts](mobile/src/main.ts#L85).
 
-The following were specifically traced by hand (not assumed from memory) and
-found to match their documented design: explorer.py's in-flight request
-de-duplication and cache TTL/pruning in store.py; the practice-queue fallback
-logic in `practice.py`; `stat.ts`'s `coverage()`/`outcomes()` parity handling;
-the retry/no-regrade mechanics in `practice-session.ts` (`handleRetry` never
-re-POSTs, matching `practice.md`); and the AttemptResult/PracticeSummary/queue
-response shapes, which the frontend and `practice.py` agree on exactly.
+`flush()` uses `flushing ??= (async () => { ... })()`. With an empty queue, the IIFE reaches `finally` synchronously and sets `flushing = null` before the assignment completes. The assignment then stores the already-resolved promise permanently. Future calls return that promise without checking the queue.
+
+The app normally flushes an empty queue at startup. Answers/runs queued during a later connection failure then stay pending after reconnection; subsequent events accumulate behind them. Reloading with a nonempty queue can recover them.
+
+**Evidence:** Reproduced empty `flush()` → failed `send()` → restore network → `flush()`: zero POSTs, event still queued.
+
+**Suggestion:** Assign the promise before scheduling its work and clear it in a completion handler that runs after assignment. Add a regression for this exact startup/offline/reconnect sequence.
+
+### 3. Tree validation accepts cycles and unusable chess trees
+
+**Location:** [studies.py](backend/app/studies.py#L70), [store.py](backend/app/store.py#L286), [stats.py](backend/app/stats.py#L35), [practice.py](backend/app/practice.py#L50).
+
+Validation checks local references and parentage, but not root reachability, cycles, duplicate children, legal SAN or the one-prepared-move rule. An isolated root plus nodes 1 and 2 pointing to each other passes, as does `startNodeId=1`. Fingerprinting then follows the cyclic parent chain indefinitely. An update can persist a malformed tree before response serialization, affecting later reads and potentially public shared-study enumeration.
+
+Illegal SAN passes validation and later crashes practice traversal. Multiple own-side children cause statistics to use the first move while practice enumerates all of them.
+
+**Evidence:** Reproduced acceptance of the disconnected cycle and its starting point. Separately reproduced accepted illegal SAN raising `InvalidMoveError` in practice. The infinite traversal was identified by inspection and deliberately not run.
+
+**Suggestion:** Validate all node shapes first, then perform a bounded traversal from the root. Reject cycles, unreachable nodes, duplicate edges and excessive size/depth. Replay moves to validate legality and side constraints before writing. Add bounded failure handling for already-stored invalid rows.
+
+### 4. Old calculations are stamped with the current study's fingerprint
+
+**Location:** [stats.py](backend/app/stats.py#L133) and [stats.py](backend/app/stats.py#L173); [frontend/src/stat.ts](frontend/src/stat.ts#L890).
+
+The browser calculates from its loaded tree but submits no input
+fingerprint/version. The backend reads the latest study and stamps that
+fingerprint onto the submitted result. An edit in another tab during
+calculation—or before calculation on an older Stats page—makes results for old
+moves appear current. Saving also writes the calculation's settings over the
+study's latest settings.
+
+**Evidence:** Reproduced loading tree A, updating to B, then submitting A's result: it received B's fingerprint. Both calculation endpoints use this pattern.
+
+**Suggestion:** Send the actual input fingerprint and study revision. Check them against the stored row inside the result-saving transaction and reject stale input with a conflict response. Do not implicitly overwrite newer settings.
+
+### 5. Anonymity changes do not hide cached public identity promptly
+
+**Location:** [community.py](backend/app/community.py#L281); [auth.py](backend/app/auth.py#L325).
+
+The top-players cache stores already-rendered usernames and exact ratings for an hour. Enabling anonymity changes SQLite without invalidating or re-filtering that cache. The old public identity remains visible; Lichess refresh failures can extend this through the stale-cache fallback. Deletion also leaves the cached player available.
+
+**Evidence:** Reproduced populating the leaderboard, enabling anonymity and requesting it again: the original username and exact rating were returned.
+
+**Suggestion:** Cache raw ratings and apply current registration, aliases and privacy settings on each response. Alternatively invalidate caches across workers on privacy changes/deletion; stale fallbacks must still apply current privacy rules.
+
+## Medium priority — P2
+
+### 6. Account deletion retains identifiable Bullet history
+
+**Location:** [store.py](backend/app/store.py#L1113).
+
+`delete_account()` removes practice state/logs but never deletes `bullet_runs`. Rows retain usernames, study IDs, timestamps and outcomes. Keeping history after deleting one study is intentional; retaining it after deleting the whole account contradicts the deletion behavior described by the code.
+
+**Evidence:** Reproduced recording a run, deleting the account and finding its username/run still in `bullet_runs`.
+
+**Suggestion:** Remove Bullet rows in the existing account-deletion transaction. Cover every account-owned table in a deletion regression.
+
+### 7. Community continues ranking obsolete statistics after edits
+
+**Location:** [community.py](backend/app/community.py#L143) and [community.py](backend/app/community.py#L371).
+
+Eligibility checks source, database and engine depth/method but never compares the saved metric's fingerprint with `study.movesFingerprint`. After changing moves or the starting point, the previous result remains ranked against a different repertoire. Stats can label it stale while Community still ranks it.
+
+**Evidence:** Reproduced saving a score, editing moves, confirming fingerprint mismatch and observing `_entry()` retain ranking eligibility. Evaluation has the same missing check.
+
+**Suggestion:** Centralize freshness checks for both metrics and exclude mismatched results from rankings. Explicitly decide how fingerprint-less legacy results are handled. Keep stale values visibly labeled for reference.
+
+### 8. Autosave silently overwrites another tab's changes
+
+**Location:** [studies.py](backend/app/studies.py#L233), [store.py](backend/app/store.py#L706), [frontend/src/study.ts](frontend/src/study.ts#L545).
+
+Updates replace the full tree, name, settings and starting point without a revision precondition. Two tabs editing different branches can both save successfully, with the second discarding the first's work. Local editor save counters coordinate only one page.
+
+**Evidence:** Source inspection: SQL updates condition only on owner and study ID.
+
+**Suggestion:** Add an integer revision and update atomically with a revision precondition. Return 409 for conflicts, preserving local edits for recovery. The existing second-resolution `updated_at` is insufficient as a dependable version counter.
+
+### 9. Retried offline events can be graded/counted multiple times
+
+**Location:** [mobile/src/outbox.ts](mobile/src/outbox.ts#L44), [practice.py](backend/app/practice.py#L253), [practice.py](backend/app/practice.py#L302).
+
+If a POST commits but its response is lost, the outbox queues it again. Attempts/runs have no unique event ID or database duplicate guard. Retrying increases streak/stability or Bullet totals again. Separate tabs can also drain the same queue because `flushing` coordinates only one JavaScript context.
+
+**Evidence:** Reproduced identical attempt submissions advancing the streak from 1 to 2. Network-loss and multiple-tab triggers were traced in source.
+
+**Suggestion:** Persist a UUID with each event before sending and enforce uniqueness per account. Deduplication, grading and logging must commit together. Coordinate draining across tabs too.
+
+### 10. Practice state and activity logging are not updated atomically
+
+**Location:** [practice.py](backend/app/practice.py#L265), [store.py](backend/app/store.py#L820), [store.py](backend/app/store.py#L835).
+
+Reading prior state, updating it and inserting the log use separate
+connections/transactions. Concurrent answers can read the same state and
+overwrite each other's grading changes while both logs remain. A failure
+between the state write and log insertion also leaves inconsistent
+state/activity totals.
+
+**Evidence:** Reproduced concurrent correct answers synchronized after reading the same state: both doubled stability from 2 to 4 days, whereas sequential grading would reach 8. Both requests succeeded.
+
+**Suggestion:** Perform state read, grading, deduplication and logging in one store operation with a SQLite write transaction such as `BEGIN IMMEDIATE`. Serialization of individual writes does not protect the current multi-transaction operation.
+
+### 11. Delayed answers can overwrite newer practice state
+
+**Location:** [practice.py](backend/app/practice.py#L231) and [practice.py](backend/app/practice.py#L265); [store.py](backend/app/store.py#L820).
+
+Offline timestamps up to seven days old are accepted, but grading applies them to the latest state and unconditionally replaces `last_seen_at`. An older wrong answer replayed after a recent correct answer resets the streak and moves the timestamp backwards, affecting decay and queue order.
+
+**Evidence:** Reproduced current answers followed by a two-day-old wrong answer: the state reset and last-seen time regressed. The response also reports `streak / 3` as knowledge even for an aged attempt.
+
+**Suggestion:** Define chronological replay semantics: rebuild from ordered, deduplicated events or explicitly handle late events without regressing the latest state. Derive returned knowledge from the actual stored timestamp.
+
+### 12. A different account can cause pending offline events to be discarded
+
+**Location:** [mobile/src/outbox.ts](mobile/src/outbox.ts#L6), [mobile/src/outbox.ts](mobile/src/outbox.ts#L58), [mobile/src/main.ts](mobile/src/main.ts#L85).
+
+The global outbox stores only URLs/bodies and flushes at startup before verifying identity. If A has pending events and B signs in on the same browser, they replay using B's cookie. Ownership checks correctly reject A's study IDs, but the resulting 404 is considered permanent and removes the events. A loses the pending history.
+
+**Evidence:** Source inspection. Owner checks prevent these requests from successfully grading B's studies; the issue is destruction of A's unsent events.
+
+**Suggestion:** Associate queues/events with an account identifier, verify identity before flushing and leave another account's pending history untouched. Provide recovery for queues whose owner is signed out.
+
+### 13. Storage failures silently lose offline answers immediately
+
+**Location:** [mobile/src/outbox.ts](mobile/src/outbox.ts#L22), [mobile/src/api.ts](mobile/src/api.ts#L95), [mobile/src/session.ts](mobile/src/session.ts#L185).
+
+`write()` swallows localStorage errors yet announces that events are waiting. `send()` returns `offline`, which practice treats as safely queued. There is no memory fallback: the next `read()` reloads storage, so a failed write is lost immediately, contrary to the comment saying it survives until page closure. Quota exhaustion/blocked storage therefore gives a false assurance of later syncing.
+
+**Evidence:** Source inspection.
+
+**Suggestion:** Return persistence success/failure and show an unsaved warning. If using an in-memory fallback, distinguish it from durable storage and report only events actually retained.
+
+### 14. Overlapping mobile routes can restore an obsolete screen
+
+**Location:** [mobile/src/main.ts](mobile/src/main.ts#L34), [mobile/src/session.ts](mobile/src/session.ts#L23), [mobile/src/bullet.ts](mobile/src/bullet.ts#L27).
+
+Hash changes launch independent async routes without cancellation or generation checks. Navigate to practice, then another tab before practice loads: the older renderer can finish last and replace the newer screen. It can also assign the shared `leave` callback after another route starts, leaving the wrong resource cleanup installed or boards/timers alive.
+
+**Evidence:** Source inspection: renderers await data before installing their screens.
+
+**Suggestion:** Give navigation a generation/abort signal, check it before DOM writes, and dispose resources from obsolete renders. Guard inside renderers; checking only after they finish is too late.
+
+### 15. Imported underpromotions cannot be entered correctly in practice
+
+**Location:** [frontend/src/practice-session.ts](frontend/src/practice-session.ts#L474), [frontend/src/bulletRun.ts](frontend/src/bulletRun.ts#L383), [mobile/src/session.ts](mobile/src/session.ts#L206), [frontend/src/studyFile.ts](frontend/src/studyFile.ts#L150).
+
+Board input always supplies `promotion: "q"`, while file import accepts legal underpromotions and engine/Explorer moves preserve promotion pieces. A prepared `=N`, `=R` or `=B` move cannot be matched through board input: practice grades the queen promotion as wrong and Bullet can fail the run.
+
+**Evidence:** Source inspection of input handling, SAN comparison and import validation.
+
+**Suggestion:** Add a shared promotion chooser across editor, practice, Bullet and mobile. Optional auto-queen should retain an accessible way to choose another piece.
+
+### 16. Both TypeScript checks fail while production builds pass
+
+**Location:** [frontend/src/tree.ts](frontend/src/tree.ts#L259), lines 259, 261, 266 and 298; [frontend/package.json](frontend/package.json); [mobile/package.json](mobile/package.json).
+
+Both projects report TS7022 implicit-`any` errors for `rowStartId`, `node`, `possibleBlackId` and `lastPlayedId` in the shared tree renderer. Both production builds run Vite without type checking, so build success does not establish compliance with the checked-in strict compiler configuration.
+
+**Evidence:** Reproduced with installed compilers: both builds passed; desktop `tsc --noEmit` and mobile `npm run check` failed on the same four errors.
+
+**Suggestion:** Add explicit types to break the inference cycle, expose a desktop `check` script and require type checks alongside production builds.
+
+## Low priority — P3 suggestions and inconsistencies
+
+### 17. The documented backend test command discovers no tests
+
+**Location:** [README.md](README.md), local-development instructions/project layout; `backend/tests/` is absent.
+
+The advertised command reports **0 tests**, `NO TESTS RAN`, and exits with status 5 in this checkout. There is no project-owned regression suite covering the persistence/offline issues above.
+
+**Suggestion:** Restore/add focused tests for grading transactions, replay, account deletion, tree integrity and result freshness. Cover logout/account changes and reconnect behavior in browser tests. Update documentation and make empty discovery fail in automation. Attach these regressions to the higher-priority fixes rather than postponing their validation.
+
+### 18. Desktop practice lacks mobile's accessible feedback announcements
+
+**Location:** [frontend/src/practice-session.ts](frontend/src/practice-session.ts#L143); [mobile/src/session.ts](mobile/src/session.ts#L39).
+
+Desktop updates prompt/results, history and celebration content without live-region announcements; mobile's prompt already uses `aria-live="polite"`. Screen-reader users can miss grading feedback and round transitions.
+
+**Suggestion:** Add scoped status/live regions and an accessible celebration announcement. Avoid re-announcing the whole history. Verify with a screen reader.
+
+### 19. Legacy evaluation migration repeats before every Stats render
+
+**Location:** [frontend/src/stat.ts](frontend/src/stat.ts#L1030).
+
+Every visit iterates `study.evals.byNode`, reconstructs each position from the root and sequentially checks IndexedDB before rendering. Already-migrated entries still incur the full scan, delaying useful content for larger legacy studies.
+
+**Suggestion:** Mark migration completion against the payload/cache version, batch it or render first and migrate in the background. Preserve recovery when browser storage is cleared.
+
+## Validation performed
+
+| Check | Result |
+| --- | --- |
+| Desktop: `cd frontend && npm run build` | Passed. |
+| Mobile: `cd mobile && npm run build` | Passed; warned about runtime resolution of `/fonts/lichess.woff2` and `/icon-192.png`. Those warnings alone do not establish a deployed asset defect. |
+| Desktop: `cd frontend && ./node_modules/.bin/tsc --noEmit` | Failed: four TS7022 errors, finding 16. |
+| Mobile: `cd mobile && npm run check` | Failed: same shared-source errors. |
+| Backend: `cd backend && .venv/bin/python -m unittest discover -s tests` | No tests discovered; exit 5. |
+| Isolated Python reproductions | Confirmed wrong fingerprint assignment, stale ranking eligibility, invalid SAN/cycle acceptance, duplicate grading, lost concurrent update, backwards offline timestamp, retained Bullet history after account deletion, and cached identity after enabling anonymity. |
+| JavaScript harnesses running actual outbox/worker source | Confirmed empty-flush lockup and persistence of a dummy `no-store` token/private data after a signed-out account response. |
+
+Reproductions used temporary databases and mocked Lichess responses. No live accounts or external services were modified. Browser harnesses test the identified logic but do not replace actual service-worker lifecycle, multiple-tab and device testing.
