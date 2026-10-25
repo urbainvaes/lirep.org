@@ -7,9 +7,29 @@ import type { StudyTree } from "@web/tree";
 
 import { send } from "./outbox";
 
-export interface StudyStats {
+export interface CalculationSettings {
+  source?: "lichess" | "lirep";
+  database?: "lichess" | "masters" | "player";
+  minRating?: number | null;
+  speeds?: string[];
+  player?: string | null;
+}
+
+export interface StudyStats extends CalculationSettings {
   winProbability?: number;
   evalCp?: number;
+  winProbabilityMovesFingerprint?: string;
+  winProbabilityCalculatedAt?: string;
+  evalMovesFingerprint?: string;
+  evalCalculatedAt?: string;
+  evalDepth?: number | null;
+  evalSettings?: CalculationSettings;
+  evalMethod?: number;
+  evalMisses?: number;
+  leafValue?: "explorer" | "stockfish" | "explorer-stockfish";
+  scoreDepth?: number | null;
+  nodesEvaluated?: number;
+  explorerCalls?: number;
 }
 
 export interface Study {
@@ -18,6 +38,7 @@ export interface Study {
   side: "white" | "black";
   tree: StudyTree;
   startNodeId: number | null;
+  movesFingerprint?: string;
   stats?: StudyStats | null;
   archived?: boolean;
   explorerSettings?: ExplorerSettings | null;

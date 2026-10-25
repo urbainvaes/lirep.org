@@ -14,15 +14,17 @@ and the website always compute and record the same things.
 ## What it does so far
 
 - **Studies** (the website's home page): each study with its badge and its
-  expected score and evaluation, White's then Black's, in your order.
+  expected score and evaluation, White's then Black's, in your order. Tap
+  the row or chart icon for saved stats, freshness labels and links to the
+  website's full Stats page and editor.
 - **Practice** (the website's Practice page): each study's knowledge, as a
   ring, and its positions due and new, in the same order as Studies, and the
   total due at the top.
-- **A practice session**, from either list: the board across the screen, the
+- **A practice session**, from Practice or a study's stats: the board across the screen, the
   same queue and rules as on the website (`practice.md`), your answers
   recorded the same way; a dot per answer (green, red), the board's flip, and
   a brief "100%" the first time the study is fully known.
-- **Bullet**, from the bullet at the end of each row: the website's game
+- **Bullet**, from the bullet at the end of each Practice row: the website's game
   (`frontend/src/bulletRun.ts`), with the clock and Start under the board and
   the options (the line's choice, auto-restart, loading missing Explorer
   data) as chips.
@@ -104,7 +106,7 @@ says so if it isn't served.
 
 ## Next steps
 
-1. **Stats:** the saved results first, then calculating them on the phone,
+1. **Stats:** calculating them on the phone,
    with the website's code.
 2. **The editor:** adding moves on the board, with the Explorer and
    Stockfish.

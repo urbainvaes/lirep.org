@@ -1,6 +1,7 @@
 // Lirep's mobile app (see mobile/README.md): the studies and practice, for a
 // phone, at /m/. Screens by the address's #fragment:
 //   #/            the studies
+//   #/stats/ID    a study's saved stats
 //   #/practice    practice: what's due, study by study
 //   #/practice/ID a practice session on one study
 //   #/bullet/ID   Bullet on one study
@@ -16,6 +17,7 @@ import { flush, onWaiting } from "./outbox";
 import { renderBullet } from "./bullet";
 import { renderCommunity, renderPracticeList, renderStudies } from "./lists";
 import { renderSession } from "./session";
+import { renderStats } from "./stats";
 
 const app = document.getElementById("app") as HTMLElement;
 // What the current screen leaves behind (a board, timers), undone before
@@ -39,9 +41,11 @@ async function route(): Promise<void> {
   const hash = location.hash || "#/";
   const session = hash.match(/^#\/practice\/(\d+)$/);
   const bullet = hash.match(/^#\/bullet\/(\d+)$/);
+  const stats = hash.match(/^#\/stats\/(\d+)$/);
   try {
     if (session) leave = await renderSession(app, Number(session[1]));
     else if (bullet) leave = await renderBullet(app, Number(bullet[1]));
+    else if (stats) await renderStats(app, Number(stats[1]), () => location.hash === hash);
     else if (hash.startsWith("#/practice")) await renderPracticeList(app);
     else if (hash.startsWith("#/community")) await renderCommunity(app, hash === "#/community/eval" ? "eval" : "score");
     else await renderStudies(app);

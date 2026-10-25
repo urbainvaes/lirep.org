@@ -1,6 +1,6 @@
 // The two list screens, under a tab bar: the studies (as on the website's
 // home page) and practice (as on its Practice page). Each row opens a
-// practice session; the bullet at its end opens Bullet.
+// stats overview in Studies, or a practice session and Bullet in Practice.
 
 import { escapeHtml } from "@web/layout";
 import { evalPiece, formatExpectedEval, pieceBadgeHtml, scoreTier } from "@web/scoreTiers";
@@ -13,12 +13,12 @@ const STUDIES_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none
 const COMMUNITY_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
 const PRACTICE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>`;
 
-function shell(tab: Tab, title: string, aside: string, body: string): string {
+export function shell(tab: Tab, title: string, aside: string, body: string, back?: string): string {
   const link = (to: Tab, href: string, icon: string, label: string) =>
     `<a class="tabs__tab${tab === to ? " tabs__tab--on" : ""}" href="${href}" aria-label="${label}"${tab === to ? ' aria-current="page"' : ""}>${icon}<span>${label}</span></a>`;
   return `
     <header class="bar">
-      <span class="bar__logo" aria-hidden="true"></span>
+      ${back ? `<a class="bar__back" href="${back}" aria-label="Back to Studies">‹</a>` : '<span class="bar__logo" aria-hidden="true"></span>'}
       <h1 class="bar__title">${title}</h1>
       <span class="bar__aside">${aside}</span>
     </header>
@@ -32,19 +32,22 @@ function shell(tab: Tab, title: string, aside: string, body: string): string {
 }
 
 const bulletLink = (study: Study) =>
-  `<a class="row__bullet" href="#/bullet/${study.id}" aria-label="Bullet on ${escapeHtml(study.name)}" title="Bullet"><span data-icon="&#xe032;" aria-hidden="true"></span></a>`;
+  `<a class="row__action" href="#/bullet/${study.id}" aria-label="Bullet on ${escapeHtml(study.name)}" title="Bullet"><span data-icon="&#xe032;" aria-hidden="true"></span></a>`;
 
-function row(study: Study, lead: string, sub: string): string {
+const statsLink = (study: Study) =>
+  `<a class="row__action" href="#/stats/${study.id}" aria-label="Stats for ${escapeHtml(study.name)}" title="Stats"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v17h17M9 15v-4M14 15V7M19 15V4"/></svg></a>`;
+
+function row(study: Study, lead: string, sub: string, destination: "stats" | "practice"): string {
   return `
     <li class="row">
-      <a class="row__link" href="#/practice/${study.id}">
+      <a class="row__link" href="#/${destination}/${study.id}">
         <span class="row__lead">${lead}</span>
         <span class="row__text">
           <span class="row__name">${escapeHtml(study.name)}</span>
           <span class="row__sub">${sub}</span>
         </span>
       </a>
-      ${bulletLink(study)}
+      ${destination === "stats" ? statsLink(study) : bulletLink(study)}
     </li>
   `;
 }
@@ -72,7 +75,7 @@ export async function renderStudies(app: HTMLElement): Promise<void> {
       score === undefined ? "—" : `${(score * 100).toFixed(1)}%`,
       evalCp === undefined ? "—" : formatExpectedEval(evalCp, study.side),
     ].join(" · ");
-    return row(study, badge, result);
+    return row(study, badge, result, "stats");
   };
   app.innerHTML = shell("studies", "Studies", "", list.length ? grouped(list, studyRow) : empty("No studies yet: create one on"));
 }
@@ -96,7 +99,7 @@ export async function renderPracticeList(app: HTMLElement): Promise<void> {
       s?.newCount ? `${s.newCount} new` : "",
       s?.bullet?.runs ? `<span data-icon="&#xe032;" aria-hidden="true"></span> ${s.bullet.successes}/${s.bullet.runs}` : "",
     ].filter(Boolean);
-    return row(study, knowledgeRing(s?.aggregateKnowledge ?? null), parts.join(" · ") || "Up to date");
+    return row(study, knowledgeRing(s?.aggregateKnowledge ?? null), parts.join(" · ") || "Up to date", "practice");
   };
   app.innerHTML = shell(
     "practice",

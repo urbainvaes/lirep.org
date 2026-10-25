@@ -70,8 +70,8 @@ export function openAnalysis(o: AnalysisOptions): void {
       <button class="icon-button" type="button" id="an-flip" aria-label="Flip the board">${FLIP_ICON}</button>
       <button class="chip" type="button" id="an-tool-engine" aria-pressed="false">Stockfish</button>
       <button class="chip" type="button" id="an-tool-explorer" aria-pressed="false">Explorer</button>
-      <button class="icon-button" type="button" id="an-prev" aria-label="Previous move">‹</button>
-      <button class="icon-button" type="button" id="an-next" aria-label="Next move">›</button>
+      <button class="icon-button analysis__step" type="button" id="an-prev" aria-label="Previous move">‹</button>
+      <button class="icon-button analysis__step" type="button" id="an-next" aria-label="Next move">›</button>
     </div>
   `;
   document.body.append(layer);
@@ -186,7 +186,6 @@ export function openAnalysis(o: AnalysisOptions): void {
 
   function showExplorer(data: ExplorerData): void {
     const rows = data.moves.filter((m) => m.white + m.draws + m.black > 0);
-    const total = rows.reduce((n, m) => n + m.white + m.draws + m.black, 0);
     if (!rows.length) {
       explorerEl.innerHTML = `<p class="analysis__note">No games</p>`;
       return;
@@ -196,10 +195,12 @@ export function openAnalysis(o: AnalysisOptions): void {
       .map((m) => {
         const games = m.white + m.draws + m.black;
         const pct = (n: number) => (n / games) * 100;
+        const wins = o.side === "white" ? m.white : m.black;
+        const expectedScore = ((wins + m.draws / 2) / games) * 100;
         const prepared = line[ply] === m.san ? " explorer-row--next" : "";
         return `<button class="explorer-row${prepared}" type="button" data-san="${escapeHtml(m.san)}">
           <span class="explorer-row__san">${escapeHtml(m.san)}</span>
-          <span class="explorer-row__share">${Math.round((games / total) * 100)}%</span>
+          <span class="explorer-row__share" title="Expected score for ${o.side === "white" ? "White" : "Black"}: wins plus half the draws">${expectedScore.toFixed(1)}%</span>
           <span class="explorer-row__bar" aria-hidden="true"><span style="width:${pct(m.white)}%" class="w"></span><span style="width:${pct(m.draws)}%" class="d"></span><span style="width:${pct(m.black)}%" class="b"></span></span>
           <span class="explorer-row__games">${games >= 1000 ? `${Math.round(games / 1000)}k` : games}</span>
         </button>`;

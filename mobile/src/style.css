@@ -276,14 +276,113 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.row__bullet {
+.row__action {
   display: flex;
   align-items: center;
   justify-content: center;
   align-self: stretch;
   width: 52px;
+  flex: none;
   color: var(--text-dim);
   font-size: 1.3rem;
+}
+
+/* ---- Saved study stats ------------------------------------------------ */
+
+.stats {
+  display: grid;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+.stats__name {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+}
+
+.stats__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stats__trophy {
+  flex: none;
+}
+
+.stats__details {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.stats__details summary {
+  min-height: 44px;
+  padding-block: 12px;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.stats__details dl {
+  margin: 8px 0 0;
+}
+
+.stats__details dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.stats__details dt {
+  color: var(--text-dim);
+}
+
+.stats__details dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.stats__card {
+  padding: 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.stats__card h3 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.stats__value {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats__note,
+.stats__warning {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.stats__note {
+  color: var(--text-dim);
+}
+
+.stats__warning {
+  margin-top: 8px;
+  color: var(--warn);
 }
 
 /* The leaderboards: the rank before the badge; your studies marked. */
@@ -670,6 +769,11 @@ button.bar__back {
   padding: 10px 16px;
   white-space: nowrap;
   scrollbar-width: none;
+}
+
+.analysis__step {
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .analysis__number {
