@@ -780,17 +780,17 @@ body.has-layer {
 /* A thinner bar, for the board and its lists: the title and the
    evaluation on one short line. */
 .analysis .bar {
-  padding-top: calc(4px + var(--safe-top));
-  padding-bottom: 4px;
+  padding-top: calc(1px + var(--safe-top));
+  padding-bottom: 1px;
 }
 
 .analysis .bar__title {
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .analysis .bar__back {
-  height: 30px;
-  font-size: 1.7rem;
+  height: 26px;
+  font-size: 1.5rem;
 }
 
 /* Nor do a session's bars. */
