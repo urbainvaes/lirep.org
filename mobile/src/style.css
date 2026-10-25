@@ -777,6 +777,22 @@ body.has-layer {
   touch-action: pan-y;
 }
 
+/* A thinner bar, for the board and its lists: the title and the
+   evaluation on one short line. */
+.analysis .bar {
+  padding-top: calc(4px + var(--safe-top));
+  padding-bottom: 4px;
+}
+
+.analysis .bar__title {
+  font-size: 1rem;
+}
+
+.analysis .bar__back {
+  height: 30px;
+  font-size: 1.7rem;
+}
+
 /* Nor do a session's bars. */
 .session .bar,
 .session__toolbar {
