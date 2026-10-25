@@ -185,7 +185,8 @@ def practice_queue(study_id: int, request: Request) -> dict:
     tree itself (it already has the full tree from GET /api/studies/{id})
     and prompts only at the nodes in this list, auto-playing the rest — so
     this list isn't just *which* nodes to ask about, it's also what decides
-    *where the session starts feeling like it's actually testing you*."""
+    *where the session starts feeling like it's actually testing you*.
+    `optional` says the queue is that voluntary review: nothing is due or new."""
     owner = _require_owner(request)
     study = store.get_study(owner, study_id)
     if not study:
@@ -200,6 +201,9 @@ def practice_queue(study_id: int, request: Request) -> dict:
     new = [node_id for node_id in items if node_id not in states]
 
     queue = due + new
+    # Nothing due or new: what follows is optional review, which the
+    # session offers rather than starts.
+    optional = not queue
     if not queue and items:
         # Nothing is due and nothing is new, but practice shouldn't be
         # gated by the schedule if you want to drill anyway — there's no
@@ -224,7 +228,7 @@ def practice_queue(study_id: int, request: Request) -> dict:
         pool = not_full if not_full else items
         queue = sorted(pool, key=lambda node_id: states[node_id]["last_seen_at"])
 
-    return {"nodeIds": queue[:SESSION_SIZE]}
+    return {"nodeIds": queue[:SESSION_SIZE], "optional": optional}
 
 
 # An answer or run sent late (the mobile app keeps them while offline) may

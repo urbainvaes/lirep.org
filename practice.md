@@ -207,7 +207,9 @@ streak from a branch that, structurally, doesn't exist anymore.
    actually needs review. Excluding it removes those nodes from the
    selected set, so the walk auto-plays straight through that prefix and
    the session starts right at the first move that isn't already perfect,
-   not at the beginning of the line.
+   not at the beginning of the line. The queue says so (`optional: true`):
+   a session started there says it's optional review, and a session that
+   reaches it after a round stops and offers it (§6) rather than starting it.
 
 **Walking the tree during a session:**
 - At a **studied-side node** (a queue item): show the position, wait for you
@@ -218,12 +220,12 @@ streak from a branch that, structurally, doesn't exist anymore.
     below), then let you try again at the same position rather than
     immediately revealing the answer and moving on. A retry that's also
     wrong just prompts again; a retry that's correct continues into that
-    child exactly like a first-try correct answer would. A **"Show
-    answer"** option (available once the first attempt has been graded)
-    plays the correct move and moves on, for when you're genuinely stuck
-    rather than one slip away — a session should eventually finish the
-    line, not dead-end on a single mistake, but it also shouldn't yank the
-    answer away before you've had a real second attempt. Only the *first*
+    child like a first-try correct answer would, but says "Got it on
+    retry": the position stays recorded as a miss. A **"Show answer"**
+    option, available from the start, plays the correct move and moves on,
+    for when you don't remember rather than one slip away. Before any
+    answer, it records a miss, as a wrong move would: you can admit a lapse
+    without inventing a move. Only the *first*
     attempt at a position is graded (recorded in the knowledge score and
     the session history); further retries at that same position don't
     grade again, so guessing repeatedly can't inflate the score.
@@ -284,6 +286,12 @@ searching for a better move, but understanding *why* a missed move was
 right is squarely in scope, and re-deriving the Study editor's whole
 analysis panel from scratch for that would have been wasted effort when
 the existing one already does the job.
+
+**Rounds:** when a round is done, the next one starts, after a short summary
+(right first time so far), while positions are due or new. Once only
+optional review is left (§5), the session stops instead: a summary, the
+study's knowledge, and **Done** or **Practice more**, which starts one
+optional round and offers the next the same way.
 
 **Reaching 100% knowledge** (rounded, matching the header's own knowledge
 badge — see §3 on why hitting the displayed 100% is achievable even though

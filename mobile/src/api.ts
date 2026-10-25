@@ -82,9 +82,11 @@ export const study = (id: number) => keptGet<Study>(`/api/studies/${id}`);
 
 export const practiceSummary = () => keptGet<Record<string, PracticeSummary>>("/api/practice/summary");
 
-/** The positions to drill in the next round (see practice.md). */
-export async function practiceQueue(id: number): Promise<number[]> {
-  return (await get<{ nodeIds: number[] }>(`/api/studies/${id}/practice/queue`)).nodeIds;
+/** The positions to drill in the next round (see practice.md); optional
+ * when nothing is due or new, only review. */
+export async function practiceQueue(id: number): Promise<{ nodeIds: number[]; optional: boolean }> {
+  const queue = await get<{ nodeIds: number[]; optional?: boolean }>(`/api/studies/${id}/practice/queue`);
+  return { nodeIds: queue.nodeIds, optional: Boolean(queue.optional) };
 }
 
 /** Records a first answer: the server's result, "later" if it waits in

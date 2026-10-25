@@ -38,6 +38,14 @@ class PracticeAttemptTests(unittest.TestCase):
         self.assertEqual(store.get_practice_states("alice", self.study["id"])[1]["streak"], 1)
         self.assertEqual(store.practice_totals("alice"), {self.study["id"]: {"answers": 1}})
 
+    def test_queue_says_when_it_is_only_optional_review(self):
+        request = Request({"type": "http", "session": {"username": "alice"}})
+        queue = practice.practice_queue(self.study["id"], request)
+        self.assertEqual(queue, {"nodeIds": [1], "optional": False})
+        self.record()
+        queue = practice.practice_queue(self.study["id"], request)
+        self.assertEqual(queue, {"nodeIds": [1], "optional": True})
+
     def test_concurrent_answers_grade_latest_committed_state(self):
         self.record()
         self.record()

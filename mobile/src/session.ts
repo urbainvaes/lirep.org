@@ -1,8 +1,9 @@
 // A practice session on one study, as on the website (practice-session.ts,
 // practice.md): the server's queue says which of your moves to ask; the
-// walk (practiceSteps.ts) plays the rest. A first answer is recorded; after
-// a wrong one you may try again or see the answer. When a round is done,
-// the next one loads.
+// walk (practiceSteps.ts) plays the rest. A first answer is recorded (seeing
+// the answer first counts as a miss); after a wrong one you may try again or
+// see the answer. When a round is done, the next one loads while positions
+// are due or new; after that, more is optional: offered, not started.
 
 import type { Api } from "@lichess-org/chessground/api";
 import type { Key } from "@lichess-org/chessground/types";
@@ -19,6 +20,7 @@ import { practiceQueue, practiceSummary, recordAttempt, study as loadStudy } fro
 const CORRECT_PAUSE_MS = 700;
 const CELEBRATION_MS = 1800;
 const ANSWER_PAUSE_MS = 1500;
+const ROUND_PAUSE_MS = 1500;
 
 /** Renders the session; returns what to undo on leaving it. */
 export async function renderSession(app: HTMLElement, id: number): Promise<() => void> {
@@ -48,8 +50,9 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
         <button class="icon-button" type="button" id="flip" aria-label="Flip the board" title="Flip the board">${FLIP_ICON}</button>
         <button class="icon-button" type="button" id="analysis" aria-label="Analysis" title="Analysis">${ANALYSIS_ICON}</button>
         <button class="icon-button" type="button" id="previous" aria-label="The previous question, in the analysis" title="Previous question" disabled>${PREVIOUS_ICON}</button>
-        <button class="button" type="button" id="answer" hidden>Show answer</button>
+        <button class="button" type="button" id="answer" title="Counts as a miss if you haven't answered" hidden>Show answer</button>
         <a class="button" href="#/practice" id="done" hidden>Done</a>
+        <button class="button" type="button" id="more" hidden>Practise more</button>
       </div>
       <div class="done" id="full" hidden>
         <div class="done__mark">100%</div>
@@ -63,10 +66,13 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   const knowledgeEl = el("knowledge");
   const answerBtn = el("answer") as HTMLButtonElement;
 
-  let steps: Step[] = buildSteps(tree, start, new Set(firstQueue));
+  let steps: Step[] = buildSteps(tree, start, new Set(firstQueue.nodeIds));
+  let optional = firstQueue.optional; // this round is review, nothing due
   let stepIndex = 0;
   let asked = 0;
   let total = steps.filter((step) => step.quiz).length;
+  let answered = 0; // first answers this session
+  let right = 0;
   let awaiting: number | null = null; // the node whose move is asked
   let graded = false; // its first answer is recorded: now only retries
   let timer: number | undefined;
@@ -140,39 +146,42 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   function ask(nodeId: number): void {
     awaiting = nodeId;
     graded = false;
-    answerBtn.hidden = true;
+    answerBtn.hidden = false;
     setPosition(tree.nodes[nodeId].parentId as number, true);
-    progressEl.textContent = `${asked + 1} / ${total}`;
+    progressEl.textContent = `${optional ? "review " : ""}${asked + 1} / ${total}`;
     prompt("Your move");
   }
 
   async function advance(): Promise<void> {
     while (stepIndex < steps.length && !steps[stepIndex].quiz) stepIndex++;
     if (stepIndex < steps.length) return ask(steps[stepIndex].nodeId);
-    // The round is done: the next one.
-    prompt("Round done", "good");
-    let queue: number[];
+    // The round is done: the next one, unless it would only be optional.
+    const tally = answered ? ` · ${right} / ${answered} right` : "";
+    prompt(`Round done${tally}`, "good");
+    progressEl.textContent = "";
+    let queue: { nodeIds: number[]; optional: boolean };
     try {
       queue = await practiceQueue(id);
     } catch {
       return prompt("Can't load the next round", "bad");
     }
     if (left) return;
-    steps = buildSteps(tree, start, new Set(queue));
+    steps = buildSteps(tree, start, new Set(queue.nodeIds));
+    optional = queue.optional;
     stepIndex = 0;
     asked = 0;
     total = steps.filter((step) => step.quiz).length;
-    if (!total) {
-      prompt("Nothing left to practise", "good");
-      progressEl.textContent = "";
+    if (!total || optional) {
+      prompt(`${total ? "Nothing due" : "Nothing left to practise"}${tally}`, "good");
       el("done").hidden = false;
+      el("more").hidden = !total;
       return;
     }
-    later(() => void advance(), CORRECT_PAUSE_MS);
+    later(() => void advance(), ROUND_PAUSE_MS);
   }
 
   /** The asked move is played on the board, then the next step. */
-  function finish(nodeId: number, text: string, tone: "good" | "bad", pause: number): void {
+  function finish(nodeId: number, text: string, tone: "" | "good" | "bad", pause: number): void {
     awaiting = null;
     previous = nodeId;
     (el("previous") as HTMLButtonElement).disabled = false;
@@ -184,15 +193,26 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     later(() => void advance(), pause);
   }
 
-  async function firstAnswer(nodeId: number, correct: boolean): Promise<void> {
+  // Records the position's first answer (a miss when the answer is shown
+  // first); no second one meanwhile.
+  async function record(nodeId: number, correct: boolean): Promise<void> {
+    graded = true;
+    answerBtn.hidden = true;
+    board.set({ movable: { color: undefined, dests: new Map() } });
     const result = await recordAttempt(id, nodeId, correct);
     if (left) return;
     // Offline, it waits to be sent: no warning, only the bar's count.
     el("warning").hidden = result !== null;
     dot(correct, typeof result === "object" && result ? result.streak : undefined);
+    answered++;
+    if (correct) right++;
     void showKnowledge();
+  }
+
+  async function firstAnswer(nodeId: number, correct: boolean): Promise<void> {
+    await record(nodeId, correct);
+    if (left) return;
     if (correct) return finish(nodeId, "Correct", "good", CORRECT_PAUSE_MS);
-    graded = true;
     answerBtn.hidden = false;
     setPosition(tree.nodes[nodeId].parentId as number, true);
     prompt("Try again", "bad");
@@ -207,11 +227,10 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     playMoveSound(move, chess);
     const correct = move.san === tree.nodes[nodeId].san;
     if (!graded) {
-      // No second move while the first answer is being saved.
-      board.set({ movable: { color: undefined, dests: new Map() } });
       void firstAnswer(nodeId, correct);
     } else if (correct) {
-      finish(nodeId, "Correct", "good", CORRECT_PAUSE_MS);
+      // Only the first answer counts: this one was recorded as a miss.
+      finish(nodeId, "Got it on retry", "", CORRECT_PAUSE_MS);
     } else {
       setPosition(tree.nodes[nodeId].parentId as number, true);
       prompt("Try again", "bad");
@@ -245,8 +264,18 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
       },
     });
   }
-  answerBtn.addEventListener("click", () => {
-    if (awaiting !== null) finish(awaiting, tree.nodes[awaiting].san as string, "bad", ANSWER_PAUSE_MS);
+  answerBtn.addEventListener("click", async () => {
+    if (awaiting === null) return;
+    const nodeId = awaiting;
+    // Before any answer: recorded as a miss, as a wrong move would be.
+    if (!graded) await record(nodeId, false);
+    if (left || awaiting !== nodeId) return;
+    finish(nodeId, tree.nodes[nodeId].san as string, "bad", ANSWER_PAUSE_MS);
+  });
+  el("more").addEventListener("click", () => {
+    el("done").hidden = true;
+    el("more").hidden = true;
+    void advance();
   });
 
   void showKnowledge();

@@ -33,6 +33,8 @@ interface AttemptResult {
 // like it's waiting on you to click through it.
 const CORRECT_PAUSE_MS = 800;
 const INCORRECT_PAUSE_MS = 1600;
+// Long enough to read the round's summary before the next one starts.
+const ROUND_PAUSE_MS = 1600;
 
 // Legend dot colors for the engine line list, matching the green (best) ->
 // red (worst) gradient of the RANK_BRUSHES arrow colors on the board — same
@@ -60,11 +62,18 @@ async function loadStudy(id: number): Promise<Study | null> {
   return res.json();
 }
 
-async function loadQueue(id: number): Promise<number[]> {
+/** The next round's positions; optional when nothing is due or new, only
+ * review (see practice.md §5). */
+interface Queue {
+  nodeIds: number[];
+  optional: boolean;
+}
+
+async function loadQueue(id: number): Promise<Queue> {
   const res = await fetch(`/api/studies/${id}/practice/queue`, { credentials: "same-origin" });
   if (!res.ok) throw new Error(`failed to load practice queue (${res.status})`);
   const data = await res.json();
-  return data.nodeIds as number[];
+  return { nodeIds: data.nodeIds as number[], optional: Boolean(data.optional) };
 }
 
 async function recordAttempt(studyId: number, nodeId: number, correct: boolean): Promise<AttemptResult | null> {
@@ -93,7 +102,7 @@ function renderSignedOut(main: HTMLElement): void {
   `;
 }
 
-function renderSession(main: HTMLElement, study: Study, startNodeId: number, initialSteps: Step[]): void {
+function renderSession(main: HTMLElement, study: Study, startNodeId: number, initialSteps: Step[], initialOptional: boolean): void {
   if (initialSteps.length === 0) {
     main.innerHTML = `
       <div class="empty-state">
@@ -131,7 +140,7 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
           <p id="practice-save-warning" class="practice-save-warning" hidden>
             Couldn't save that attempt — check your connection. Your progress here wasn't recorded.
           </p>
-          <button id="practice-show-answer" class="btn btn-secondary practice-show-answer" type="button" hidden>
+          <button id="practice-show-answer" class="btn btn-secondary practice-show-answer" type="button" title="Before any answer, this counts as a miss" hidden>
             Show answer
           </button>
           <div class="analysis-header">
@@ -164,12 +173,13 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
   const saveWarningEl = document.getElementById("practice-save-warning") as HTMLElement;
 
   const tree = study.tree;
-  // Practice is open-ended — once a round's queue is drained, the next one
-  // is fetched automatically (see startNextRound) rather than ending the
-  // session, since there's no real reason to have to leave and come back.
-  // `steps`/`totalQuizzes` are therefore reassigned per round; `quizzesDone`/
-  // `correctCount` accumulate for as long as this tab stays open.
+  // Once a round's queue is drained, the next one is fetched (see
+  // startNextRound): started while positions are due or new, offered when
+  // it would only be optional review. `steps`/`totalQuizzes`/`optional` are
+  // therefore reassigned per round; `quizzesDone`/`correctCount` accumulate
+  // for as long as this tab stays open.
   let steps = initialSteps;
+  let optional = initialOptional;
   let totalQuizzes = steps.filter((step) => step.quiz).length;
   let stepIndex = 0;
   let roundDone = 0;
@@ -268,11 +278,14 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     void updateEngine(chess);
   }
 
-  function addHistoryEntry(nodeId: number, expectedSan: string, correct: boolean, playedSan: string, knowledgePct: number | null): void {
+  // `playedSan` null: the answer was shown before any move.
+  function addHistoryEntry(nodeId: number, expectedSan: string, correct: boolean, playedSan: string | null, knowledgePct: number | null): void {
     const pct = knowledgePct === null ? "" : `<span class="practice-history__knowledge">${knowledgePct}%</span>`;
     const detail = correct
       ? escapeHtml(expectedSan)
-      : `${escapeHtml(playedSan)} <span class="practice-history__expected">→ ${escapeHtml(expectedSan)}</span>`;
+      : playedSan === null
+        ? `${escapeHtml(expectedSan)} <span class="practice-history__expected">(answer shown)</span>`
+        : `${escapeHtml(playedSan)} <span class="practice-history__expected">→ ${escapeHtml(expectedSan)}</span>`;
     const analysisUrl = lichessAnalysisUrl(nodeId);
     const item = document.createElement("li");
     item.className = `practice-history__item ${correct ? "practice-history__item--correct" : "practice-history__item--incorrect"}`;
@@ -299,51 +312,58 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     return aggregate;
   }
 
-  /** Practice has no natural end — once a round's queue (due items, or
-   * everything if nothing's due — see practice.md §5) is drained, the next
-   * one loads automatically instead of stopping. This is the rare fallback
-   * for a queue that comes back genuinely empty (only possible if the study
-   * lost every one of its drill-item nodes mid-session), not the normal
-   * path. */
-  async function stop(): Promise<void> {
+  /** The end of what's due: a summary, and more practice offered when
+   * there is some (`more`: the next round, optional review), not started.
+   * Without it, the study lost every one of its drill-item nodes
+   * mid-session, a rare fallback. */
+  async function stop(more: boolean): Promise<void> {
     const aggregate = await refreshKnowledge();
     const pct = aggregate === null ? "—" : `${Math.round(aggregate * 100)}%`;
-    progressEl.textContent = "Nothing left to practice here";
+    progressEl.textContent = more ? "Nothing due" : "Nothing left to practice here";
     promptEl.textContent = "";
     promptEl.className = "practice-prompt";
     summaryEl.hidden = false;
     summaryEl.innerHTML = `
-      <p>${correctCount} / ${quizzesDone} correct this session.</p>
-      <p>"${escapeHtml(study.name)}" knowledge is now ${pct}.</p>
-      <a class="btn btn-primary" href="/practice.html">Back to Practice</a>
+      <p>${correctCount} / ${quizzesDone} right first time this session.</p>
+      <p>"${escapeHtml(study.name)}" knowledge is now ${pct}.${more ? " More practice is optional." : ""}</p>
+      <div class="practice-celebration__actions">
+        <a class="btn ${more ? "btn-secondary" : "btn-primary"}" href="/practice.html">Done</a>
+        ${more ? '<button class="btn btn-primary" type="button" id="practice-more-btn">Practice more</button>' : ""}
+      </div>
     `;
+    document.getElementById("practice-more-btn")?.addEventListener("click", () => {
+      summaryEl.hidden = true;
+      summaryEl.innerHTML = "";
+      void advance();
+    });
   }
 
   async function startNextRound(): Promise<void> {
     showAnswerBtn.hidden = true;
     promptEl.className = "practice-prompt practice-prompt--correct";
-    promptEl.textContent = "Nice work — loading more…";
+    promptEl.textContent = quizzesDone ? `${correctCount} / ${quizzesDone} right first time so far` : "";
     progressEl.textContent = "Round complete";
 
-    let nodeIds: number[];
+    let queue: Queue;
     try {
-      nodeIds = await loadQueue(study.id);
+      queue = await loadQueue(study.id);
     } catch {
       promptEl.className = "practice-prompt practice-prompt--incorrect";
       promptEl.textContent = "Could not load the next round — check your connection and reload.";
       progressEl.textContent = "";
       return;
     }
-    const nextSteps = buildSteps(tree, startNodeId, new Set(nodeIds));
-    if (nextSteps.length === 0) {
-      await stop();
-      return;
-    }
+    const nextSteps = buildSteps(tree, startNodeId, new Set(queue.nodeIds));
     steps = nextSteps;
+    optional = queue.optional;
     totalQuizzes = steps.filter((step) => step.quiz).length;
     stepIndex = 0;
     roundDone = 0;
-    window.setTimeout(() => void advance(), CORRECT_PAUSE_MS);
+    if (nextSteps.length === 0 || optional) {
+      await stop(nextSteps.length > 0);
+      return;
+    }
+    window.setTimeout(() => void advance(), ROUND_PAUSE_MS);
   }
 
   function showPrompt(nodeId: number): void {
@@ -351,8 +371,8 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     setBoardPosition(parentId, true);
     awaitingNodeId = nodeId;
     firstAttemptGraded = false;
-    showAnswerBtn.hidden = true;
-    progressEl.textContent = `Position ${roundDone + 1} of ${totalQuizzes}`;
+    showAnswerBtn.hidden = false;
+    progressEl.textContent = `${optional ? "Optional review: position" : "Position"} ${roundDone + 1} of ${totalQuizzes}`;
     promptEl.textContent = "Your move";
     promptEl.className = "practice-prompt";
   }
@@ -427,7 +447,11 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     promptEl.textContent = message;
   }
 
-  async function handleFirstAttempt(nodeId: number, correct: boolean, playedSan: string): Promise<void> {
+  // `playedSan` null: the answer was shown before any move, recorded as a
+  // miss.
+  async function handleFirstAttempt(nodeId: number, correct: boolean, playedSan: string | null): Promise<void> {
+    firstAttemptGraded = true;
+    showAnswerBtn.hidden = true;
     roundDone++;
     quizzesDone++;
     if (correct) correctCount++;
@@ -448,11 +472,13 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
       if (reachedFull) celebrated = true;
       completeItem(nodeId, "practice-prompt--correct", "Correct!", reachedFull ? null : CORRECT_PAUSE_MS);
       if (reachedFull) showCelebration();
+    } else if (playedSan === null) {
+      void refreshKnowledge();
+      completeItem(nodeId, "", `The move was ${expectedSan}`, INCORRECT_PAUSE_MS);
     } else {
       void refreshKnowledge();
       // Allow another try instead of moving straight on — a single slip
       // shouldn't end the position, only a second miss (or giving up) does.
-      firstAttemptGraded = true;
       showAnswerBtn.hidden = false;
       retryAtSamePrompt(nodeId, "Not quite — try again");
     }
@@ -460,7 +486,8 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
 
   function handleRetry(nodeId: number, correct: boolean): void {
     if (correct) {
-      completeItem(nodeId, "practice-prompt--correct", "Correct!", CORRECT_PAUSE_MS);
+      // Only the first answer counts: this position was recorded as a miss.
+      completeItem(nodeId, "", "Got it on retry — recorded as a miss", CORRECT_PAUSE_MS);
     } else {
       retryAtSamePrompt(nodeId, "Still not quite — try again");
     }
@@ -477,11 +504,8 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     const expectedSan = tree.nodes[nodeId].san as string;
     const correct = move.san === expectedSan;
     if (!firstAttemptGraded) {
-      // Freeze the board immediately, synchronously — handleFirstAttempt
-      // awaits recordAttempt before firstAttemptGraded itself gets set, so
-      // without this a second move dragged while that save is still in
-      // flight would re-enter handleFirstAttempt for the same node and
-      // grade it twice.
+      // Freeze the board while the answer is saved: no second move until
+      // then (handleFirstAttempt sets firstAttemptGraded at once, too).
       board.set({ movable: { color: undefined, dests: new Map() } });
       void handleFirstAttempt(nodeId, correct, move.san);
     } else {
@@ -518,6 +542,12 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     if (awaitingNodeId === null) return;
     const nodeId = awaitingNodeId;
     const expectedSan = tree.nodes[nodeId].san as string;
+    // Before any answer: recorded as a miss, as a wrong move would be.
+    if (!firstAttemptGraded) {
+      board.set({ movable: { color: undefined, dests: new Map() } });
+      void handleFirstAttempt(nodeId, false, null);
+      return;
+    }
     completeItem(nodeId, "", `The move was ${expectedSan}`, INCORRECT_PAUSE_MS);
   });
 
@@ -583,9 +613,9 @@ async function init(): Promise<void> {
   }
 
   let study: Study | null;
-  let nodeIds: number[];
+  let queue: Queue;
   try {
-    [study, , nodeIds] = await Promise.all([loadStudy(studyId), applyBoardTheme(), loadQueue(studyId)]);
+    [study, , queue] = await Promise.all([loadStudy(studyId), applyBoardTheme(), loadQueue(studyId)]);
   } catch {
     // Network error / backend not running — same fallback practice.ts uses,
     // rather than leaving an unhandled rejection and a permanently blank page.
@@ -599,8 +629,8 @@ async function init(): Promise<void> {
 
   const startNodeId =
     study.startNodeId !== null && study.startNodeId in study.tree.nodes ? study.startNodeId : study.tree.rootId;
-  const steps = buildSteps(study.tree, startNodeId, new Set(nodeIds));
-  renderSession(main, study, startNodeId, steps);
+  const steps = buildSteps(study.tree, startNodeId, new Set(queue.nodeIds));
+  renderSession(main, study, startNodeId, steps, queue.optional);
 }
 
 init();
