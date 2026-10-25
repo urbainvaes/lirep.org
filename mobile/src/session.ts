@@ -13,7 +13,7 @@ import { buildSteps, PRACTICE_ANIMATION_MS, type Step } from "@web/practiceSteps
 import { lastMoveAt, positionAt, sanPathTo } from "@web/tree";
 
 import { openAnalysis } from "./analysis";
-import { ANALYSIS_ICON, FLIP_ICON } from "./icons";
+import { ANALYSIS_ICON, FLIP_ICON, PREVIOUS_ICON } from "./icons";
 import { practiceQueue, practiceSummary, recordAttempt, study as loadStudy } from "./api";
 
 const CORRECT_PAUSE_MS = 700;
@@ -47,6 +47,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
       <div class="session__toolbar">
         <button class="icon-button" type="button" id="flip" aria-label="Flip the board" title="Flip the board">${FLIP_ICON}</button>
         <button class="icon-button" type="button" id="analysis" aria-label="Analysis" title="Analysis">${ANALYSIS_ICON}</button>
+        <button class="icon-button" type="button" id="previous" aria-label="The previous question, in the analysis" title="Previous question" disabled>${PREVIOUS_ICON}</button>
         <button class="button" type="button" id="answer" hidden>Show answer</button>
         <a class="button" href="#/practice" id="done" hidden>Done</a>
       </div>
@@ -114,6 +115,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   }
 
   let shownNode = start; // the position on the board
+  let previous: number | null = null; // the last question answered
   function setPosition(nodeId: number, interactive: boolean): void {
     shownNode = nodeId;
     const chess = positionAt(tree, nodeId);
@@ -173,6 +175,8 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   /** The asked move is played on the board, then the next step. */
   function finish(nodeId: number, text: string, tone: "good" | "bad", pause: number): void {
     awaiting = null;
+    previous = nodeId;
+    (el("previous") as HTMLButtonElement).disabled = false;
     answerBtn.hidden = true;
     setPosition(nodeId, false);
     prompt(text, tone);
@@ -219,13 +223,21 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     board.set({ orientation: board.state.orientation === "white" ? "black" : "white" }),
   );
   el("full").addEventListener("click", () => (el("full").hidden = true));
-  // The analysis, on the board's position: the session pauses meanwhile.
-  el("analysis").addEventListener("click", () => {
+  // The analysis, on the board's position, or on the previous question
+  // (its position, the answer one step on): the session pauses meanwhile.
+  el("analysis").addEventListener("click", () => analyse(sanPathTo(tree, shownNode)));
+  el("previous").addEventListener("click", () => {
+    if (previous === null) return;
+    const line = sanPathTo(tree, previous);
+    analyse(line, line.length - 1);
+  });
+  function analyse(line: string[], at?: number): void {
     const resume = pending;
     window.clearTimeout(timer);
     pending = null;
     openAnalysis({
-      line: sanPathTo(tree, shownNode),
+      line,
+      at,
       orientation: board.state.orientation,
       side: study.side,
       explorerSettings: study.explorerSettings,
@@ -233,7 +245,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
         if (resume && !left) later(resume, 300);
       },
     });
-  });
+  }
   answerBtn.addEventListener("click", () => {
     if (awaiting !== null) finish(awaiting, tree.nodes[awaiting].san as string, "bad", ANSWER_PAUSE_MS);
   });
