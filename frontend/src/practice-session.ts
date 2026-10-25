@@ -10,7 +10,7 @@ import type { BulletStats } from "./bulletStats";
 import type { ExplorerSettings } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { buildSteps, PRACTICE_ANIMATION_MS, type Step } from "./practiceSteps";
-import { lastMoveAt, positionAt, sanPathTo, type StudyTree } from "./tree";
+import { lastMoveAt, positionAt, sanPathTo, setLichessOrientation, type StudyTree } from "./tree";
 
 interface Study {
   id: number;
@@ -240,9 +240,10 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
    * Study editor's own "Open position in Lichess analysis" link. */
   function lichessAnalysisUrl(nodeId: number): string {
     const line = sanPathTo(tree, nodeId);
+    const color = boardOrientation === "black" ? "?color=black" : "";
     return line.length
-      ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}`
-      : "https://lichess.org/analysis";
+      ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}${color}`
+      : `https://lichess.org/analysis${color}`;
   }
 
   /** Every place the board's displayed position changes goes through here,
@@ -494,6 +495,7 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
   function flipBoard(): void {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     board.set({ orientation: boardOrientation });
+    setLichessOrientation(lichessAnalysisLink, boardOrientation);
   }
 
   flipBoardBtn.addEventListener("click", flipBoard);

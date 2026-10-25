@@ -42,6 +42,7 @@ import {
   renderTree,
   saveFolding,
   sanPathTo,
+  setLichessOrientation,
   siblingVariation,
   type StudyTree,
 } from "./tree";
@@ -248,6 +249,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   function syncOrientation(): void {
     gaugeEl.classList.toggle("eval-gauge--flipped", boardOrientation === "black");
     renderMaterial();
+    setLichessOrientation(lichessAnalysisLink, boardOrientation);
   }
 
   // Stockfish's top lines for the last position analysed, reused when only
@@ -378,7 +380,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     }
     // The whole line, so it can be stepped through on Lichess, opened at the
     // current move.
-    lichessAnalysisLink.href = lichessAnalysisUrl(line, sanPathTo(tree, currentId).length);
+    lichessAnalysisLink.href = lichessAnalysisUrl(line, sanPathTo(tree, currentId).length, boardOrientation);
 
     board.set({
       fen: chess.fen(),

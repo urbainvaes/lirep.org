@@ -450,7 +450,7 @@ export class BulletGame {
       nodeId: this.nodeId,
       played,
       expected,
-      analysisUrl: lichessAnalysisUrl(line, line.length),
+      analysisUrl: lichessAnalysisUrl(line, line.length, this.study.side),
       line,
     });
     void this.record(reason);

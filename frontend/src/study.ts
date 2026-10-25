@@ -67,6 +67,7 @@ import {
   renderTree,
   saveFolding,
   sanPathTo,
+  setLichessOrientation,
   siblingVariation,
   type StudyTree,
 } from "./tree";
@@ -740,6 +741,7 @@ function renderEditor(
   function syncOrientation(): void {
     gaugeEl.classList.toggle("eval-gauge--flipped", boardOrientation === "black");
     renderMaterial();
+    setLichessOrientation(lichessAnalysisLink, boardOrientation);
   }
 
   // Stockfish's top lines for the last position analysed, reused when only
@@ -1175,7 +1177,7 @@ function renderEditor(
     }
     // The whole line, so it can be stepped through on Lichess, opened at the
     // current move.
-    lichessAnalysisLink.href = lichessAnalysisUrl(line, sanPathTo(tree, currentId).length);
+    lichessAnalysisLink.href = lichessAnalysisUrl(line, sanPathTo(tree, currentId).length, boardOrientation);
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),

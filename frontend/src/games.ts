@@ -87,8 +87,8 @@ async function fetchLichessGame(id: string): Promise<string> {
 function lichessHref(p: ParsedGame, side: "white" | "black"): string {
   const site = p.headers.Site?.match(/^https:\/\/lichess\.org\/([a-zA-Z0-9]{8})$/);
   if (site) return `https://lichess.org/${site[1]}${side === "black" ? "/black" : ""}`;
-  if (p.startFen === STANDARD_START) return lichessAnalysisUrl(p.moves.map((m) => m.san), 0);
-  return `https://lichess.org/analysis/standard/${p.startFen.replace(/ /g, "_")}`;
+  if (p.startFen === STANDARD_START) return lichessAnalysisUrl(p.moves.map((m) => m.san), 0, side);
+  return `https://lichess.org/analysis/standard/${p.startFen.replace(/ /g, "_")}${side === "black" ? "?color=black" : ""}`;
 }
 
 async function api(url: string, method = "GET", body?: unknown): Promise<Response> {

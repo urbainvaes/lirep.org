@@ -27,11 +27,22 @@ export function createEmptyTree(): StudyTree {
 
 /** A Lichess analysis link to `line` (SAN moves from the initial position),
  * opened at its `ply`-th move: Lichess reads the ply from the #fragment and
- * would otherwise open a pasted line at its last move. */
-export function lichessAnalysisUrl(line: string[], ply: number): string {
+ * would otherwise open a pasted line at its last move. `orientation`: the
+ * side at the bottom there, as on our board. */
+export function lichessAnalysisUrl(line: string[], ply: number, orientation: "white" | "black" = "white"): string {
+  const color = orientation === "black" ? "?color=black" : "";
   return line.length
-    ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}#${ply}`
-    : "https://lichess.org/analysis";
+    ? `https://lichess.org/analysis/pgn/${line.map(encodeURIComponent).join("_")}${color}#${ply}`
+    : `https://lichess.org/analysis${color}`;
+}
+
+/** Sets the side at the bottom on a Lichess analysis link (the board was
+ * flipped). */
+export function setLichessOrientation(link: HTMLAnchorElement, orientation: "white" | "black"): void {
+  const url = new URL(link.href);
+  if (orientation === "black") url.searchParams.set("color", "black");
+  else url.searchParams.delete("color");
+  link.href = url.href;
 }
 
 export function pathTo(tree: StudyTree, nodeId: number): TreeNode[] {
