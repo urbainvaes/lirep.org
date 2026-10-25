@@ -215,9 +215,12 @@ function renderMove(
     ? '<span class="tree-move-unfetched" title="The expected score needs Opening Explorer data for the position after this move, not loaded yet: open this move to load it"></span>'
     : "";
   const stat = marks.moveStats?.get(nodeId);
-  const statMarker = stat
-    ? `<span class="tree-move-stat" title="Reached in ${(stat.probability * 100).toFixed(1)}% of games; expected score from here ${(stat.score * 100).toFixed(1)}%">${share(stat.probability)} · ${(stat.score * 100).toFixed(1)}%</span>`
-    : "";
+  // A score that isn't a number: the move isn't played in the Explorer's games.
+  const statMarker = !stat
+    ? ""
+    : Number.isNaN(stat.score)
+      ? '<span class="tree-move-stat" title="Not played in the Opening Explorer\'s games">0% · –</span>'
+      : `<span class="tree-move-stat" title="Reached in ${(stat.probability * 100).toFixed(1)}% of games; expected score from here ${(stat.score * 100).toFixed(1)}%">${share(stat.probability)} · ${(stat.score * 100).toFixed(1)}%</span>`;
   // The figures follow the move, outside it: not part of what is clicked or
   // highlighted.
   const flag = nodeId === studyStartNodeId && marks.startFlag

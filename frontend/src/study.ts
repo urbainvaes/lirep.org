@@ -990,9 +990,20 @@ function renderEditor(
     unfetched = new Map(needed.filter((_, i) => !loaded[i]));
     for (const [id, sum] of others) others.set(id, { probability: sum.probability, score: sum.score / sum.probability });
     const replies = branchReplies(start, side);
-    moveStats = new Map(replies.filter((id) => stats.has(id)).map((id) => [id, stats.get(id)!]));
+    // A reply the walk didn't reach with nothing missing on its way or after
+    // it isn't played in the Explorer's games (or the position before it
+    // has none): 0%, with no score, and nothing for Calculate to load.
+    const lacking = [...missing, ...missingEvaluations].map((m) => m.nodeId).filter((id) => id in tree.nodes);
+    const lacksData = (reply: number) => {
+      const above = new Set(pathTo(tree, reply).map((node) => node.id));
+      return lacking.some((id) => above.has(id) || pathTo(tree, id).some((node) => node.id === reply));
+    };
+    const unplayed = { probability: 0, score: NaN };
+    moveStats = new Map(
+      replies.filter((id) => stats.has(id) || !lacksData(id)).map((id) => [id, stats.get(id) ?? unplayed]),
+    );
     otherReplies = others;
-    const buttons = new Set(replies.filter((id) => !stats.has(id)));
+    const buttons = new Set(replies.filter((id) => !moveStats.has(id)));
     const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
     const valuedWith = leaf === "explorer" ? "Explorer results" : `${LEAF_VALUE_LABELS[leaf]} (Stockfish depth ${depth})`;
     if (missing.length || missingEvaluations.length) {
