@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -817,10 +818,26 @@ def get_practice_states(owner: str, study_id: int) -> dict[int, dict[str, Any]]:
     }
 
 
-def upsert_practice_state(
-    owner: str, study_id: int, node_id: int, streak: int, tau_days: float, last_seen_at: str
-) -> None:
+def record_practice_attempt(
+    owner: str,
+    study_id: int,
+    node_id: int,
+    correct: bool,
+    answered_at: str,
+    grade: Callable[[dict[str, Any] | None, bool], tuple[int, float]],
+) -> tuple[int, float]:
+    """Read, grade and log one answer atomically, serializing concurrent answers.
+
+    Acquire the write lock before reading so grading always sees the previous
+    committed answer. Any failure rolls back both state and activity logging.
+    """
     with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT streak, tau_days, last_seen_at FROM practice_state WHERE owner = ? AND study_id = ? AND node_id = ?",
+            (owner, study_id, node_id),
+        ).fetchone()
+        streak, tau_days = grade(dict(row) if row is not None else None, correct)
         conn.execute(
             """
             INSERT INTO practice_state (owner, study_id, node_id, streak, tau_days, last_seen_at)
@@ -828,16 +845,13 @@ def upsert_practice_state(
             ON CONFLICT(owner, study_id, node_id) DO UPDATE SET
                 streak = excluded.streak, tau_days = excluded.tau_days, last_seen_at = excluded.last_seen_at
             """,
-            (owner, study_id, node_id, streak, tau_days, last_seen_at),
+            (owner, study_id, node_id, streak, tau_days, answered_at),
         )
-
-
-def log_practice_answer(owner: str, study_id: int, node_id: int, correct: bool, answered_at: str) -> None:
-    with _connect() as conn:
         conn.execute(
             "INSERT INTO practice_log (owner, study_id, node_id, correct, answered_at) VALUES (?, ?, ?, ?, ?)",
             (owner, study_id, node_id, int(correct), answered_at),
         )
+    return streak, tau_days
 
 
 def practice_totals(owner: str) -> dict[int, dict[str, int]]:

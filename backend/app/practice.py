@@ -262,12 +262,10 @@ def record_attempt(study_id: int, payload: AttemptIn, request: Request) -> dict:
     if payload.nodeId not in _drill_item_nodes(study["tree"], start_node_id, study["side"]):
         raise HTTPException(status_code=400, detail="not a drill item for this study")
 
-    states = store.get_practice_states(owner, study_id)
-    prev = states.get(payload.nodeId)
-    streak, tau_days = apply_answer(prev, payload.correct)
     now = _when(payload.answeredAt)
-    store.upsert_practice_state(owner, study_id, payload.nodeId, streak, tau_days, now)
-    store.log_practice_answer(owner, study_id, payload.nodeId, payload.correct, now)
+    streak, tau_days = store.record_practice_attempt(
+        owner, study_id, payload.nodeId, payload.correct, now, apply_answer
+    )
 
     # Retention is exp(0) = 1.0 immediately after an attempt, so knowledge
     # right now is exactly streak/3 — no need to round-trip through
