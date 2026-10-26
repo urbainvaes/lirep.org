@@ -756,8 +756,7 @@ body {
   font-size: 0.8rem;
 }
 
-/* The opening moves' line close under it; and without a variation under
-   the title, a little more room above it. */
+/* The opening moves' line close under it. */
 .study-card__score + .study-card__line {
   margin-top: 2px;
 }
@@ -767,10 +766,6 @@ body {
   margin: 8px 0 0;
   color: var(--warn);
   font-size: 0.85rem;
-}
-
-.study-card__header:not(:has(.study-card__variation)) + .study-card__score {
-  margin-top: 4px;
 }
 
 /* The expected result: score / evaluation. On a leaderboard, the one it

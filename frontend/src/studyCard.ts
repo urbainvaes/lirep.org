@@ -163,10 +163,13 @@ export function splitStudyName(name: string): { opening: string; variation: stri
   return opening && variation ? { opening, variation } : { opening: name, variation: null };
 }
 
-/** The variation's line under a card's title, if the name has one. */
+/** The variation's line under a card's title; empty, but as tall, when
+ * the name has none, so that cards side by side line up. */
 export function variationHtml(name: string): string {
   const { variation } = splitStudyName(name);
-  return variation ? `<span class="study-card__variation">${escapeHtml(variation)}</span>` : "";
+  return variation
+    ? `<span class="study-card__variation">${escapeHtml(variation)}</span>`
+    : `<span class="study-card__variation" aria-hidden="true">&nbsp;</span>`;
 }
 
 /** A card's body, the same on the home page and the leaderboards: the
