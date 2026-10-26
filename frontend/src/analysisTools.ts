@@ -59,7 +59,7 @@ export function saveTools(tools: Set<Tool>): void {
 }
 
 // null when there's nothing to say (no starting point set, or it's just the
-// real root) — see starting-point.md.
+// real root) — see doc/starting-point.md.
 export function describeStartPoint(tree: StudyTree, startNodeId: number | null): string | null {
   if (startNodeId === null || startNodeId === tree.rootId) return null;
   const node = tree.nodes[startNodeId];

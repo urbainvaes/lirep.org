@@ -1,7 +1,7 @@
 # Stats page
 
-Deep-dive companion to ["The Stats page"](README.md#the-stats-page) and the
-general tree-walk idea in [§2 "Core idea"](README.md#2-core-idea). Win
+Deep-dive companion to ["The Stats page"](../README.md#the-stats-page) and the
+general tree-walk idea in [§2 "Core idea"](../README.md#2-core-idea). Win
 probability and coverage run in `backend/app/stats.py`; expected evaluation
 runs in `frontend/src/stat.ts`. Study cards on the home page are rendered by `frontend/src/studyCard.ts`.
 

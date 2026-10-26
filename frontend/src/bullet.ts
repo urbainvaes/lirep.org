@@ -1,4 +1,4 @@
-// Bullet practice, the website's page (see bullet.md and doc/bullet.html):
+// Bullet practice, the website's page (see doc/bullet.md and doc/bullet.html):
 // the game itself (the clock, the computer's replies, the options, the
 // runs' recording) is bulletRun.ts, shared with the mobile app; this is
 // its page: the board and clock, the options, the Explorer data's note, the

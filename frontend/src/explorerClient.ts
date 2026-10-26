@@ -7,7 +7,7 @@
 // Requests to Lichess are paced: one at a time, at least
 // EXPLORER_REQUEST_GAP_MS apart, and after a 429 everything waits
 // RATE_LIMIT_PAUSE_MS, as Lichess's API guidelines ask. Responses are cached
-// in IndexedDB (see explorer-cache.md).
+// in IndexedDB (see doc/explorer-cache.md).
 
 import { lirepExplorerUrl, type ExplorerData, type ExplorerSettings } from "./explorer";
 import { serverCacheEnabled, serverExplorerGet, serverExplorerSet } from "./serverCache";

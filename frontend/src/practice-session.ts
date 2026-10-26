@@ -63,7 +63,7 @@ async function loadStudy(id: number): Promise<Study | null> {
 }
 
 /** The next round's positions; optional when nothing is due or new, only
- * review (see practice.md §5). */
+ * review (see doc/practice.md §5). */
 interface Queue {
   nodeIds: number[];
   optional: boolean;

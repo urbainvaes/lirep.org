@@ -4,9 +4,9 @@ Design draft for a new tab: **choose a study, then drill it** — the app
 quizzes you on your own repertoire's book moves and keeps a per-position
 "knowledge" score that fades over time, so you always know what's actually
 solid versus what's gone rusty. This single-study practice feature is
-described in the README's [Practice section](README.md#the-practice-tab). It
+described in the README's [Practice section](../README.md#the-practice-tab). It
 uses the same study tree and optional [starting point](starting-point.md) as
-the Stats page; see [How it works](README.md#how-it-works) for the shared
+the Stats page; see [How it works](../README.md#how-it-works) for the shared
 Explorer-weighted tree model.
 
 **Status: implemented**, per the same "draft it, then build it" process used

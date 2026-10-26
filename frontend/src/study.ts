@@ -92,7 +92,7 @@ interface Study {
   stats: StudyStats | null;
   shared?: boolean;
   // null (the default) means calculations start at the tree's real root —
-  // see starting-point.md.
+  // see doc/starting-point.md.
   startNodeId: number | null;
   // Why its stored moves can't be read (store.py's _broken_study): then
   // it isn't opened, so nothing can save over them.
@@ -465,7 +465,7 @@ function renderEditor(
   let navigating = false;
   let currentId = tree.rootId;
   // null means "no override — calculations start at the tree's real root",
-  // the default. See starting-point.md.
+  // the default. See doc/starting-point.md.
   let startNodeId: number | null = existing?.startNodeId ?? null;
   let board: Api;
   let explorerRequestId = 0;
@@ -1225,7 +1225,7 @@ function renderEditor(
 
   // Resolves to the starting point when one is set (falling back to the
   // real root if it's somehow gone — same degrade-gracefully rule the
-  // backend's stats calculations use, see starting-point.md) — used both to
+  // backend's stats calculations use, see doc/starting-point.md) — used both to
   // open the editor and for "Go to start" / Up, so that action means
   // "back to where prep begins" rather than always the very first move.
   function goToStart(): void {
@@ -1605,7 +1605,7 @@ function renderEditor(
     }
     // The starting point may have lived inside the subtree just removed —
     // rather than pointing at a node that no longer exists, fall back to the
-    // default (the real root). See starting-point.md.
+    // default (the real root). See doc/starting-point.md.
     if (startNodeId !== null && !(startNodeId in tree.nodes)) startNodeId = null;
     goTo(parentId);
     scheduleAutoSave();

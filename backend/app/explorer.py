@@ -62,7 +62,7 @@ async def _resolve_min_rating(client: httpx.AsyncClient, headers: dict[str, str]
        stale is virtually always still correct, and "probably still right"
        beats "definitely fails" when the alternative is refusing to serve
        Explorer data that's sitting right there in cache. See
-       explorer-cache.md.
+       doc/explorer-cache.md.
     """
     if username:
         fresh = store.get_rating_cache(username)

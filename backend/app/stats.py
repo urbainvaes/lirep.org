@@ -3,7 +3,7 @@
 Both the expected score (with coverage) and the expected evaluation are
 calculated by the Stats page itself: the Opening Explorer requests behind
 them then come from the user's own browser and token, so each user stays
-within their own Lichess rate limit (see explorer-cache.md). The backend
+within their own Lichess rate limit (see doc/explorer-cache.md). The backend
 validates what it can and stores the results with the settings and moves
 they were calculated from.
 """
@@ -44,7 +44,7 @@ def _sans_to(tree: dict, node_id: int) -> list[str]:
 def _resolve_start_node_id(study: dict) -> int:
     """The node every calculation should treat as move one — a study's
     `startNodeId` if it's set and still exists in the current tree, else the
-    tree's real root. See starting-point.md: a stale id (its subtree got
+    tree's real root. See doc/starting-point.md: a stale id (its subtree got
     deleted since it was set) degrades to the default rather than erroring,
     the same instinct as every other fallback in this app."""
     start_node_id = study.get("startNodeId")

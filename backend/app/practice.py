@@ -1,5 +1,5 @@
 """Practice mode: drilling a study's own-side moves, with a per-position
-knowledge score that fades over time. See practice.md for the full design
+knowledge score that fades over time. See doc/practice.md for the full design
 writeup this implements.
 
 Unlike the Stats page's expected-score walk (which works *backward* from leaves to
@@ -21,7 +21,7 @@ from .stats import _get_node, _resolve_start_node_id, _sans_to
 
 router = APIRouter()
 
-# See practice.md §3/§8: hard-coded for v1 rather than a per-profile setting,
+# See doc/practice.md §3/§8: hard-coded for v1 rather than a per-profile setting,
 # since nothing else in the shipped app reads a profile file yet.
 TAU0_DAYS = 1.0
 RETENTION_FLOOR = 0.80
@@ -29,7 +29,7 @@ SESSION_SIZE = 20
 # The activity calendar's span: a year, with a day to spare for time zones.
 ACTIVITY_DAYS = 366
 # Bullet: the stats show successes out of all runs and out of this many
-# most recent ones. See bullet.md.
+# most recent ones. See doc/bullet.md.
 BULLET_RECENT_RUNS = 30
 # ...and successes in the last this many days, shown by the Bullet page.
 BULLET_MONTH_DAYS = 30
@@ -79,7 +79,7 @@ def _retention(tau_days: float, last_seen_at: str) -> float:
 
 def knowledge(state: dict | None) -> float | None:
     """0..1, or None if this position has never been attempted ("Not
-    started" in the UI — practice.md §3). Deliberately never stored: always
+    started" in the UI — doc/practice.md §3). Deliberately never stored: always
     recomputed from streak/tau_days/last_seen_at plus "now", so tuning the
     decay formula later needs no migration."""
     if state is None:
@@ -96,7 +96,7 @@ def is_due(state: dict | None) -> bool:
 
 
 def apply_answer(prev: dict | None, correct: bool) -> tuple[int, float]:
-    """(new_streak, new_tau_days) — practice.md §3. A wrong answer always
+    """(new_streak, new_tau_days) — doc/practice.md §3. A wrong answer always
     resets fully, whether or not this position had a history yet. A correct
     answer starts the stability at tau0 on the very first attempt, then
     doubles it (half-life regression) on every subsequent correct rep."""
@@ -181,7 +181,7 @@ def practice_queue(study_id: int, request: Request) -> dict:
     """Node ids to drill this session: due items first (staler retention
     first), then never-attempted items, capped at SESSION_SIZE. If neither
     exists, falls back to whatever isn't already at 100% knowledge yet (or,
-    failing that, everything) — see practice.md §5. The frontend walks the
+    failing that, everything) — see doc/practice.md §5. The frontend walks the
     tree itself (it already has the full tree from GET /api/studies/{id})
     and prompts only at the nodes in this list, auto-playing the rest — so
     this list isn't just *which* nodes to ask about, it's also what decides
@@ -213,7 +213,7 @@ def practice_queue(study_id: int, request: Request) -> dict:
         # (see knowledge()). Queuing everything indiscriminately would select
         # every drill-item node in the line, and since the frontend's walk
         # only *prompts* at selected nodes (everything else is silently
-        # auto-played — see practice.md §5), that would force you to
+        # auto-played — see doc/practice.md §5), that would force you to
         # re-answer a long fully-mastered prefix before ever reaching
         # whatever's actually worth reviewing. Excluding maxed-out nodes
         # means that prefix is no longer selected, so the walk auto-plays
@@ -278,7 +278,7 @@ def record_attempt(study_id: int, payload: AttemptIn, request: Request) -> dict:
 
 
 class BulletRunIn(BaseModel):
-    """A Bullet run, as the browser played it (see bullet.md): whether it
+    """A Bullet run, as the browser played it (see doc/bullet.md): whether it
     reached the end of the preparation in time, and if not why it ended."""
 
     model_config = ConfigDict(extra="forbid")
@@ -287,7 +287,7 @@ class BulletRunIn(BaseModel):
     reason: Literal["finished", "time", "wrong"]
     moves: int = Field(strict=True, ge=0, le=10_000)
     timeMs: int = Field(strict=True, ge=0, le=24 * 3600 * 1000)
-    # How the run's line was chosen (see bullet.md). Missing from pages
+    # How the run's line was chosen (see doc/bullet.md). Missing from pages
     # loaded before the choice existed: the Explorer's frequencies.
     selection: Literal["explorer", "uniform", "cycle"] = "explorer"
     # When it ended, if earlier than now (sent late, see _when).

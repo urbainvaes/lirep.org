@@ -1,6 +1,6 @@
 # Opening Explorer and evaluation caches
 
-Companion to the [Opening Explorer panel](README.md#the-study-page) and
+Companion to the [Opening Explorer panel](../README.md#the-study-page) and
 [stats.md's calculations](stats.md#4-two-calculations). Where each piece of
 data lives:
 

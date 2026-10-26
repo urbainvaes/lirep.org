@@ -1,4 +1,4 @@
-// A Bullet run's game (see bullet.md), apart from any page: shared by the
+// A Bullet run's game (see doc/bullet.md), apart from any page: shared by the
 // website's Bullet page (bullet.ts) and the mobile app's.
 //
 // From the study's starting point, the computer plays the opponent's replies

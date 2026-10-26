@@ -1,5 +1,5 @@
 // The walk through a study that a practice session follows (see
-// practice.md §5): shared by the website's session (practice-session.ts)
+// doc/practice.md §5): shared by the website's session (practice-session.ts)
 // and the mobile app's.
 
 import type { StudyTree } from "./tree";
@@ -20,7 +20,7 @@ export type Step = { nodeId: number; quiz: boolean };
  * ancestor, or an opponent reply, or one of your own moves that isn't due
  * this session). Everything outside this set — a whole variation with
  * nothing due or new in it — is skipped entirely rather than walked
- * through for no reason. See practice.md §5; this is a simplification of
+ * through for no reason. See doc/practice.md §5; this is a simplification of
  * its "sample opponent replies" idea: since every branch that matters gets
  * walked deterministically here, there's nothing left to sample. */
 export function buildSteps(tree: StudyTree, startNodeId: number, selected: Set<number>): Step[] {

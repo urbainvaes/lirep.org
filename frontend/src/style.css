@@ -3260,7 +3260,7 @@ button.tree-calc:hover {
   color: #fff;
 }
 
-/* The study's starting point (see starting-point.md). */
+/* The study's starting point (see doc/starting-point.md). */
 .tree-move--start-point {
   color: var(--info);
 }
@@ -3923,7 +3923,7 @@ details[open] > summary.tree-fold__head::before {
   }
 }
 
-/* Practice tab — see practice.md. */
+/* Practice tab — see doc/practice.md. */
 
 .practice-grid {
   display: grid;

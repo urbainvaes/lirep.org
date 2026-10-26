@@ -30,7 +30,7 @@ DEFAULT_SIDE = "white"
 # How long a resolved "my current rating" bucket is trusted before
 # re-checking Lichess. Persisted (not in-memory) specifically so a backend
 # restart can't silently erase a still-fresh resolution and force a live
-# account call it didn't actually need — see explorer-cache.md.
+# account call it didn't actually need — see doc/explorer-cache.md.
 RATING_CACHE_TTL_SECONDS = 60 * 60
 
 
@@ -185,7 +185,7 @@ def init_db() -> None:
         )
 
         # Lichess Explorer responses used to be cached here; the browser now
-        # queries Lichess itself and caches them (see explorer-cache.md).
+        # queries Lichess itself and caches them (see doc/explorer-cache.md).
         conn.execute("DROP TABLE IF EXISTS explorer_cache")
 
         # Games attached to a study (its Games page): the PGN (with the
@@ -279,7 +279,7 @@ def init_db() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS practice_log_owner ON practice_log (owner, answered_at)")
 
-        # One row per Bullet run (see bullet.md): the Practice page shows
+        # One row per Bullet run (see doc/bullet.md): the Practice page shows
         # successes out of all runs, and out of the last BULLET_RECENT_RUNS.
         # Like practice_log, it outlives the study.
         conn.execute(
@@ -360,7 +360,7 @@ def _row_to_study(row: sqlite3.Row, *, replay: bool = True) -> dict[str, Any]:
         "stats": json.loads(row["stats"]) if row["stats"] else None,
         "evals": json.loads(row["evals"]) if row["evals"] else None,
         # None means "no override — calculations start at the tree's real
-        # root", the default for every study. See starting-point.md.
+        # root", the default for every study. See doc/starting-point.md.
         "startNodeId": row["start_node_id"],
         "shared": bool(row["shared"]),
         "archived": row["archived_at"] is not None,
@@ -907,7 +907,7 @@ def set_rating_cache(username: str, bucket: int, fetched_at: str) -> None:
 def get_practice_states(owner: str, study_id: int) -> dict[int, dict[str, Any]]:
     """Every drill-item node this study has ever recorded an attempt for,
     keyed by node_id. A node missing from the result has never been
-    attempted ("new" — see practice.md §3); there's deliberately no row for
+    attempted ("new" — see doc/practice.md §3); there's deliberately no row for
     it until the first attempt, rather than a zeroed-out row up front, so
     "never attempted" and "attempted and reset to streak 0" stay
     distinguishable at the storage layer too."""

@@ -309,7 +309,7 @@ function formatCount(n: number): string {
 }
 
 // This data is served from a persistent, cross-study cache (see
-// explorer-cache.md) rather than fetched fresh every time, so it's worth
+// doc/explorer-cache.md) rather than fetched fresh every time, so it's worth
 // showing how stale it might be rather than implying it's always live.
 function formatFetchedAt(iso: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);

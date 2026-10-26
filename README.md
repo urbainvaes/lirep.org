@@ -47,7 +47,7 @@ created. The optional starting point tells Stats and Practice where to begin.
 The editor's Stockfish analysis runs locally in a Web Worker using the bundled
 WASM engine. Explorer settings (data source, database, rating threshold and
 time controls) are saved per study. See the [Studies guide](frontend/doc/studies.html)
-and [starting-point notes](starting-point.md).
+and [starting-point notes](doc/starting-point.md).
 
 ### The Stats page
 
@@ -66,7 +66,7 @@ Expected evaluation is calculated in your browser; positions are cached in
 that browser's IndexedDB and are not synced between devices. Calculations are
 manual and can be run separately. These are estimates: Explorer data omits
 some moves and the result depends on the selected pool and your study tree.
-See [stats.md](stats.md) for calculation details and assumptions.
+See [stats.md](doc/stats.md) for calculation details and assumptions.
 
 ### The Practice tab
 
@@ -74,7 +74,7 @@ Practice drills only the studied side's moves; opponent replies are played for
 you. Sessions combine positions due for review with positions you have not
 practiced yet, up to 20 items. A position's knowledge score is based on its
 correct-answer streak and a simple forgetting curve. Practice state is stored
-per account, study and position in SQLite. See [practice.md](practice.md) for
+per account, study and position in SQLite. See [practice.md](doc/practice.md) for
 the implementation and design details.
 
 ### Community
@@ -158,7 +158,7 @@ token, so every user stays within their own rate limit: one request at a
 time, at least 500 ms apart, pausing a minute after a 429. Its responses are
 cached in the browser (30 days, 24 hours for an individual player's games);
 local Lirep responses are fetched fresh through the backend. Stockfish evaluations are cached separately in the local
-browser. More detail is in [explorer-cache.md](explorer-cache.md).
+browser. More detail is in [explorer-cache.md](doc/explorer-cache.md).
 
 ## Deployment
 
@@ -193,8 +193,8 @@ explorer/          Optional local Lichess Explorer and archive instructions
 deploy/            Guix packages and local/remote deployment scripts
 ```
 
-Useful implementation notes: [stats.md](stats.md), [practice.md](practice.md),
-[explorer-cache.md](explorer-cache.md), and [starting-point.md](starting-point.md).
+Useful implementation notes: [stats.md](doc/stats.md), [practice.md](doc/practice.md),
+[explorer-cache.md](doc/explorer-cache.md), and [starting-point.md](doc/starting-point.md).
 
 ## License
 

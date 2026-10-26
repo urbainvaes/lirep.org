@@ -22,7 +22,7 @@ Built both applications and inspected local Chromium renders using synthetic acc
 
 ### 1. Make public sharing visible before a study is created
 
-**Evidence: Source and rendered first-use editor.** [study.ts](frontend/src/study.ts), [store.py](backend/app/store.py), [main.ts](frontend/src/main.ts).
+**Evidence: Source and rendered first-use editor.** [study.ts](../frontend/src/study.ts), [store.py](../backend/app/store.py), [main.ts](../frontend/src/main.ts).
 
 New studies are shared by default, and naming a study starts autosaving. The sharing control is inside the overflow menu, whose containing links are hidden until the first save. Someone can publish preparation and comments before encountering a visibility choice. Imports from files also use the create endpoint's public default, while duplication and Community imports produce private copies. These different defaults are hard to infer.
 
@@ -32,7 +32,7 @@ New studies are shared by default, and naming a study starts autosaving. The sha
 
 ### 2. Fix the new-study header at phone widths
 
-**Evidence: Rendered and measured.** [style.css](frontend/src/style.css), `.study-head__title`, `.study-name-input`, `.study-save-status`; [study.ts](frontend/src/study.ts).
+**Evidence: Rendered and measured.** [style.css](../frontend/src/style.css), `.study-head__title`, `.study-name-input`, `.study-save-status`; [study.ts](../frontend/src/study.ts).
 
 At 390 × 844, the new-study page had a document scroll width of **502 px**. The side selector, name field and single-line autosave message competed for the same header row. The name placeholder was compressed and the save instruction ran off-screen. The existing-study preview did not have the same page overflow, so testing only saved studies would miss this.
 
@@ -42,7 +42,7 @@ At 390 × 844, the new-study page had a document scroll width of **502 px**. The
 
 ### 3. Provide recovery for deleting a move and its entire subtree
 
-**Evidence: Source.** [study.ts](frontend/src/study.ts), `deleteCurrentMove()` and keyboard handler; [tree.ts](frontend/src/tree.ts), `deleteSubtree()`.
+**Evidence: Source.** [study.ts](../frontend/src/study.ts), `deleteCurrentMove()` and keyboard handler; [tree.ts](../frontend/src/tree.ts), `deleteSubtree()`.
 
 Deleting a selected move removes all descendants and autosaves immediately. Both Delete and Backspace trigger it outside form fields. There is no move-edit undo/redo or recovery action. In contrast, archiving a study already offers Undo and deleting the whole study asks for confirmation. Losing a large branch through one small action is a disproportionate consequence.
 
@@ -52,7 +52,7 @@ Deleting a selected move removes all descendants and autosaves immediately. Both
 
 ### 4. Distinguish an empty collection from a failed load
 
-**Evidence: Rendered simulated HTTP 503 and source.** [main.ts](frontend/src/main.ts), [practice.ts](frontend/src/practice.ts), [study.ts](frontend/src/study.ts).
+**Evidence: Rendered simulated HTTP 503 and source.** [main.ts](../frontend/src/main.ts), [practice.ts](../frontend/src/practice.ts), [study.ts](../frontend/src/study.ts).
 
 When the study-list request failed, Home rendered only the two new-study cards, exactly as if the account had no studies. Practice similarly falls back to “No studies yet” after loading errors. A failed practice-summary request can make populated studies appear to have no practice moves. The editor also maps unsuccessful study responses to “Study not found.” These messages can suggest that work disappeared.
 
@@ -62,7 +62,7 @@ When the study-list request failed, Home rendered only the two new-study cards, 
 
 ### 5. Make the core chess tasks accessible beyond pointer input
 
-**Evidence: Source; assistive-technology testing remains outstanding.** [board.ts](frontend/src/board.ts), [tree.ts](frontend/src/tree.ts), [practice-session.ts](frontend/src/practice-session.ts), [mobile analysis.ts](mobile/src/analysis.ts).
+**Evidence: Source; assistive-technology testing remains outstanding.** [board.ts](../frontend/src/board.ts), [tree.ts](../frontend/src/tree.ts), [practice-session.ts](../frontend/src/practice-session.ts), [mobile analysis.ts](../mobile/src/analysis.ts).
 
 The editor has useful global arrow-key navigation, but individual move entries are clickable spans without selected-state semantics or a focus model. Board move entry has no application-provided keyboard/SAN alternative, which is particularly limiting in practice. Desktop feedback lacks mobile's live announcement region. Mobile analysis is a dynamically inserted layer without dialog semantics, focus containment or explicit focus restoration.
 
@@ -74,7 +74,7 @@ The editor has useful global arrow-key navigation, but individual move entries a
 
 ### 6. Use one evaluation perspective everywhere
 
-**Evidence: Source.** [stat.ts](frontend/src/stat.ts), [scoreTiers.ts](frontend/src/scoreTiers.ts), [studyCard.ts](frontend/src/studyCard.ts).
+**Evidence: Source.** [stat.ts](../frontend/src/stat.ts), [scoreTiers.ts](../frontend/src/scoreTiers.ts), [studyCard.ts](../frontend/src/studyCard.ts).
 
 `formatExpectedEval()` displays evaluations from White's perspective, including for Black studies. Card help and the badge legend describe this convention correctly. The Stats evaluation description instead says the value is from the studied side's perspective. For Black, a negative number can therefore mean an advantage while its nearby explanation implies the opposite.
 
@@ -84,7 +84,7 @@ The editor has useful global arrow-key navigation, but individual move entries a
 
 ### 7. Give Studies a consistent destination across desktop and mobile
 
-**Evidence: Rendered and source.** [mobile/src/lists.ts](mobile/src/lists.ts), [studyCard.ts](frontend/src/studyCard.ts), [index.html](frontend/index.html), [opening.ts](frontend/src/opening.ts).
+**Evidence: Rendered and source.** [mobile/src/lists.ts](../mobile/src/lists.ts), [studyCard.ts](../frontend/src/studyCard.ts), [index.html](../frontend/index.html), [opening.ts](../frontend/src/opening.ts).
 
 Desktop study cards expose Edit and Practice separately. In mobile, the Studies row now opens the study read-only (its moves, along the prep) and its chart icon a stats screen linking to the website's editor and Stats; the Practice row opens a practice session. Desktop's home/study collection is reached through the logo rather than an explicit Studies navigation item. Signing in from a public opening uses a generic login link and loses the specific import context; mobile already preserves its destination.
 
@@ -94,7 +94,7 @@ Desktop study cards expose Edit and Practice separately. In mobile, the Studies 
 
 ### 8. Put the next practice action ahead of the activity dashboard
 
-**Evidence: Rendered desktop Practice and mobile list; source.** [practice.ts](frontend/src/practice.ts), [practiceActivity.ts](frontend/src/practiceActivity.ts), [mobile/src/lists.ts](mobile/src/lists.ts).
+**Evidence: Rendered desktop Practice and mobile list; source.** [practice.ts](../frontend/src/practice.ts), [practiceActivity.ts](../frontend/src/practiceActivity.ts), [mobile/src/lists.ts](../mobile/src/lists.ts).
 
 Desktop Practice begins with the yearly activity grid and internal rankings, then separates White and Black cards. In the preview, the second repertoire's action fell below the initial viewport. The main practice buttons on those cards are icons. There is no prominent aggregate “Start review” action or default due-first path. Mobile does show a total due count, creating a useful pattern desktop could share.
 
@@ -104,7 +104,7 @@ Desktop Practice begins with the yearly activity grid and internal rankings, the
 
 ### 11. Explain missing metrics and simplify the two-dimensional badge
 
-**Evidence: Rendered uncalculated studies and source.** [studyCard.ts](frontend/src/studyCard.ts), [scoreTiers.ts](frontend/src/scoreTiers.ts), [mobile/src/lists.ts](mobile/src/lists.ts).
+**Evidence: Rendered uncalculated studies and source.** [studyCard.ts](../frontend/src/studyCard.ts), [scoreTiers.ts](../frontend/src/scoreTiers.ts), [mobile/src/lists.ts](../mobile/src/lists.ts).
 
 Home presents “Expected result — / —”; mobile presents “— · —.” The first number is expected score, the second is evaluation, but their names and units are largely left to hover help. A chess piece's color encodes one metric and its rank encodes another. An uncalculated study receives a gray pawn, which resembles a low-performing study rather than an unknown result. Home/mobile cards also omit the freshness context available on Stats.
 
@@ -114,7 +114,7 @@ Home presents “Expected result — / —”; mobile presents “— · —.”
 
 ### 12. Introduce tools progressively instead of starting with unexplained controls
 
-**Evidence: Rendered fresh editor and source.** [analysisTools.ts](frontend/src/analysisTools.ts), [study.ts](frontend/src/study.ts), [style.css](frontend/src/style.css).
+**Evidence: Rendered fresh editor and source.** [analysisTools.ts](../frontend/src/analysisTools.ts), [study.ts](../frontend/src/study.ts), [style.css](../frontend/src/style.css).
 
 Explorer and Stockfish both start off in a fresh browser. The empty move list says to play moves, but does not explain the single-prepared-move constraint, how to branch for the opponent or how to use the analysis tools. At widths below 600 px, tool names disappear and leave symbols plus toggles. Settings and suggested moves are also icon-only. Their low visual emphasis makes disabled-looking and available-but-off controls easy to confuse.
 
@@ -124,7 +124,7 @@ Explorer and Stockfish both start off in a fresh browser. The empty move list sa
 
 ### 13. Clarify calculation scope, settings persistence and cancellation
 
-**Evidence: Rendered empty Stats and source.** [stat.ts](frontend/src/stat.ts), [study.ts](frontend/src/study.ts), [explorerClient.ts](frontend/src/explorerClient.ts).
+**Evidence: Rendered empty Stats and source.** [stat.ts](../frontend/src/stat.ts), [study.ts](../frontend/src/study.ts), [explorerClient.ts](../frontend/src/explorerClient.ts).
 
 The editor has Calculate for move-tree figures, Stats has a global Recalculate plus two identically labeled per-metric buttons, and the settings panel closes with Done. In Stats, Done only collapses the panel; settings persist through a successful calculation, while editor settings autosave. A new user cannot readily infer these different save/apply rules. Lengthy engine work and rate-limit waits provide progress but no explicit cancellation control. The empty coverage chart also reserves substantial space before there is anything to show.
 
@@ -134,7 +134,7 @@ The editor has Calculate for move-tree figures, Stats has a global Recalculate p
 
 ### 14. Increase small touch targets and strengthen primary-button contrast
 
-**Evidence: Measured rendered controls and palette calculation.** [style.css](frontend/src/style.css), [mobile/src/style.css](mobile/src/style.css).
+**Evidence: Measured rendered controls and palette calculation.** [style.css](../frontend/src/style.css), [mobile/src/style.css](../mobile/src/style.css).
 
 On the responsive desktop Home, archive/duplicate controls measured **22 × 22 px**. Editor folding switches measured about **19 px high**, and the rename control was **24 × 24 px**. Mobile's main controls use a more generous 44 px baseline. White text against the dark-theme primary blue `#3692e7` computes to roughly **3.27:1** contrast; primary buttons use small text, so this deserves attention independently of overall dark-theme readability.
 
@@ -144,7 +144,7 @@ On the responsive desktop Home, archive/duplicate controls measured **22 × 22 p
 
 ### 15. Make Community useful for discovery as well as competition
 
-**Evidence: Source.** [community.ts](frontend/src/community.ts), [community.py](backend/app/community.py), [landing.ts](frontend/src/landing.ts).
+**Evidence: Source.** [community.ts](../frontend/src/community.ts), [community.py](../backend/app/community.py), [landing.ts](../frontend/src/landing.ts).
 
 The landing page offers “Browse community openings,” but the main destination emphasizes leaderboards and strongest players. The ranked API returns only a limited set per side and excludes uncalculated studies; the page has no general searchable repertoire catalogue. It also asks readers to compare matching rating bands/time controls even though the ranking combines different settings. Badges and rank can imply greater comparability than that caveat supports.
 
@@ -156,7 +156,7 @@ The landing page offers “Browse community openings,” but the main destinatio
 
 ### 16. Reveal complete titles and previews on touch and keyboard
 
-**Evidence: Rendered long titles and source.** [studyCard.ts](frontend/src/studyCard.ts), [miniBoard.ts](frontend/src/miniBoard.ts), [mobile/src/style.css](mobile/src/style.css).
+**Evidence: Rendered long titles and source.** [studyCard.ts](../frontend/src/studyCard.ts), [miniBoard.ts](../frontend/src/miniBoard.ts), [mobile/src/style.css](../mobile/src/style.css).
 
 Desktop card titles truncate and scroll on mouse hover. Mobile row titles truncate too. Mini-board replay starts only on mouse pointer entry, so touch/keyboard users do not receive the same preview. The full title is available after opening, but that makes comparing similarly named repertoires unnecessarily difficult.
 
@@ -164,7 +164,7 @@ Desktop card titles truncate and scroll on mouse hover. Mobile row titles trunca
 
 ### 17. Standardize vocabulary and navigation labels
 
-**Evidence: Source and renders.** [layout.ts](frontend/src/layout.ts), [studyCard.ts](frontend/src/studyCard.ts), [practice.ts](frontend/src/practice.ts), [mobile/src/lists.ts](mobile/src/lists.ts).
+**Evidence: Source and renders.** [layout.ts](../frontend/src/layout.ts), [studyCard.ts](../frontend/src/studyCard.ts), [practice.ts](../frontend/src/practice.ts), [mobile/src/lists.ts](../mobile/src/lists.ts).
 
 The app alternates among study, opening and repertoire; Expected result and Expected score; Knowledge and percent known; Sign in and Log out. Bullet has a compact icon but means a particular training mode, not simply the Lichess time control. None of these choices is inherently wrong, but their combination raises the amount a new user must infer.
 
@@ -172,7 +172,7 @@ The app alternates among study, opening and repertoire; Expected result and Expe
 
 ### 18. Give the landing page one primary action and disclose access limits earlier
 
-**Evidence: Rendered mobile landing and source.** [landing.ts](frontend/src/landing.ts), [auth.py](backend/app/auth.py), [community.ts](frontend/src/community.ts).
+**Evidence: Rendered mobile landing and source.** [landing.ts](../frontend/src/landing.ts), [auth.py](../backend/app/auth.py), [community.ts](../frontend/src/community.ts).
 
 Sign in and Browse community openings have equal primary styling; the public browsing button is visually larger on the narrow preview. The app can also refuse new accounts after the beta user limit is reached, but the landing sign-in promise does not surface that condition before the external OAuth journey. Community/profile expose the limit elsewhere.
 
@@ -180,7 +180,7 @@ Sign in and Browse community openings have equal primary styling; the public bro
 
 ### 19. Consolidate shared design patterns and update the design notes
 
-**Evidence: Source.** [design.md](design.md), [style.css](frontend/src/style.css), [mobile/src/style.css](mobile/src/style.css), [treeViewer.ts](frontend/src/treeViewer.ts).
+**Evidence: Source.** [design.md](design.md), [style.css](../frontend/src/style.css), [mobile/src/style.css](../mobile/src/style.css), [treeViewer.ts](../frontend/src/treeViewer.ts).
 
 Desktop/mobile already share chess logic but duplicate palette and component rules. Both themes, button sizing, status wording and analysis behavior can drift. `design.md` also describes older states: it says there are only five media rules, proposes screenshots that now exist, describes mutually exclusive analysis tabs although the current tools can both be enabled, and says the shared viewer still uses the old layout despite its shared editor-style structure.
 

@@ -101,7 +101,7 @@ interface Study {
   stats: StudyStats | null;
   evals: StudyEvals | null;
   // null (the default) means every stat below is calculated from the tree's
-  // real root — see starting-point.md.
+  // real root — see doc/starting-point.md.
   startNodeId: number | null;
   shared: boolean;
   // Changes whenever the moves or the starting point do; see moves_fingerprint
@@ -238,7 +238,7 @@ function sameExplorerSettings(a: CalculationSettings, b: CalculationSettings): b
 }
 
 // null when there's nothing to say (no starting point set, or it's just the
-// real root) — see starting-point.md.
+// real root) — see doc/starting-point.md.
 function describeStartPoint(tree: StudyTree, startNodeId: number | null): string | null {
   if (startNodeId === null || startNodeId === tree.rootId) return null;
   const node = tree.nodes[startNodeId];

@@ -1,4 +1,4 @@
-// Bullet on one study, as on the website (bullet.md): the game is the
+// Bullet on one study, as on the website (doc/bullet.md): the game is the
 // website's (bulletRun.ts); this is its screen for a phone. The board across
 // the screen; under it the clock and Start; two toggles for the options; the
 // result of each run.

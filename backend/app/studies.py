@@ -57,7 +57,7 @@ class StudyIn(BaseModel):
     explorerSettings: ExplorerSettings = ExplorerSettings()
     side: Literal["white", "black"] = "white"
     # None (the default) means "no override — calculations start at the
-    # tree's real root". See starting-point.md.
+    # tree's real root". See doc/starting-point.md.
     startNodeId: int | None = None
 
 

@@ -1,5 +1,5 @@
 // A practice session on one study, as on the website (practice-session.ts,
-// practice.md): the server's queue says which of your moves to ask; the
+// doc/practice.md): the server's queue says which of your moves to ask; the
 // walk (practiceSteps.ts) plays the rest. A first answer is recorded (seeing
 // the answer first counts as a miss); after a wrong one you may try again or
 // see the answer. When a round is done, the next one loads while positions
