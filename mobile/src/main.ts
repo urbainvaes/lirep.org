@@ -51,9 +51,10 @@ async function route(): Promise<void> {
     else if (bullet) leave = await renderBullet(app, Number(bullet[1]));
     else if (view) leave = await renderStudyView(app, Number(view[1]));
     else if (stats) await renderStats(app, Number(stats[1]), () => location.hash === hash);
-    else if (hash.startsWith("#/practice")) await renderPracticeList(app);
+    else if (hash.startsWith("#/studies")) await renderStudies(app);
     else if (hash.startsWith("#/community")) await renderCommunity(app, hash === "#/community/eval" ? "eval" : "score");
-    else await renderStudies(app);
+    // Practice is the home screen (#/; #/practice too, as it used to be).
+    else await renderPracticeList(app);
   } catch (err) {
     if (err instanceof SignedOut) return signedOut();
     app.innerHTML = `

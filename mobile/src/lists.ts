@@ -25,8 +25,8 @@ export function shell(tab: Tab, title: string, aside: string, body: string, back
     </header>
     <main class="list">${body}</main>
     <nav class="tabs" aria-label="Screens">
-      ${link("studies", "#/", STUDIES_ICON, "Studies")}
-      ${link("practice", "#/practice", PRACTICE_ICON, "Practice")}
+      ${link("studies", "#/studies", STUDIES_ICON, "Studies")}
+      ${link("practice", "#/", PRACTICE_ICON, "Practice")}
       ${link("community", "#/community", COMMUNITY_ICON, "Community")}
     </nav>
   `;

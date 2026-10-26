@@ -17,7 +17,7 @@ export async function renderStudyView(app: HTMLElement, id: number): Promise<() 
     explorerSettings: study.explorerSettings,
     tree: study.tree,
     title: study.name,
-    screen: { root: app, back: "#/" },
+    screen: { root: app, back: "#/studies" },
     onClose: () => {},
   });
 }

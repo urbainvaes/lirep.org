@@ -23,9 +23,9 @@ and the website always compute and record the same things.
   order, with how often each is played when the Explorer's answer is already
   in the browser; a move's comment above them. Moves off the prep are greyed,
   with "Back to prep".
-- **Practice** (the website's Practice page): each study's knowledge, as a
-  ring, and its positions due and new, in the same order as Studies, and the
-  total due at the top.
+- **Practice** (the website's Practice page), the app's home screen: each
+  study's knowledge, as a ring, and its positions due and new, in the same
+  order as Studies, and the total due at the top.
 - **A practice session**, from Practice or a study's stats: the board across the screen, the
   same queue and rules as on the website (`practice.md`), your answers
   recorded the same way; a dot per answer (green, red), the board's flip, and

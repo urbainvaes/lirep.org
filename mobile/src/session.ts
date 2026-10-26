@@ -31,7 +31,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   app.innerHTML = `
     <div class="session">
       <header class="bar">
-        <a class="bar__back" href="#/practice" aria-label="Back">‹</a>
+        <a class="bar__back" href="#/" aria-label="Back">‹</a>
         <h1 class="bar__title">${escapeHtml(study.name)}</h1>
         <span class="bar__aside" id="knowledge" title="Known"></span>
       </header>
@@ -51,7 +51,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
         <button class="icon-button" type="button" id="analysis" aria-label="Analysis" title="Analysis">${ANALYSIS_ICON}</button>
         <button class="icon-button" type="button" id="previous" aria-label="The previous question, in the analysis" title="Previous question" disabled>${PREVIOUS_ICON}</button>
         <button class="button" type="button" id="answer" title="Counts as a miss if you haven't answered" hidden>Show answer</button>
-        <a class="button" href="#/practice" id="done" hidden>Done</a>
+        <a class="button" href="#/" id="done" hidden>Done</a>
         <button class="button" type="button" id="more" hidden>Practise more</button>
       </div>
       <div class="done" id="full" hidden>

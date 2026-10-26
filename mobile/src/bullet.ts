@@ -39,7 +39,7 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
   app.innerHTML = `
     <div class="session bullet">
       <header class="bar">
-        <a class="bar__back" href="#/practice" aria-label="Back">‹</a>
+        <a class="bar__back" href="#/" aria-label="Back">‹</a>
         <h1 class="bar__title">${escapeHtml(study.name)}</h1>
         <span class="bar__aside" id="stats" title="Successes in the last month"></span>
       </header>
