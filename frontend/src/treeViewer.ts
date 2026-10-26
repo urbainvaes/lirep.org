@@ -12,7 +12,6 @@ import {
   missingPopularMoves,
   moveShares,
   QUALITY_BRUSHES,
-  saveEngineDepth,
   saveTools,
   sanToUci,
   toolTabsHtml,
@@ -22,7 +21,10 @@ import {
 import { createBoard, toColor } from "./board";
 import { Engine, whiteGaugeShare, type EngineAnalysis } from "./engine";
 import {
+  bindExplorerSettingsForm,
+  explorerSettingsFormHtml,
   explorerSummary,
+  fetchExplorerDefaults,
   renderExplorer,
   renderExplorerError,
   renderExplorerLoading,
@@ -49,9 +51,12 @@ import {
 
 // A read-only view of a move tree: a shared opening (opening.ts) or one of
 // a study's games (games.ts). It is laid out like the study editor, with the
-// same board column and tools (whose on/off switches and Stockfish depth it
-// shares with the editor), but moves on the board are not accepted (no free
-// play) and the Explorer uses the given settings.
+// same board column and tools (whose on/off switches it shares with the
+// editor, and whose Stockfish depth starts at the editor's), but moves on the
+// board are not accepted (no free play) and the Explorer uses the given
+// settings. With `settings`, a gear changes the Explorer's settings and
+// Stockfish's depth for the page only: nothing is saved, so the study, its
+// stats and the editor keep theirs.
 
 export interface TreeView {
   tree: StudyTree;
@@ -64,8 +69,22 @@ export interface TreeView {
   bylineHtml: string;
   /** The keyboard help's first line. */
   intro: string;
-  /** An extra card in the side column, under the moves (as HTML). */
-  extraCardHtml?: string;
+  /** Extra buttons beside the fold switches (as HTML). */
+  actionsHtml?: string;
+  /** Extra lines of the keyboard help, before F (as HTML). */
+  shortcutsHtml?: string;
+  /** Under the moves, in their card (as HTML). */
+  belowMovesHtml?: string;
+  /** The caller shows (and edits) the comments on positions itself, in
+   * `belowMovesHtml`, rather than under the moves as text. */
+  ownComments?: boolean;
+  /** Called on reaching a position. */
+  onPosition?: (nodeId: number) => void;
+  /** The Explorer without the editor's marks (✓ on the tree's moves, common
+   * replies without an answer flagged): just the Explorer's moves. */
+  plainExplorer?: boolean;
+  /** The gear, for the page's own Explorer settings and Stockfish depth. */
+  settings?: boolean;
 }
 
 /** Renders the view into `main`; returns the header's links area, for the
@@ -97,6 +116,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
             <div class="study-card study-card--moves">
               <div class="study-actions">
                 ${FOLD_SWITCHES_HTML}
+                ${view.actionsHtml ?? ""}
                 <a id="open-lichess-analysis" class="btn btn-secondary study-icon-btn" data-icon="&#xe05f;" aria-label="Open position in Lichess analysis" title="Open position in Lichess analysis" href="https://lichess.org/analysis" target="_blank" rel="noopener noreferrer"></a>
                 <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
               </div>
@@ -107,6 +127,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
                   <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
                   <li><kbd>↑</kbd> / <kbd>↓</kbd> Previous / next variation</li>
                   <li><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
+                  ${view.shortcutsHtml ?? ""}
                   <li><kbd>F</kbd> Flip the board</li>
                   ${FOCUS_SHORTCUT_HTML}
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
@@ -114,18 +135,37 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
               </div>
               <div id="tree-view" class="tree-view"></div>
               <p id="opening-comment" class="opening-comment" hidden></p>
+              ${view.belowMovesHtml ?? ""}
             </div>
-            ${view.extraCardHtml ?? ""}
 
             <div class="study-card study-card--tools">
               <div id="tool-explorer" class="tool-panel tool-panel--explorer">
                 <div class="explorer-settings-line">
-                  <span title="The author's Explorer settings">${escapeHtml(explorerSummary(view.explorerSettings))}</span>
+                  <span id="explorer-summary" title="${view.settings ? "The study's Explorer settings, unless changed with the gear" : "The author's Explorer settings"}">${escapeHtml(explorerSummary(view.explorerSettings))}</span>
                 </div>
                 <div id="explorer-panel" class="explorer-panel"></div>
               </div>
+              ${
+                view.settings
+                  ? `<div id="tool-settings" class="tool-panel tool-panel--settings" hidden>
+                <p class="tool-settings__note">For this page only: nothing is saved, and the study's own settings don't change.</p>
+                <div class="tool-settings__group">
+                  <h3 class="tool-settings__title">Opening Explorer</h3>
+                  <div id="explorer-settings-form"></div>
+                </div>
+                <div class="tool-settings__group">
+                  <h3 class="tool-settings__title">Stockfish depth</h3>
+                  <div class="tool-settings__radios" id="viewer-engine-depth" role="radiogroup" aria-label="Stockfish depth">
+                    ${Array.from({ length: (ENGINE_DEPTH_MAX - ENGINE_DEPTH_MIN) / ENGINE_DEPTH_STEP + 1 }, (_, i) => ENGINE_DEPTH_MIN + i * ENGINE_DEPTH_STEP)
+                      .map((d) => `<label class="tool-settings__radio"><input type="radio" name="viewer-engine-depth" value="${d}" />${d}</label>`)
+                      .join("")}
+                  </div>
+                </div>
+              </div>`
+                  : ""
+              }
 
-              ${toolTabsHtml()}
+              ${toolTabsHtml({ settings: view.settings })}
             </div>
           </div>
         </div>
@@ -170,6 +210,11 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   let engine: Engine | null = null;
   let engineAnalysisId = 0;
   let engineDepth = getSavedEngineDepth();
+  // The page's own copy: the gear changes it, never the study's.
+  const explorerSettings: ExplorerSettings = { ...view.explorerSettings, speeds: [...view.explorerSettings.speeds] };
+  const settingsPanel = document.getElementById("tool-settings");
+  const settingsTab = document.getElementById("tab-settings");
+  let settingsShown = false;
   const shownTools: Set<Tool> = getSavedTools();
   // Which child was last followed from each node, so the arrow keys continue
   // along the variation being viewed, as in the editor.
@@ -207,7 +252,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
   }
 
   function explorerData(fen: string) {
-    return fetchExplorerData(fen, view.explorerSettings, side, { priority: "interactive" });
+    return fetchExplorerData(fen, explorerSettings, side, { priority: "interactive" });
   }
 
   async function updateExplorer(fen: string): Promise<void> {
@@ -222,10 +267,18 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
       const data = await explorerData(fen);
       if (requestId !== explorerRequestId) return;
       const chess = positionAt(tree, currentId);
-      renderExplorer(explorerPanelEl, data, followSan, {
-        inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
-        yourTurn: (chess.turn() === "w") === (side === "white"),
-      });
+      renderExplorer(
+        explorerPanelEl,
+        data,
+        followSan,
+        view.plainExplorer
+          ? undefined
+          : {
+              inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
+              yourTurn: (chess.turn() === "w") === (side === "white"),
+              markLabel: "In this opening",
+            },
+      );
     } catch (err) {
       if (requestId === explorerRequestId) renderExplorerError(explorerPanelEl, errorMessage(err));
     }
@@ -367,7 +420,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     currentId = nodeId;
     const chess = positionAt(tree, currentId);
     const comment = tree.nodes[currentId].comment;
-    commentEl.hidden = !comment;
+    commentEl.hidden = !comment || Boolean(view.ownComments);
     commentEl.textContent = comment ?? "";
 
     const line = sanPathTo(tree, currentId);
@@ -398,6 +451,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     navForwardBtn.disabled = navEndBtn.disabled = tree.nodes[currentId].children.length === 0;
     void updateExplorer(chess.fen());
     void updateEngine(chess);
+    view.onPosition?.(currentId);
   }
 
   function stepBack(): void {
@@ -441,18 +495,26 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     for (const name of ["explorer", "engine"] as const) {
       tabButtons[name].setAttribute("aria-pressed", String(shownTools.has(name)));
       tabButtons[name].title = toolToggleTitle(name, shownTools.has(name));
-      tabPanels[name].hidden = !shownTools.has(name);
+      tabPanels[name].hidden = settingsShown || !shownTools.has(name);
     }
+    if (settingsPanel) settingsPanel.hidden = !settingsShown;
+    settingsTab?.setAttribute("aria-pressed", String(settingsShown));
     gaugeEl.hidden = !shownTools.has("engine");
     engineDepthEl.hidden = !shownTools.has("engine");
     const toolsCard = document.querySelector(".study-card--tools");
     toolsCard?.classList.toggle("study-card--tools-both", shownTools.size === 2);
-    toolsCard?.classList.toggle("study-card--tools-explorer", shownTools.has("explorer"));
-    toolsCard?.classList.toggle("study-card--tools-none", shownTools.size === 0);
+    toolsCard?.classList.toggle("study-card--tools-explorer", settingsShown || shownTools.has("explorer"));
+    toolsCard?.classList.toggle("study-card--tools-none", !settingsShown && shownTools.size === 0);
   }
 
   function toggleTool(tool: Tool): void {
-    if (shownTools.has(tool)) shownTools.delete(tool);
+    // From the settings, a tool's tab goes back to the tools, with it on
+    // (as in the editor).
+    if (settingsShown) {
+      settingsShown = false;
+      if (shownTools.has(tool)) return applyToolsUI();
+      shownTools.add(tool);
+    } else if (shownTools.has(tool)) shownTools.delete(tool);
     else shownTools.add(tool);
     saveTools(shownTools);
     applyToolsUI();
@@ -483,7 +545,8 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     depthUpBtn.disabled = engineDepth >= ENGINE_DEPTH_MAX;
     depthDownBtn.title = `Depth ${Math.max(ENGINE_DEPTH_MIN, engineDepth - ENGINE_DEPTH_STEP)}`;
     depthUpBtn.title = `Depth ${Math.min(ENGINE_DEPTH_MAX, engineDepth + ENGINE_DEPTH_STEP)}`;
-    saveEngineDepth(engineDepth);
+    const radio = document.querySelector<HTMLInputElement>(`input[name="viewer-engine-depth"][value="${engineDepth}"]`);
+    if (radio) radio.checked = true;
   }
 
   function closeKeyboardHelp(restoreFocus = false): void {
@@ -536,6 +599,36 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     void updateEngine(positionAt(tree, currentId));
   });
   keyboardHelpButton.addEventListener("click", toggleKeyboardHelp);
+
+  // The gear: the Explorer's settings (their choices from the server) and
+  // Stockfish's depth, for this page.
+  if (settingsPanel && settingsTab) {
+    settingsTab.addEventListener("click", () => {
+      settingsShown = !settingsShown;
+      applyToolsUI();
+    });
+    const summaryEl = document.getElementById("explorer-summary") as HTMLElement;
+    const formEl = document.getElementById("explorer-settings-form") as HTMLElement;
+    void fetchExplorerDefaults().then((defaults) => {
+      formEl.innerHTML = explorerSettingsFormHtml(explorerSettings, {
+        lirepAvailable: Boolean(defaults?.lirepAvailable),
+        ratingBuckets: defaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500],
+        defaultMinRating: defaults?.defaultMinRating ?? 1400,
+        speeds: defaults?.speeds ?? ["bullet", "blitz", "rapid", "classical"],
+      });
+      bindExplorerSettingsForm(formEl, explorerSettings, Boolean(defaults?.lirepAvailable), () => {
+        summaryEl.textContent = explorerSummary(explorerSettings);
+        const chess = positionAt(tree, currentId);
+        void updateExplorer(chess.fen());
+        // Stockfish's arrow widths follow the Explorer's frequencies.
+        void updateEngine(chess);
+      });
+    });
+    document.getElementById("viewer-engine-depth")!.addEventListener("change", (event) => {
+      setEngineDepth(Number((event.target as HTMLInputElement).value));
+      void updateEngine(positionAt(tree, currentId));
+    });
+  }
   document.addEventListener("click", (event) => {
     if (
       !keyboardHelpPanel.hidden &&

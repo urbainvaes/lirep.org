@@ -344,7 +344,7 @@ function renderEditor(
                 </div>
               </div>
 
-              ${toolTabsHtml({ settings: true })}
+              ${toolTabsHtml({ suggest: true, settings: true })}
             </div>
           </div>
         </div>

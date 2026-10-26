@@ -63,6 +63,27 @@ export function parseGame(pgn: string): ParsedGame {
   };
 }
 
+/** The game's PGN with `comments` on its positions: the starting
+ * position's first, then the position after each move. Its headers and
+ * moves are kept; variations and annotation symbols are dropped. */
+export function pgnWithComments(pgn: string, comments: (string | undefined)[]): string {
+  const source = new Chess();
+  source.loadPgn(pgn);
+  const history = source.history({ verbose: true });
+  const chess = new Chess(history.length ? history[0].before : source.fen());
+  for (const [name, value] of Object.entries(source.getHeaders())) chess.setHeader(name, value);
+  const comment = (i: number) => {
+    const text = comments[i]?.trim();
+    if (text) chess.setComment(text);
+  };
+  comment(0);
+  history.forEach((move, i) => {
+    chess.move(move.san);
+    comment(i + 1);
+  });
+  return chess.pgn();
+}
+
 const known = (value: string | undefined): string | null => (value && value !== "?" && !/^\?+$/.test(value) ? value : null);
 
 /** "Carlsen, M. – Anand, V." */

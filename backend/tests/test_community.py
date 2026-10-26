@@ -81,3 +81,31 @@ class CommunityFreshnessTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedGamesTests(unittest.TestCase):
+    """A shared opening's games give its author's name away (in their PGN),
+    so they are only shown to others under the author's own name."""
+
+    names = community._Names(frozenset({"hidden"}), {"penned": "Pen"})
+
+    def test_games_public_only_under_own_name(self):
+        fields = lambda owner, me=None: community._owner_fields(owner, me, self.names)
+        self.assertTrue(fields("alice")["gamesPublic"])
+        self.assertFalse(fields("hidden")["gamesPublic"])
+        self.assertFalse(fields("penned")["gamesPublic"])
+        self.assertTrue(fields("hidden", "Hidden")["gamesPublic"])
+
+    def test_endpoint_hides_games_of_hidden_names(self):
+        request = Request({"type": "http", "session": {}})
+        games = {"sections": [], "games": []}
+        with patch.object(community, "_names", return_value=self.names), \
+                patch.object(community.store, "get_study_games", return_value=games):
+            for owner, visible in (("alice", True), ("hidden", False), ("penned", False)):
+                with self.subTest(owner=owner), \
+                        patch.object(community.store, "get_shared_study", return_value=(owner, {})):
+                    if visible:
+                        self.assertEqual(community.shared_study_games(1, request), games)
+                    else:
+                        with self.assertRaises(community.HTTPException):
+                            community.shared_study_games(1, request)

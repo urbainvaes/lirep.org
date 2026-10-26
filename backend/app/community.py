@@ -130,13 +130,16 @@ def _names() -> _Names:
 
 def _owner_fields(owner: str, me: str | None, names: _Names) -> dict:
     """Who a shared study belongs to: an anonymous player's name is only
-    shown to themselves; a pen name is shown to everyone, its owner too."""
+    shown to themselves; a pen name is shown to everyone, its owner too.
+    The study's games are only shown to others under the player's own name,
+    since their PGN would give a hidden one away."""
     mine = _is_mine(owner, me)
     public = names.public(owner)
     return {
         "owner": owner if mine and public is None else public,
         "anonymous": owner.lower() in names.anonymous,
         "mine": mine,
+        "gamesPublic": mine or public == owner,
     }
 
 
@@ -359,6 +362,20 @@ def shared_study(study_id: int, request: Request) -> dict:
         "startNodeId": study["startNodeId"],
         "explorerSettings": _public_settings(study["explorerSettings"], owner, me, names),
     }
+
+
+@router.get("/api/community/studies/{study_id}/games")
+def shared_study_games(study_id: int, request: Request) -> dict:
+    """A shared opening's games, for the read-only games page: its sections
+    and games, with the author's comments. Not for an author whose name is
+    hidden (see _owner_fields)."""
+    found = store.get_shared_study(study_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="not found")
+    owner, _ = found
+    if not _owner_fields(owner, request.session.get("username"), _names())["gamesPublic"]:
+        raise HTTPException(status_code=404, detail="not found")
+    return store.get_study_games(study_id)
 
 
 @router.get("/api/community/openings")

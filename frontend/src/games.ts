@@ -4,7 +4,7 @@ import { applyBoardTheme } from "./board";
 import type { ExplorerSettings } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { observeMiniBoards, type MiniBoard } from "./miniBoard";
-import { gameDetails, gameTitle, parseGame, splitPgnGames, type ParsedGame } from "./pgnGames";
+import { gameDetails, gameTitle, parseGame, pgnWithComments, splitPgnGames, type ParsedGame } from "./pgnGames";
 import { createEmptyTree, lichessAnalysisUrl, type StudyTree } from "./tree";
 import { renderTreeViewer } from "./treeViewer";
 
@@ -12,7 +12,11 @@ import { renderTreeViewer } from "./treeViewer";
 // orders, each with a small board showing the game's final position, which
 // replays the game while the pointer is over it. Clicking a card opens the
 // game (games.html?id=…&game=…) in the read-only tree viewer, with the
-// player's comment on it. See doc/studies.html#games.
+// player's comments on its positions. See doc/studies.html#games.
+//
+// A shared opening's games (games.html?id=…&shared=1, linked from the
+// community leaderboards) are the same pages, read-only: no adding, moving
+// or deleting, and the author's comments can't be changed.
 
 interface Game {
   id: number;
@@ -32,6 +36,24 @@ interface StudyInfo {
   side: "white" | "black";
   explorerSettings: ExplorerSettings;
 }
+
+// A shared opening's author, as /api/community/studies/{id} gives it.
+interface SharedAuthor {
+  owner: string | null;
+}
+
+// Read-only, the author of a shared opening; null for your own study.
+type Shared = SharedAuthor | null;
+
+const sharedQuery = (shared: Shared) => (shared ? "&shared=1" : "");
+
+function authorHtml(author: SharedAuthor): string {
+  return author.owner === null
+    ? "by an anonymous player"
+    : `by <a class="community-owner" href="/player.html?u=${encodeURIComponent(author.owner)}">${escapeHtml(author.owner)}</a>`;
+}
+
+const COMMENT_ICON = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
 
 type Layout = { name: string; gameIds: number[] }[];
 
@@ -122,7 +144,7 @@ function moveItem<T>(items: T[], index: number, delta: number): T[] {
 
 // ---- The list of games, as cards.
 
-function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): void {
+function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData, shared: Shared): void {
   let data = initial;
   const parsed = new Map<number, ParsedGame | null>();
   const parsedGame = (game: Game) => {
@@ -135,11 +157,15 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
       <div class="games-page__header">
         <div>
           <h1 class="page-title">${escapeHtml(study.name)} · Games</h1>
-          <p class="games-page__sub">
+          <p class="games-page__sub">${
+            shared
+              ? `${authorHtml(shared)} ·
+            <a href="/opening.html?id=${study.id}">View the opening</a>`
+              : `
             <a href="/study.html?id=${study.id}">Edit the study</a> ·
             <a href="/stat.html?id=${study.id}">Stats</a> ·
-            <a href="/practice-session.html?id=${study.id}">Practice</a>
-          </p>
+            <a href="/practice-session.html?id=${study.id}">Practice</a>`
+          }</p>
         </div>
         <div class="games-page__actions">
           <div class="source-switch" role="group" aria-label="Open games in">
@@ -147,10 +173,10 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
             <button type="button" data-open-in="lirep" aria-pressed="false">Lirep</button>
             <button type="button" data-open-in="lichess" aria-pressed="false">Lichess</button>
           </div>
-          <button id="add-games-btn" class="btn btn-primary" type="button" aria-expanded="false" aria-controls="add-games">Add games</button>
+          ${shared ? "" : `<button id="add-games-btn" class="btn btn-primary" type="button" aria-expanded="false" aria-controls="add-games">Add games</button>`}
         </div>
       </div>
-      <form id="add-games" class="games-add" hidden>
+      ${shared ? "" : `<form id="add-games" class="games-add" hidden>
         <textarea id="add-games-pgn" rows="8" placeholder="Paste games in PGN, or Lichess game links (one per line)" aria-label="Games in PGN, or Lichess game links" spellcheck="false"></textarea>
         <div class="games-add__row">
           <label>Section
@@ -160,7 +186,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
           <button class="btn btn-primary" type="submit">Add</button>
           <span id="add-games-status" class="games-status" role="status" aria-live="polite"></span>
         </div>
-      </form>
+      </form>`}
       <div id="games-loose" class="games-grid games-grid--loose" aria-label="Games without a section"></div>
       <div id="games-sections" class="games-sections"></div>
     </div>
@@ -229,7 +255,7 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     const p = parsedGame(game);
     const headers = p?.headers ?? {};
     const onLichess = openIn === "lichess" && p !== null;
-    const href = onLichess ? lichessHref(p, study.side) : `/games.html?id=${study.id}&game=${game.id}`;
+    const href = onLichess ? lichessHref(p, study.side) : `/games.html?id=${study.id}&game=${game.id}${sharedQuery(shared)}`;
     // One player above the board and one below, on their own side of it,
     // each with their rating and score when the PGN has them.
     const known = (v: string | undefined) => (v && !/^\?*$/.test(v) ? v : null);
@@ -251,13 +277,13 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
       <div class="games-card" data-game-id="${game.id}">
         <a class="games-card__link" href="${escapeHtml(href)}" draggable="false"
            ${onLichess ? 'target="_blank" rel="noopener noreferrer"' : ""}
-           title="${escapeHtml(gameTitle(headers))}: open${onLichess ? " on Lichess" : ""} (drag to reorder, or Alt+←/→)">
+           title="${escapeHtml(gameTitle(headers))}: open${onLichess ? " on Lichess" : ""}${shared ? "" : " (drag to reorder, or Alt+←/→)"}">
           ${player(top)}
           <div class="games-card__board" data-mini-board data-board="${game.id}"></div>
           ${player(bottom)}
           <span class="games-card__details">${p ? escapeHtml([known(headers.Event), known(headers.Date?.slice(0, 4))].filter(Boolean).join(" · ")) || "&nbsp;" : "Unreadable PGN"}</span>
         </a>
-        <button class="games-card__delete" type="button" data-delete-game="${game.id}" title="Delete this game" aria-label="Delete ${escapeHtml(gameTitle(headers))}">×</button>
+        ${shared ? "" : `<button class="games-card__delete" type="button" data-delete-game="${game.id}" title="Delete this game" aria-label="Delete ${escapeHtml(gameTitle(headers))}">×</button>`}
       </div>`;
   }
 
@@ -303,7 +329,33 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     }));
   }
 
+  // Read-only: the sections with their games, and nothing to change them.
+  function renderShared(): void {
+    unmountBoards();
+    looseEl.innerHTML = looseIds().map((id) => cardHtml(data.games.find((g) => g.id === id) as Game)).join("");
+    sectionsEl.innerHTML = data.games.length
+      ? layout()
+          .filter((section) => section.gameIds.length)
+          .map(
+            (section) => `
+        <section class="games-section">
+          <div class="games-section__head">
+            <h2>${escapeHtml(section.name)}</h2>
+            <span class="games-section__count">${section.gameIds.length}</span>
+          </div>
+          <div class="games-grid">${section.gameIds.map((id) => cardHtml(data.games.find((g) => g.id === id) as Game)).join("")}</div>
+        </section>`,
+          )
+          .join("")
+      : `<div class="empty-state profile-empty"><p>No games in this opening.</p></div>`;
+    unmountBoards = observeMiniBoards(pageEl, boardSpec);
+  }
+
   function render(): void {
+    if (shared) {
+      renderShared();
+      return;
+    }
     renderSectionOptions();
     unmountBoards();
     sortables.forEach((s) => s.destroy());
@@ -450,85 +502,91 @@ function renderList(main: HTMLElement, study: StudyInfo, initial: GamesData): vo
     );
   }
 
-  // ---- Adding games from PGN.
-  addBtn.addEventListener("click", () => {
-    addForm.hidden = !addForm.hidden;
-    addBtn.setAttribute("aria-expanded", String(!addForm.hidden));
-    if (!addForm.hidden) (document.getElementById("add-games-pgn") as HTMLTextAreaElement).focus();
-  });
-  sectionSelect.addEventListener("change", () => {
-    newSectionInput.hidden = sectionSelect.value !== NEW_SECTION;
-    if (!newSectionInput.hidden) newSectionInput.focus();
-  });
-  addForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const textEl = document.getElementById("add-games-pgn") as HTMLTextAreaElement;
-    const section = sectionSelect.value === NEW_SECTION ? newSectionInput.value.trim() : sectionSelect.value;
-    addStatus.classList.remove("games-status--error");
-    if (sectionSelect.value === NEW_SECTION && !section) {
-      addStatus.textContent = "Name the new section.";
-      addStatus.classList.add("games-status--error");
-      return;
-    }
-    // Lichess links (a line each) are fetched; the rest is read as PGN.
-    const lines = textEl.value.split(/\r?\n/);
-    const ids = lines.map((line) => line.match(LICHESS_GAME_URL)?.[1]).filter((id): id is string => Boolean(id));
-    const pgnText = lines.filter((line) => !LICHESS_GAME_URL.test(line)).join("\n");
-    const valid: string[] = [];
-    const problems: string[] = [];
-    for (const [i, id] of ids.entries()) {
-      addStatus.textContent = `Fetching game ${i + 1} of ${ids.length} from Lichess…`;
-      try {
-        const pgn = await fetchLichessGame(id);
-        parseGame(pgn);
-        valid.push(pgn);
-      } catch (err) {
-        problems.push(err instanceof Error ? err.message : `Lichess game ${id} unreadable`);
+  // ---- Adding games from PGN (your own study only).
+  if (!shared) {
+    addBtn.addEventListener("click", () => {
+      addForm.hidden = !addForm.hidden;
+      addBtn.setAttribute("aria-expanded", String(!addForm.hidden));
+      if (!addForm.hidden) (document.getElementById("add-games-pgn") as HTMLTextAreaElement).focus();
+    });
+    sectionSelect.addEventListener("change", () => {
+      newSectionInput.hidden = sectionSelect.value !== NEW_SECTION;
+      if (!newSectionInput.hidden) newSectionInput.focus();
+    });
+    addForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const textEl = document.getElementById("add-games-pgn") as HTMLTextAreaElement;
+      const section = sectionSelect.value === NEW_SECTION ? newSectionInput.value.trim() : sectionSelect.value;
+      addStatus.classList.remove("games-status--error");
+      if (sectionSelect.value === NEW_SECTION && !section) {
+        addStatus.textContent = "Name the new section.";
+        addStatus.classList.add("games-status--error");
+        return;
       }
-    }
-    const pgns = splitPgnGames(pgnText);
-    pgns.forEach((pgn, i) => {
+      // Lichess links (a line each) are fetched; the rest is read as PGN.
+      const lines = textEl.value.split(/\r?\n/);
+      const ids = lines.map((line) => line.match(LICHESS_GAME_URL)?.[1]).filter((id): id is string => Boolean(id));
+      const pgnText = lines.filter((line) => !LICHESS_GAME_URL.test(line)).join("\n");
+      const valid: string[] = [];
+      const problems: string[] = [];
+      for (const [i, id] of ids.entries()) {
+        addStatus.textContent = `Fetching game ${i + 1} of ${ids.length} from Lichess…`;
+        try {
+          const pgn = await fetchLichessGame(id);
+          parseGame(pgn);
+          valid.push(pgn);
+        } catch (err) {
+          problems.push(err instanceof Error ? err.message : `Lichess game ${id} unreadable`);
+        }
+      }
+      const pgns = splitPgnGames(pgnText);
+      pgns.forEach((pgn, i) => {
+        try {
+          parseGame(pgn);
+          valid.push(pgn);
+        } catch (err) {
+          problems.push(`game ${i + 1}: ${err instanceof Error ? err.message : "unreadable"}`);
+        }
+      });
+      const pastedCount = ids.length + pgns.length;
+      if (!valid.length) {
+        addStatus.textContent = pastedCount
+          ? `No game could be read (${problems.join("; ")}).`
+          : "Paste some PGN or Lichess game links first.";
+        addStatus.classList.add("games-status--error");
+        return;
+      }
       try {
-        parseGame(pgn);
-        valid.push(pgn);
+        await api(`/api/studies/${study.id}/games`, "POST", { section, games: valid.map((pgn) => ({ pgn })) });
+        data = await (await api(`/api/studies/${study.id}/games`)).json();
+        textEl.value = "";
+        newSectionInput.value = "";
+        sectionSelect.value = section;
+        addStatus.textContent =
+          `Added ${valid.length} game${valid.length === 1 ? "" : "s"}.` + (problems.length ? ` Skipped ${problems.join("; ")}.` : "");
+        if (problems.length) addStatus.classList.add("games-status--error");
+        render();
       } catch (err) {
-        problems.push(`game ${i + 1}: ${err instanceof Error ? err.message : "unreadable"}`);
+        addStatus.textContent = err instanceof Error ? err.message : "Could not add the games.";
+        addStatus.classList.add("games-status--error");
       }
     });
-    const pastedCount = ids.length + pgns.length;
-    if (!valid.length) {
-      addStatus.textContent = pastedCount
-        ? `No game could be read (${problems.join("; ")}).`
-        : "Paste some PGN or Lichess game links first.";
-      addStatus.classList.add("games-status--error");
-      return;
-    }
-    try {
-      await api(`/api/studies/${study.id}/games`, "POST", { section, games: valid.map((pgn) => ({ pgn })) });
-      data = await (await api(`/api/studies/${study.id}/games`)).json();
-      textEl.value = "";
-      newSectionInput.value = "";
-      sectionSelect.value = section;
-      addStatus.textContent =
-        `Added ${valid.length} game${valid.length === 1 ? "" : "s"}.` + (problems.length ? ` Skipped ${problems.join("; ")}.` : "");
-      if (problems.length) addStatus.classList.add("games-status--error");
-      render();
-    } catch (err) {
-      addStatus.textContent = err instanceof Error ? err.message : "Could not add the games.";
-      addStatus.classList.add("games-status--error");
-    }
-  });
+  }
 
   render();
 }
 
 // ---- One game, in the read-only tree viewer: its moves as a single line,
-// the PGN's comments on them, and the player's comment on the game.
+// with the comments on its positions (kept in its PGN), which the player
+// can edit.
 
-function gameTree(p: ParsedGame): StudyTree {
+// A comment on the whole game, from before comments were on positions, is
+// the starting position's (after the PGN's own).
+function gameTree(p: ParsedGame, gameComment: string): StudyTree {
   const tree = createEmptyTree();
   let parent = tree.rootId;
-  if (p.startComment) tree.nodes[parent].comment = p.startComment;
+  const startComment = [p.startComment, gameComment].map((c) => c?.trim()).filter(Boolean).join("\n\n");
+  if (startComment) tree.nodes[parent].comment = startComment;
   for (const move of p.moves) {
     const id = tree.nextId++;
     tree.nodes[id] = { id, san: move.san, parentId: parent, children: [], ...(move.comment ? { comment: move.comment } : {}) };
@@ -538,8 +596,8 @@ function gameTree(p: ParsedGame): StudyTree {
   return tree;
 }
 
-function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: Game, signedIn: boolean): void {
-  const back = `/games.html?id=${study.id}`;
+function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: Game, shared: Shared, signedIn: boolean): void {
+  const back = `/games.html?id=${study.id}${sharedQuery(shared)}`;
   const p = parsedOrNull(game.pgn);
   const headers = p?.headers ?? {};
   if (!p || p.startFen !== STANDARD_START) {
@@ -552,10 +610,19 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
   }
   document.title = `${gameTitle(headers)} · ${study.name} · lirep.org`;
 
+  // Comments on positions, as in the editor: under the moves, behind the
+  // comment button, open on a position that has one. They are saved in the
+  // game's PGN. Read-only, they show under the moves as text.
+  const tree = gameTree(p, game.comment);
+  const plies: number[] = [];
+  for (let id: number | undefined = tree.rootId; id !== undefined; id = tree.nodes[id].children[0]) plies.push(id);
+  let currentId = tree.rootId;
+  let refreshComment = (): void => {};
+
   const links = renderTreeViewer(
     main,
     {
-      tree: gameTree(p),
+      tree,
       side: study.side,
       startNodeId: null,
       explorerSettings: study.explorerSettings,
@@ -563,53 +630,136 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
       bylineHtml: [
         escapeHtml(gameDetails(headers)),
         `<a class="community-owner" href="${back}">${game.section ? `${escapeHtml(game.section)} · ` : ""}${escapeHtml(study.name)}</a>`,
+        shared ? authorHtml(shared) : "",
       ]
         .filter(Boolean)
         .join(" · "),
-      intro: "Click a move to jump there. The game is read-only; your comment on it is saved as you type.",
-      extraCardHtml: `
-        <div class="study-card games-comment-card">
-          <label class="games-comment-editor">Your comment
-            <textarea id="game-comment" rows="3" maxlength="10000" placeholder="What to remember from this game">${escapeHtml(game.comment)}</textarea>
-          </label>
-          <div class="games-view__actions">
-            <label>Section
-              <select id="game-section">${["", ...data.sections]
-                .map((name) => `<option value="${escapeHtml(name)}" ${name === game.section ? "selected" : ""}>${name ? escapeHtml(name) : "None"}</option>`)
-                .join("")}</select>
-            </label>
-            <span id="game-comment-status" class="games-status" role="status" aria-live="polite"></span>
-            <button id="game-delete" class="btn btn-danger btn-small" type="button">Delete game</button>
-          </div>
-        </div>`,
+      intro: shared
+        ? "Click a move to jump there. The game and the author's comments on it are read-only."
+        : "Click a move to jump there. The moves are read-only; your comments on positions are saved as you type.",
+      plainExplorer: true,
+      settings: true,
+      ...(shared
+        ? {}
+        : {
+            actionsHtml: `<button id="comment-btn" class="btn btn-secondary study-icon-btn" type="button" aria-expanded="false" aria-controls="comment-editor" aria-label="Comment on this position" title="Comment on this position">${COMMENT_ICON}</button>`,
+            shortcutsHtml: `<li><kbd>C</kbd> Comment on this position</li>`,
+            belowMovesHtml: `<div class="study-comment-editor" id="comment-editor" hidden>
+                <textarea id="game-comment" rows="2" placeholder="Comment on this position" aria-label="Comment on selected position"></textarea>
+              </div>`,
+            ownComments: true,
+            onPosition: (nodeId: number) => {
+              currentId = nodeId;
+              refreshComment();
+            },
+          }),
     },
     signedIn,
   );
-  links.innerHTML = `<a class="study-head__link" href="${back}">← All games</a>`;
+  // Your own game's section and Delete are in the "⋯" menu, as the
+  // editor's Delete study.
+  links.innerHTML = `
+    <span id="game-status" class="games-status" role="status" aria-live="polite"></span>
+    <a class="study-head__link" href="${back}">← All games</a>
+    ${
+      shared
+        ? ""
+        : `<details class="study-menu" id="game-menu">
+      <summary class="btn btn-secondary" aria-label="More game options">⋯</summary>
+      <div class="study-menu__panel">
+        <label class="games-menu__section">Section
+          <select id="game-section">${["", ...data.sections]
+            .map((name) => `<option value="${escapeHtml(name)}" ${name === game.section ? "selected" : ""}>${name ? escapeHtml(name) : "None"}</option>`)
+            .join("")}</select>
+        </label>
+        <button id="game-delete" class="btn btn-danger btn-small" type="button">Delete game</button>
+      </div>
+    </details>`
+    }`;
+  const status = document.getElementById("game-status") as HTMLElement;
 
+  if (shared) return;
+
+  const commentBtn = document.getElementById("comment-btn") as HTMLButtonElement;
+  const commentBoxEl = document.getElementById("comment-editor") as HTMLElement;
   const commentEl = document.getElementById("game-comment") as HTMLTextAreaElement;
-  const commentStatus = document.getElementById("game-comment-status") as HTMLElement;
-  let commentTimer: number | null = null;
-  const saveComment = async () => {
-    commentTimer = null;
+  // The box opens for a position that has a comment, or when asked.
+  let commentRequested = false;
+  let shownId = currentId;
+  refreshComment = () => {
+    if (currentId !== shownId) commentRequested = false;
+    shownId = currentId;
+    const comment = tree.nodes[currentId].comment ?? "";
+    commentEl.value = comment;
+    const open = commentRequested || Boolean(comment.trim());
+    commentBoxEl.hidden = !open;
+    commentBtn.setAttribute("aria-expanded", String(open));
+    commentBtn.classList.toggle("btn--active", open);
+  };
+  refreshComment();
+  const openComment = () => {
+    commentRequested = true;
+    refreshComment();
+    commentEl.focus();
+  };
+  commentBtn.addEventListener("click", () => {
+    if (commentBoxEl.hidden) openComment();
+    else if (tree.nodes[currentId].comment?.trim()) commentEl.focus(); // a comment is there: the box stays open
+    else {
+      commentRequested = false;
+      refreshComment();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || (e.key !== "c" && e.key !== "C")) return;
+    if (["INPUT", "SELECT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)) return;
+    e.preventDefault(); // opens the box without typing the c
+    openComment();
+  });
+
+  let saveTimer: number | null = null;
+  const saveComments = async () => {
+    saveTimer = null;
     try {
-      await api(`/api/studies/${study.id}/games/${game.id}/comment`, "PUT", { comment: commentEl.value });
-      commentStatus.textContent = "Saved";
+      const pgn = pgnWithComments(game.pgn, plies.map((id) => tree.nodes[id].comment));
+      await api(`/api/studies/${study.id}/games/${game.id}/pgn`, "PUT", { pgn });
+      game.pgn = pgn;
+      game.comment = "";
+      status.textContent = "Saved";
     } catch (err) {
-      commentStatus.textContent = err instanceof Error ? err.message : "Could not save the comment.";
+      status.textContent = err instanceof Error ? err.message : "Could not save the comment.";
     }
   };
+  const scheduleSave = (delay: number) => {
+    if (saveTimer !== null) window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => void saveComments(), delay);
+  };
   commentEl.addEventListener("input", () => {
-    commentStatus.textContent = "";
-    if (commentTimer !== null) window.clearTimeout(commentTimer);
-    commentTimer = window.setTimeout(() => void saveComment(), 600);
+    const node = tree.nodes[currentId];
+    if (commentEl.value.trim()) node.comment = commentEl.value;
+    else delete node.comment;
+    const marker = document.querySelector<HTMLElement>(`#tree-view [data-node-id="${currentId}"] .tree-move-comment-marker`);
+    if (marker) {
+      marker.hidden = !node.comment;
+      marker.title = node.comment ? "Has a comment" : "";
+    }
+    status.textContent = "";
+    scheduleSave(500);
+  });
+  commentEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    commentEl.blur();
   });
   commentEl.addEventListener("blur", () => {
-    if (commentTimer === null) return;
-    window.clearTimeout(commentTimer);
-    void saveComment();
+    if (saveTimer !== null) scheduleSave(0);
   });
 
+
+  const menuEl = document.getElementById("game-menu") as HTMLDetailsElement;
+  document.addEventListener("click", (event) => {
+    if (menuEl.open && event.target instanceof Node && !menuEl.contains(event.target)) menuEl.open = false;
+  });
   document.getElementById("game-section")!.addEventListener("change", async (event) => {
     const target = (event.target as HTMLSelectElement).value;
     const next: Layout = ["", ...data.sections].map((name) => ({
@@ -620,9 +770,9 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
     try {
       await api(`/api/studies/${study.id}/games-layout`, "PUT", { sections: next });
       game.section = target;
-      commentStatus.textContent = target ? `Moved to ${target}` : "Moved out of its section";
+      status.textContent = target ? `Moved to ${target}` : "Moved out of its section";
     } catch (err) {
-      commentStatus.textContent = err instanceof Error ? err.message : "Could not move the game.";
+      status.textContent = err instanceof Error ? err.message : "Could not move the game.";
     }
   });
   document.getElementById("game-delete")!.addEventListener("click", async () => {
@@ -631,7 +781,7 @@ function renderGame(main: HTMLElement, study: StudyInfo, data: GamesData, game: 
       await api(`/api/studies/${study.id}/games/${game.id}`, "DELETE");
       window.location.href = back;
     } catch (err) {
-      commentStatus.textContent = err instanceof Error ? err.message : "Could not delete the game.";
+      status.textContent = err instanceof Error ? err.message : "Could not delete the game.";
     }
   });
 }
@@ -641,36 +791,42 @@ async function init(): Promise<void> {
   renderAuthArea(me);
   const main = document.getElementById("games-main");
   if (!main) return;
-  if (!me.authenticated) {
-    main.innerHTML = `<div class="empty-state"><p>Sign in with your Lichess account to see your studies' games.</p><a class="btn btn-primary" href="/auth/login">Sign in</a></div>`;
-    return;
-  }
   const params = new URLSearchParams(window.location.search);
   const id = Number(params.get("id"));
   const gameId = Number(params.get("game"));
+  const isShared = params.has("shared");
+  if (!me.authenticated && !isShared) {
+    main.innerHTML = `<div class="empty-state"><p>Sign in with your Lichess account to see your studies' games.</p><a class="btn btn-primary" href="/auth/login">Sign in</a></div>`;
+    return;
+  }
+  // A shared opening's (read-only), or your own study's.
+  const base = isShared ? `/api/community/studies/${id}` : `/api/studies/${id}`;
   try {
     const [studyRes, gamesRes] = await Promise.all([
-      fetch(`/api/studies/${id}`, { credentials: "same-origin" }),
-      fetch(`/api/studies/${id}/games`, { credentials: "same-origin" }),
+      fetch(base, { credentials: "same-origin" }),
+      fetch(`${base}/games`, { credentials: "same-origin" }),
       applyBoardTheme(),
     ]);
-    if (studyRes.status === 404 || !id) {
-      main.innerHTML = `<div class="empty-state"><p>Study not found.</p><a class="btn btn-secondary" href="/">Your studies</a></div>`;
+    if (studyRes.status === 404 || gamesRes.status === 404 || !id) {
+      main.innerHTML = isShared
+        ? `<div class="empty-state"><p>This opening's games are not shared (or no longer are).</p><a class="btn btn-secondary" href="/community.html">Community</a></div>`
+        : `<div class="empty-state"><p>Study not found.</p><a class="btn btn-secondary" href="/">Your studies</a></div>`;
       return;
     }
     if (!studyRes.ok || !gamesRes.ok) throw new Error("request failed");
-    const study: StudyInfo = await studyRes.json();
+    const study: StudyInfo & SharedAuthor = await studyRes.json();
+    const shared: Shared = isShared ? { owner: study.owner } : null;
     const data: GamesData = await gamesRes.json();
     if (gameId) {
       const game = data.games.find((g) => g.id === gameId);
       if (!game) {
-        main.innerHTML = `<div class="empty-state"><p>This game doesn't exist (or was deleted).</p><a class="btn btn-secondary" href="/games.html?id=${id}">Back to the games</a></div>`;
+        main.innerHTML = `<div class="empty-state"><p>This game doesn't exist (or was deleted).</p><a class="btn btn-secondary" href="/games.html?id=${id}${sharedQuery(shared)}">Back to the games</a></div>`;
         return;
       }
-      renderGame(main, study, data, game, me.authenticated);
+      renderGame(main, study, data, game, shared, me.authenticated);
     } else {
       document.title = `${study.name} · Games · lirep.org`;
-      renderList(main, study, data);
+      renderList(main, study, data, shared);
     }
   } catch {
     main.innerHTML = `<div class="empty-state"><p>Could not load the games. Please try again in a moment.</p></div>`;

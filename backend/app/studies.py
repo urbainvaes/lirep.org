@@ -235,8 +235,8 @@ class GamesIn(BaseModel):
     games: list[GameIn] = Field(min_length=1)
 
 
-class CommentIn(BaseModel):
-    comment: str = Field(max_length=MAX_COMMENT_LENGTH)
+class PgnIn(BaseModel):
+    pgn: str = Field(min_length=1, max_length=MAX_PGN_LENGTH)
 
 
 class SectionIn(BaseModel):
@@ -273,10 +273,12 @@ def add_games(study_id: int, payload: GamesIn, request: Request) -> dict:
     return {"ids": ids}
 
 
-@router.put("/api/studies/{study_id}/games/{game_id}/comment")
-def set_game_comment(study_id: int, game_id: int, payload: CommentIn, request: Request) -> dict:
+@router.put("/api/studies/{study_id}/games/{game_id}/pgn")
+def set_game_pgn(study_id: int, game_id: int, payload: PgnIn, request: Request) -> dict:
+    """The game with the player's comments on its positions, which are kept
+    in its PGN (see store.set_study_game_pgn)."""
     _require_study(request, study_id)
-    if not store.set_study_game_comment(study_id, game_id, payload.comment):
+    if not store.set_study_game_pgn(study_id, game_id, payload.pgn):
         raise HTTPException(status_code=404, detail="not found")
     return {"ok": True}
 

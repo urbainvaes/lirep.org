@@ -188,8 +188,10 @@ def init_db() -> None:
         # queries Lichess itself and caches them (see explorer-cache.md).
         conn.execute("DROP TABLE IF EXISTS explorer_cache")
 
-        # Games attached to a study (its Games page): the PGN as given, a
-        # comment, and the game's section and place within it.
+        # Games attached to a study (its Games page): the PGN (with the
+        # player's comments on its positions), an older comment on the whole
+        # game (moved into the PGN when the game's comments are next saved),
+        # and the game's section and place within it.
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS study_games (
@@ -1186,10 +1188,13 @@ def add_study_games(study_id: int, section: str, games: list[dict[str, str]]) ->
     return ids
 
 
-def set_study_game_comment(study_id: int, game_id: int, comment: str) -> bool:
+def set_study_game_pgn(study_id: int, game_id: int, pgn: str) -> bool:
+    """Replaces the game's PGN, which now holds the comments on its
+    positions. The older comment on the whole game, which the browser moved
+    into the PGN (on the starting position), is cleared."""
     with _connect() as conn:
         cur = conn.execute(
-            "UPDATE study_games SET comment = ? WHERE id = ? AND study_id = ?", (comment, game_id, study_id)
+            "UPDATE study_games SET pgn = ?, comment = '' WHERE id = ? AND study_id = ?", (pgn, game_id, study_id)
         )
     return cur.rowcount > 0
 

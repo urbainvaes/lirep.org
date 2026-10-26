@@ -25,6 +25,8 @@ interface Opening {
   owner: string | null;
   anonymous: boolean;
   mine: boolean;
+  // Whether others may see its games (not under a hidden name).
+  gamesPublic: boolean;
   winProbability: number | null;
   reason: string | null;
   source: "lichess" | "lirep" | null;
@@ -60,6 +62,7 @@ interface EvalOpening {
   owner: string | null;
   anonymous: boolean;
   mine: boolean;
+  gamesPublic: boolean;
   evalCp: number;
   depth: number;
   source: "lichess" | "lirep";
@@ -161,7 +164,7 @@ interface Leaderboard<T> {
 
 type LeaderboardRow = Pick<
   Opening,
-  "id" | "mine" | "name" | "side" | "moves" | "lines" | "games" | "startLine" | "mainLine" | "badge" | "owner" | "anonymous"
+  "id" | "mine" | "name" | "side" | "moves" | "lines" | "games" | "startLine" | "mainLine" | "badge" | "owner" | "anonymous" | "gamesPublic"
 > & {
   rank: number | null;
 };
@@ -206,10 +209,16 @@ function ownerHtml(opening: LeaderboardRow): string {
   return opening.anonymous ? `${link} <span class="community-anonymous">(anonymous)</span>` : link;
 }
 
+function gamesHref(opening: LeaderboardRow): string | undefined {
+  if (opening.mine) return `/games.html?id=${opening.id}`;
+  return opening.gamesPublic ? `/games.html?id=${opening.id}&shared=1` : undefined;
+}
+
 // A card as on the home page, with the rank before the name (which opens
 // the study, read-only), the settings the result was calculated with under
 // it (folded, one per line), the tree's size and games under the opening
-// line, and at the bottom the author, then Import.
+// line (its games open read-only, or in the Games page for your own), and
+// at the bottom the author, then Import.
 function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T, signedIn: boolean): string {
   return `
     <article class="study-card study-card--summary">
@@ -229,7 +238,7 @@ function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T,
         board: { mainLine: opening.mainLine },
         side: opening.side,
       })}
-      <p class="study-card__meta">${studySizeHtml({ moves: opening.moves, lines: opening.lines, games: { count: opening.games } })}</p>
+      <p class="study-card__meta">${studySizeHtml({ moves: opening.moves, lines: opening.lines, games: { count: opening.games, href: gamesHref(opening) } })}</p>
       <div class="study-card__footer">
         <span class="study-card__author">by ${ownerHtml(opening)}</span>
         ${actionsHtml(opening, signedIn)}

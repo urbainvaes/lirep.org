@@ -6359,8 +6359,7 @@ details[open] > summary.tree-fold__head::before {
 .games-add textarea,
 .games-add input,
 .games-add select,
-.games-comment-card select,
-.games-comment-editor textarea {
+.games-menu__section select {
   padding: 8px 10px;
   background: var(--card-nested-bg);
   border: 1px solid var(--border);
@@ -6375,8 +6374,7 @@ details[open] > summary.tree-fold__head::before {
   resize: vertical;
 }
 
-.games-add__row,
-.games-view__actions {
+.games-add__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -6384,7 +6382,7 @@ details[open] > summary.tree-fold__head::before {
 }
 
 .games-add__row label,
-.games-view__actions label {
+.games-menu__section {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -6601,25 +6599,12 @@ details[open] > summary.tree-fold__head::before {
   border-radius: 8px;
 }
 
-/* The game view: the player's comment, under the moves. */
-.games-comment-card {
-  display: grid;
-  gap: 10px;
-}
-
-.games-comment-editor {
-  display: grid;
-  gap: 6px;
-  color: var(--text-dim);
-  font-size: 0.9rem;
-}
-
-.games-comment-editor textarea {
-  resize: vertical;
-}
-
-.games-view__actions .btn-danger {
-  margin-left: auto;
+/* The game view: the comment on the game, under the moves (read-only, as
+   text). */
+.games-comment-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 #new-section-btn {

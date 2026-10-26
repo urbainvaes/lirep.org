@@ -335,10 +335,13 @@ export function renderExplorerError(panel: HTMLElement, message = "Explorer data
 export const UNPREPARED_THRESHOLD = 0.05;
 
 /** What the study already has at this position, for the editor's Explorer:
- * the moves in the tree from here, and whether it's the studied side's turn. */
+ * the moves in the tree from here, and whether it's the studied side's turn.
+ * In a viewer, the ✓ on the tree's moves says what they are (`markLabel`,
+ * "In your study" by default). */
 export interface RepertoireView {
   inTree: Set<string>;
   yourTurn: boolean;
+  markLabel?: string;
 }
 
 // The move list shows this many rows; the rest scroll inside it.
@@ -364,13 +367,14 @@ export function renderExplorer(
       const prepared = repertoire?.inTree.has(move.san) ?? false;
       const gap = repertoire !== undefined && !repertoire.yourTurn && !prepared && games / total >= UNPREPARED_THRESHOLD;
       const rowClass = prepared ? " explorer-row--prepared" : gap ? " explorer-row--gap" : "";
-      const label = prepared ? "In your study" : gap ? "Not prepared" : "";
+      const markLabel = repertoire?.markLabel ?? "In your study";
+      const label = prepared ? markLabel : gap ? "Not prepared" : "";
       const whitePct = (move.white / games) * 100;
       const drawsPct = (move.draws / games) * 100;
       const blackPct = (move.black / games) * 100;
       return `
         <button class="explorer-row${rowClass}" type="button" data-san="${escapeHtml(move.san)}"${label ? ` title="${label}"` : ""}>
-          <span class="explorer-row__san">${prepared ? `<span class="explorer-row__mark" aria-label="In your study">✓</span>` : ""}${escapeHtml(move.san)}</span>
+          <span class="explorer-row__san">${prepared ? `<span class="explorer-row__mark" aria-label="${escapeHtml(markLabel)}">✓</span>` : ""}${escapeHtml(move.san)}</span>
           <span class="explorer-row__bar-wrap">
             <span class="explorer-row__bar">
               <span class="explorer-row__white" style="width:${whitePct}%"></span>
