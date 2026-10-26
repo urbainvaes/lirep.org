@@ -8,9 +8,7 @@ it or extends it with their own moves.
 
 It differs from Community, which ranks the studies players share: Browse is
 a small catalogue kept in the repository, the same for everyone, with no
-optimisation. (The optimised repertoires, by expected score, are a separate
-experiment: `optimal-repertoires/`, built by
-`tools/build_optimal_repertoires.py`.)
+optimisation.
 
 ## Done
 
