@@ -33,15 +33,21 @@ type MoveSound = keyof typeof MOVE_SOUND_URLS;
 // Keep an HTMLAudio fallback, but normally use decoded Web Audio buffers:
 // starting a network-backed audio element on every move can lag behind the
 // board animation on mobile. These tiny Lichess sounds are cached by the CDN.
-const MOVE_SOUNDS: Record<MoveSound, HTMLAudioElement> = {
-  move: new Audio(MOVE_SOUND_URLS.move),
-  capture: new Audio(MOVE_SOUND_URLS.capture),
-  check: new Audio(MOVE_SOUND_URLS.check),
-};
-for (const sound of Object.values(MOVE_SOUNDS)) {
-  sound.preload = "auto";
-  sound.load();
+// Fetched with CORS (Lichess allows it), like the buffers: the mobile app's
+// service worker would otherwise keep an opaque copy, which fetch() then
+// can't read for Web Audio.
+function moveAudio(url: string): HTMLAudioElement {
+  const audio = new Audio();
+  audio.crossOrigin = "anonymous";
+  audio.preload = "auto";
+  audio.src = url;
+  return audio;
 }
+const MOVE_SOUNDS: Record<MoveSound, HTMLAudioElement> = {
+  move: moveAudio(MOVE_SOUND_URLS.move),
+  capture: moveAudio(MOVE_SOUND_URLS.capture),
+  check: moveAudio(MOVE_SOUND_URLS.check),
+};
 
 let audioContext: AudioContext | null = null;
 try {
@@ -50,11 +56,14 @@ try {
   // The HTMLAudio fallback still works if Web Audio is unavailable.
 }
 const moveBuffers = new Map<MoveSound, AudioBuffer>();
+const loadingBuffers = new Set<MoveSound>();
 
 // A phone lets Web Audio start only from a user's gesture: the page's
 // first taps (Start, an answer, any button) turn it on, so that every move
 // sound, the computer's first ones included, plays at once rather than
-// through the slower HTMLAudio fallback until your own first move.
+// through the slower HTMLAudio fallback until your own first move. A phone
+// also stops it again (the app in the background, the screen locked, a
+// call): the next tap turns it back on.
 if (audioContext) {
   const context = audioContext;
   const events = ["pointerdown", "touchend", "click", "keydown"] as const;
@@ -65,22 +74,32 @@ if (audioContext) {
       if (context.state === "running") stop();
     }, () => {});
   };
-  events.forEach((name) => document.addEventListener(name, unlock, true));
+  const listen = () => events.forEach((name) => document.addEventListener(name, unlock, true));
+  listen();
+  context.addEventListener("statechange", () => {
+    if (context.state !== "running") listen();
+  });
 }
-if (audioContext) {
-  for (const [name, url] of Object.entries(MOVE_SOUND_URLS) as [MoveSound, string][]) {
-    void fetch(url)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Move sound: HTTP ${response.status}`);
-        return response.arrayBuffer();
-      })
-      .then((data) => audioContext.decodeAudioData(data))
-      .then((buffer) => moveBuffers.set(name, buffer))
-      .catch(() => {
-        // Keep using the HTMLAudio fallback if Web Audio preload fails.
-      });
-  }
+
+// A sound that failed to load (a dropped connection) is tried again when
+// it's next played.
+function loadMoveBuffer(kind: MoveSound): void {
+  if (!audioContext || moveBuffers.has(kind) || loadingBuffers.has(kind)) return;
+  const context = audioContext;
+  loadingBuffers.add(kind);
+  void fetch(MOVE_SOUND_URLS[kind])
+    .then((response) => {
+      if (!response.ok) throw new Error(`Move sound: HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((data) => context.decodeAudioData(data))
+    .then((buffer) => moveBuffers.set(kind, buffer))
+    .catch(() => {
+      // The HTMLAudio fallback plays it meanwhile.
+    })
+    .finally(() => loadingBuffers.delete(kind));
 }
+(Object.keys(MOVE_SOUND_URLS) as MoveSound[]).forEach(loadMoveBuffer);
 
 function playFallbackSound(kind: MoveSound): void {
   const sound = MOVE_SOUNDS[kind];
@@ -101,6 +120,7 @@ export function playMoveSound(move: ReturnType<Chess["move"]>, chess: Chess): vo
   const kind: MoveSound = chess.isCheck() ? "check" : move.isCapture() ? "capture" : "move";
   if (!audioContext) return playFallbackSound(kind);
   if (audioContext.state === "running" && moveBuffers.has(kind)) return startMoveBuffer(audioContext, kind);
+  loadMoveBuffer(kind);
   // Not running yet: ask it to resume (from the move gesture when there is
   // one; later sounds then use Web Audio), but play this one now. Without a
   // gesture, resume() can stay pending until the next tap, and a sound

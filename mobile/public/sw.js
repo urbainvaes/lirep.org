@@ -11,7 +11,7 @@
 // - Sign-in, and anything sent (answers, runs: see src/outbox.ts), go to
 //   the network only.
 
-const VERSION = 2;
+const VERSION = 3;
 const SHELL = `lirep-m-shell-${VERSION}`;
 const ASSETS = `lirep-m-assets-${VERSION}`;
 const DATA = `lirep-m-data-${VERSION}`;
@@ -130,6 +130,9 @@ self.addEventListener("fetch", (event) => {
     }
     return;
   }
-  // The board's images and sounds.
-  if (url.hostname === "lichess1.org") event.respondWith(fromCacheFirst(request));
+  // The board's images and sounds. An audio element asks for a range of
+  // the file, which a whole copy from here doesn't answer (Safari then
+  // plays nothing): it goes to the network, the sounds' copies here being
+  // for the board's Web Audio (src/board.ts).
+  if (url.hostname === "lichess1.org" && !request.headers.has("range")) event.respondWith(fromCacheFirst(request));
 });
