@@ -644,7 +644,7 @@ function renderPage(
             <p class="calc-settings__summary" id="settings-summary"></p>
           </div>
           <button type="button" class="btn btn-secondary" id="settings-toggle" aria-expanded="${settingsOpen}" aria-controls="settings-body">
-            ${settingsOpen ? "Done" : "Edit"}
+            ${settingsOpen ? "Save" : "Edit"}
           </button>
         </div>
         <div id="settings-body" class="calc-settings__body" ${settingsOpen ? "" : "hidden"}>
@@ -750,12 +750,38 @@ function renderPage(
 
   const settingsBody = document.getElementById("settings-body") as HTMLElement;
   const settingsToggle = document.getElementById("settings-toggle") as HTMLButtonElement;
-  settingsToggle.addEventListener("click", () => {
-    settingsOpen = settingsBody.hidden;
-    settingsBody.hidden = !settingsOpen;
-    settingsToggle.textContent = settingsOpen ? "Done" : "Edit";
-    settingsToggle.setAttribute("aria-expanded", String(settingsOpen));
+  // Edit opens the settings; Save saves them as the study's (the editor
+  // then uses them too) and closes them, the results calculated with
+  // others then marked out of date.
+  settingsToggle.addEventListener("click", async () => {
+    if (settingsBody.hidden) {
+      settingsOpen = true;
+      settingsBody.hidden = false;
+      settingsToggle.textContent = "Save";
+      settingsToggle.setAttribute("aria-expanded", "true");
+      return;
+    }
+    settingsToggle.disabled = true;
+    try {
+      const saved = await saveSettings(readSettingsFromDom());
+      settingsOpen = false;
+      renderPage(main, saved, explorerDefaults, knowledge, cache);
+    } catch {
+      settingsToggle.disabled = false;
+      (document.getElementById("recalc-status") as HTMLElement).textContent = "Could not save the settings. Please try again.";
+    }
   });
+
+  async function saveSettings(settings: ExplorerSettings): Promise<Study> {
+    const res = await fetch(`/api/studies/${study.id}/explorer-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) throw new Error("Could not save the settings");
+    return res.json();
+  }
 
   const depthEl = document.getElementById("eval-depth") as HTMLSelectElement;
   // The depth of a run still going, while the page is redrawn between its
@@ -968,6 +994,8 @@ function renderPage(
     };
     let current: Study;
     try {
+      // The settings it runs with become the study's, as Save does.
+      await saveSettings(settings);
       current = id === "score"
         ? await calculateScore(study, settings, leaf, depth)
         : await calculateEvaluation(study, settings, depth);

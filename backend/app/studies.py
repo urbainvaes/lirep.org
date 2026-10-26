@@ -192,6 +192,18 @@ def update_study(study_id: int, payload: StudyIn, request: Request) -> dict:
     return study
 
 
+@router.put("/api/studies/{study_id}/explorer-settings")
+def set_explorer_settings(study_id: int, payload: ExplorerSettings, request: Request) -> dict:
+    """The study's settings alone (the Stats page's Save, and its
+    calculations): its results calculated with other settings then show as
+    out of date."""
+    owner = _require_owner(request)
+    study = store.update_explorer_settings(owner, study_id, payload.model_dump())
+    if not study:
+        raise HTTPException(status_code=404, detail="not found")
+    return study
+
+
 @router.put("/api/studies/{study_id}/shared")
 def set_shared(study_id: int, payload: SharedIn, request: Request) -> dict:
     """Sharing is a separate call (not part of the autosaved study body) so an

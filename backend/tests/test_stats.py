@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
 
-from app import stats, store
+from app import stats, store, studies
 
 
 class StatsSaveTests(unittest.TestCase):
@@ -83,6 +83,22 @@ class StatsSaveTests(unittest.TestCase):
             self.assertEqual(saved["explorerSettings"], settings)
         self.assertEqual(saved["stats"]["minRating"], self.score.explorerSettings.minRating)
         self.assertEqual(saved["stats"]["evalSettings"]["minRating"], self.evaluation.explorerSettings.minRating)
+
+    def test_settings_saved_alone_make_results_out_of_date_not_lost(self):
+        self.save_score()
+        settings = {**self.study["explorerSettings"], "minRating": 2200, "leafValue": "stockfish", "depth": 12}
+        saved = studies.set_explorer_settings(self.study["id"], studies.ExplorerSettings(**settings), self.request)
+        self.assertEqual(saved["explorerSettings"]["minRating"], 2200)
+        self.assertEqual(saved["explorerSettings"]["leafValue"], "stockfish")
+        reread = store.get_study("alice", self.study["id"])
+        self.assertEqual(reread["explorerSettings"]["depth"], 12)
+        # The result stays, with the settings it was calculated with.
+        self.assertEqual(reread["stats"]["winProbability"], 0.6)
+        self.assertEqual(reread["stats"]["minRating"], self.score.explorerSettings.minRating)
+        bob = Request({"type": "http", "session": {"username": "bob"}})
+        with self.assertRaises(HTTPException) as error:
+            studies.set_explorer_settings(self.study["id"], studies.ExplorerSettings(**settings), bob)
+        self.assertEqual(error.exception.status_code, 404)
 
     def test_missing_input_fingerprint_is_rejected(self):
         for payload in (self.score, self.evaluation):
