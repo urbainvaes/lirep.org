@@ -610,6 +610,18 @@ body {
   text-indent: var(--title-shift, 0);
 }
 
+/* The variation, if the name has one, small on a line of its own. */
+.study-card__variation {
+  display: block;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 0.78em;
+  font-style: italic;
+  font-weight: 400;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* Archived studies (main.ts): after the others, behind a switch, their
    cards faded with a dashed border and their badge still, so they read as
    put away. */

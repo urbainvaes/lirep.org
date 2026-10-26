@@ -145,10 +145,27 @@ function expectedResultHtml(
   )}</span></div>`;
 }
 
+/** A study's name as a card shows it: "Caro-Kann Defense: Advance
+ * Variation" is the opening, then its variation; a name without a colon
+ * is all opening. */
+export function splitStudyName(name: string): { opening: string; variation: string | null } {
+  const at = name.indexOf(":");
+  const opening = at < 0 ? name : name.slice(0, at).trim();
+  const variation = at < 0 ? "" : name.slice(at + 1).trim();
+  return opening && variation ? { opening, variation } : { opening: name, variation: null };
+}
+
+/** The variation's line under a card's title, if the name has one. */
+export function variationHtml(name: string): string {
+  const { variation } = splitStudyName(name);
+  return variation ? `<span class="study-card__variation">${escapeHtml(variation)}</span>` : "";
+}
+
 /** A card's body, the same on the home page and the leaderboards: the
  * header (`titleHtml`, then `headerEnd` at its right), the expected result,
  * the tree's size and the opening line. */
 export function studyCardBodyHtml(card: {
+  /** The title (the opening, without its variation: see splitStudyName). */
   titleHtml: string;
   /** The title as plain text, for its tooltip when it's cut. */
   titleText: string;
@@ -170,7 +187,7 @@ export function studyCardBodyHtml(card: {
 }): string {
   return `
     <div class="study-card__header">
-      <h3 title="${escapeHtml(card.titleText)}"><span class="study-card__title-text">${card.titleHtml}</span></h3>
+      <h3 title="${escapeHtml(card.titleText)}"><span class="study-card__title-text">${card.titleHtml}</span>${variationHtml(card.titleText)}</h3>
       ${card.headerEnd}
     </div>
     ${expectedResultHtml(card.stats, card.side, card.ranked)}
@@ -209,7 +226,8 @@ export function cardBoardSpec(el: HTMLElement): MiniBoard {
 }
 
 /** "12 moves · 3 lines", then the study's games, if any: a link to its
- * Games page given `href` (the owner's), else just their number. */
+ * Games page given `href` (the owner's, or the read-only one), else just
+ * their number. */
 export function studySizeHtml(size: { moves: number; lines: number; games?: { count: number; href?: string } }): string {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   const games = size.games?.count ? plural(size.games.count, "game") : "";
@@ -221,7 +239,7 @@ export function studySizeHtml(size: { moves: number; lines: number; games?: { co
 function renderStudyCardContent(study: StudyCardData, headerEnd: string): string {
   const startId = study.startNodeId !== null && study.tree.nodes[study.startNodeId] ? study.startNodeId : study.tree.rootId;
   return studyCardBodyHtml({
-    titleHtml: escapeHtml(study.name),
+    titleHtml: escapeHtml(splitStudyName(study.name).opening),
     titleText: study.name,
     headerEnd,
     stats: study.stats ?? {},

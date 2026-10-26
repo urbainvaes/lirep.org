@@ -1,7 +1,7 @@
 import { statsLine, type BulletStats } from "./bulletStats";
 import { escapeHtml, fetchMe, renderAuthArea, renderSignedOut } from "./layout";
 import { activityTzOffset, renderPracticeOverview, type PracticeActivity } from "./practiceActivity";
-import { openingMovesHtml, renderStudyGroups, type StudyCardData } from "./studyCard";
+import { openingMovesHtml, renderStudyGroups, splitStudyName, variationHtml, type StudyCardData } from "./studyCard";
 
 interface PracticeSummary {
   totalItems: number;
@@ -40,7 +40,7 @@ function renderCard(study: StudyCardData, summaries: Record<string, PracticeSumm
 
   const content = `
       <div class="study-card__header">
-        <h3>${escapeHtml(study.name)}</h3>
+        <h3 title="${escapeHtml(study.name)}"><span class="study-card__title-text">${escapeHtml(splitStudyName(study.name).opening)}</span>${variationHtml(study.name)}</h3>
         ${knowledgeRing(summary)}
       </div>
       ${bulletRowHtml(summary.bullet)}

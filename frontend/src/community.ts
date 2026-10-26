@@ -2,7 +2,7 @@ import { LEAF_VALUE_LABELS, LIREP_DATASET, type LeafValue } from "./explorer";
 import { applyBoardTheme } from "./board";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { observeMiniBoards } from "./miniBoard";
-import { bindTitleScroll, cardBoardSpec, studyBadgeHtml, studyCardBodyHtml, studySizeHtml } from "./studyCard";
+import { bindTitleScroll, cardBoardSpec, studyBadgeHtml, studyCardBodyHtml, splitStudyName, studySizeHtml } from "./studyCard";
 
 interface Summary {
   players: number;
@@ -214,7 +214,7 @@ function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T,
   return `
     <article class="study-card study-card--summary">
       ${studyCardBodyHtml({
-        titleHtml: `<span class="study-card__rank">${opening.rank ?? "–"}</span> <a class="study-card__title-link" href="/opening.html?id=${opening.id}">${escapeHtml(opening.name)}</a>`,
+        titleHtml: `<span class="study-card__rank">${opening.rank ?? "–"}</span> <a class="study-card__title-link" href="/opening.html?id=${opening.id}">${escapeHtml(splitStudyName(opening.name).opening)}</a>`,
         titleText: opening.name,
         headerEnd: studyBadgeHtml(opening.badge, opening.side, opening.mine ? opening.id : undefined),
         stats: opening.badge,
