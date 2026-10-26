@@ -3931,23 +3931,19 @@ details[open] > summary.tree-fold__head::before {
   gap: 16px;
 }
 
-/* A study's knowledge, top right of its card: the share of the ring in
-   green, the percentage inside. */
+/* A study's knowledge, top right of its card where the home page's card
+   has its badge (same size and margins as .study-card__trophy): the share
+   of the ring in green. */
 .knowledge-ring {
-  display: flex;
   flex: none;
   align-self: center;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 26px;
+  height: 26px;
+  margin: -4px -2px -4px 0;
   border-radius: 50%;
   background:
-    radial-gradient(closest-side, var(--panel-bg) 78%, transparent 80%),
+    radial-gradient(closest-side, var(--panel-bg) 70%, transparent 72%),
     conic-gradient(var(--good) calc(var(--pct) * 1%), var(--border) 0);
-  color: var(--text-strong);
-  font-size: 0.75rem;
-  font-weight: 700;
 }
 
 .practice-card__counts {

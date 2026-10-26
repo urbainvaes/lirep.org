@@ -11,14 +11,26 @@ interface PracticeSummary {
   bullet?: BulletStats;
 }
 
-// The knowledge, top right, as a ring that fills up (as in the mobile app).
+const knowledgePct = (summary: PracticeSummary) => Math.round((summary.aggregateKnowledge ?? 0) * 100);
+
+// The knowledge, top right where the home page has the badge, as a ring
+// that fills up (as in the mobile app); its figure is in the row below.
 function knowledgeRing(summary: PracticeSummary): string {
   if (summary.totalItems === 0) return "";
-  const pct = Math.round((summary.aggregateKnowledge ?? 0) * 100);
-  return `<span class="knowledge-ring" style="--pct:${pct}" title="Knowledge: ${pct}%" aria-label="Knowledge: ${pct}%">${pct}</span>`;
+  const pct = knowledgePct(summary);
+  return `<span class="study-card__header-end"><span class="knowledge-ring" style="--pct:${pct}" title="Knowledge score: ${pct}%" aria-hidden="true"></span></span>`;
 }
 
-// Under the title: Bullet runs that reached the end of the
+// Under the title: the knowledge score, as a figure.
+function knowledgeRowHtml(summary: PracticeSummary): string {
+  return `
+      <div class="study-card__score" title="How well you know this study's moves">
+        <span>Knowledge score</span>
+        <strong>${summary.totalItems === 0 ? "—" : `${knowledgePct(summary)}%`}</strong>
+      </div>`;
+}
+
+// Under that: Bullet runs that reached the end of the
 // preparation out of all runs (the last ones in the title).
 function bulletRowHtml(bullet: BulletStats | undefined): string {
   const title = bullet?.runs
@@ -43,6 +55,7 @@ function renderCard(study: StudyCardData, summaries: Record<string, PracticeSumm
         <h3 title="${escapeHtml(study.name)}"><span class="study-card__title-text">${escapeHtml(splitStudyName(study.name).opening)}</span>${variationHtml(study.name)}</h3>
         ${knowledgeRing(summary)}
       </div>
+      ${knowledgeRowHtml(summary)}
       ${bulletRowHtml(summary.bullet)}
       <div class="practice-card__counts">
         <span class="practice-badge practice-badge--due">${summary.dueCount} due</span>
