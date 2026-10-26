@@ -756,6 +756,16 @@ body {
   font-size: 0.8rem;
 }
 
+/* The opening moves' line close under it; and without a variation under
+   the title, a little more room above it. */
+.study-card__score + .study-card__line {
+  margin-top: 2px;
+}
+
+.study-card__header:not(:has(.study-card__variation)) + .study-card__score {
+  margin-top: 4px;
+}
+
 /* The expected result: score / evaluation. On a leaderboard, the one it
    ranks by is bold and the other is not. */
 .study-card__results {
