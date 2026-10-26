@@ -50,7 +50,10 @@ self.addEventListener("activate", (event) => {
 
 async function fromCacheFirst(request) {
   const cached = await caches.match(request);
-  if (cached) return cached;
+  // A copy kept from a no-CORS request (a board's piece images) is opaque,
+  // and the browser refuses it for a CORS one (a badge's piece, a CSS
+  // mask): then from the network, and that copy, readable by both, is kept.
+  if (cached && !(cached.type === "opaque" && request.mode !== "no-cors")) return cached;
   const response = await fetch(request);
   if ((response.ok || response.type === "opaque") && mayStore(response)) {
     const copy = response.clone();
