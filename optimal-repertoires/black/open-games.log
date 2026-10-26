@@ -1,0 +1,225 @@
+Parameters:
+  data:       https://explorer.lichess.org, speeds blitz,rapid, games averaging 2000+: 80,684,316 games at the start
+  requests:   1 s apart; cache /home/urbain/.cache/lirep/explorer.json (3,357 answers, kept 30 days)
+  candidates: 6 per position, replies down to 0.2% of games
+  safeguards: 100 games per candidate move, scores shrunk by 20 games
+
+[    0.2s] Valuing the base repertoire: reading the explorer for each of its positions
+[    0.2s] start: expected score 47.63%; adding up to 50 moves
+[    0.2s] Looking for move 1: listing the replies the repertoire leaves unanswered
+[    5.1s] move 1: 1. e4 e5 2. Nf3 d5  ->  expected score 50.28% (+2.65 points)
+[    5.1s] Looking for move 2: listing the replies the repertoire leaves unanswered
+[   11.1s] move 2: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7  ->  expected score 50.77% (+0.49 points)
+[   11.1s] Looking for move 3: listing the replies the repertoire leaves unanswered
+[   14.4s] move 3: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6  ->  expected score 51.25% (+0.47 points)
+[   14.4s] Looking for move 4: listing the replies the repertoire leaves unanswered
+[   24.9s] move 4: 1. e4 e5 2. f4 Bc5  ->  expected score 51.53% (+0.28 points)
+[   24.9s] Looking for move 5: listing the replies the repertoire leaves unanswered
+[   27.4s] move 5: 1. e4 e5 2. f4 Bc5 3. Nf3 d5  ->  expected score 51.78% (+0.25 points)
+[   27.4s] Looking for move 6: listing the replies the repertoire leaves unanswered
+[   31.4s] explorer: rate limited (429), waiting 60 s
+[   93.0s] move 6: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6  ->  expected score 51.97% (+0.19 points)
+[   93.0s] Looking for move 7: listing the replies the repertoire leaves unanswered
+[   97.6s] move 7: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Nd3 Nc6  ->  expected score 52.24% (+0.27 points)
+[   97.6s] Looking for move 8: listing the replies the repertoire leaves unanswered
+[  103.5s] move 8: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Ng4 Nc6  ->  expected score 52.41% (+0.17 points)
+[  103.5s] Looking for move 9: listing the replies the repertoire leaves unanswered
+[  113.7s] move 9: 1. e4 e5 2. Nf3 d5 3. Nc3 dxe4  ->  expected score 52.54% (+0.13 points)
+[  113.7s] Looking for move 10: listing the replies the repertoire leaves unanswered
+[  118.6s] move 10: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. Nc3 Bd6  ->  expected score 52.65% (+0.11 points)
+[  118.6s] Looking for move 11: listing the replies the repertoire leaves unanswered
+[  125.0s] move 11: 1. e4 e5 2. Bc4 f5  ->  expected score 52.75% (+0.10 points)
+[  125.0s] Looking for move 12: listing the replies the repertoire leaves unanswered
+[  128.1s] explorer: rate limited (429), waiting 60 s
+[  191.9s] move 12: 1. e4 e5 2. d4 Nc6  ->  expected score 52.83% (+0.08 points)
+[  191.9s] Looking for move 13: listing the replies the repertoire leaves unanswered
+[  196.1s] move 13: 1. e4 e5 2. d4 Nc6 3. dxe5 d6  ->  expected score 53.20% (+0.37 points)
+[  196.1s] Looking for move 14: listing the replies the repertoire leaves unanswered
+[  199.2s] move 14: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. Qe2 Bd6  ->  expected score 53.27% (+0.08 points)
+[  199.2s] Looking for move 15: listing the replies the repertoire leaves unanswered
+[  203.2s] move 15: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. d3 Qxd5  ->  expected score 53.34% (+0.07 points)
+[  203.2s] Looking for move 16: listing the replies the repertoire leaves unanswered
+[  205.1s] explorer: rate limited (429), waiting 60 s
+[  266.6s] move 16: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. c4 e4  ->  expected score 53.40% (+0.06 points)
+[  266.6s] Looking for move 17: listing the replies the repertoire leaves unanswered
+[  268.5s] move 17: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. c4 e4 5. Nd4 Ng4  ->  expected score 53.77% (+0.36 points)
+[  268.5s] Looking for move 18: listing the replies the repertoire leaves unanswered
+[  274.5s] move 18: 1. e4 e5 2. Bc4 f5 3. d3 c6  ->  expected score 53.82% (+0.06 points)
+[  274.5s] Looking for move 19: listing the replies the repertoire leaves unanswered
+[  278.8s] move 19: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. c4 e4 5. Qe2 c6  ->  expected score 53.88% (+0.06 points)
+[  278.8s] Looking for move 20: listing the replies the repertoire leaves unanswered
+[  282.2s] explorer: rate limited (429), waiting 60 s
+[  342.6s] move 20: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Nf3 dxe4  ->  expected score 53.93% (+0.05 points)
+[  342.6s] Looking for move 21: listing the replies the repertoire leaves unanswered
+[  345.4s] move 21: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Nf3 dxe4 6. Nfd2 f5  ->  expected score 54.04% (+0.11 points)
+[  345.4s] Looking for move 22: listing the replies the repertoire leaves unanswered
+[  352.8s] move 22: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Nf3 dxe4 6. Ng1 Be6  ->  expected score 54.12% (+0.08 points)
+[  352.8s] Looking for move 23: listing the replies the repertoire leaves unanswered
+[  356.4s] move 23: 1. e4 e5 2. Nf3 d5 3. d3 Nc6  ->  expected score 54.18% (+0.05 points)
+[  356.4s] Looking for move 24: listing the replies the repertoire leaves unanswered
+[  357.3s] explorer: rate limited (429), waiting 60 s
+[  423.2s] move 24: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. c4 e4 5. Ng1 c6  ->  expected score 54.21% (+0.03 points)
+[  423.2s] Looking for move 25: listing the replies the repertoire leaves unanswered
+[  424.4s] move 25: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. d4 Qxd5  ->  expected score 54.24% (+0.03 points)
+[  424.4s] Looking for move 26: listing the replies the repertoire leaves unanswered
+[  429.5s] move 26: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. d4 Qxd5 5. Nxe5 Nc6  ->  expected score 54.37% (+0.13 points)
+[  429.5s] Looking for move 27: listing the replies the repertoire leaves unanswered
+[  432.6s] move 27: 1. e4 e5 2. Bc4 f5 3. d4 Nc6  ->  expected score 54.41% (+0.03 points)
+[  432.6s] Looking for move 28: listing the replies the repertoire leaves unanswered
+[  433.1s] move 28: 1. e4 e5 2. d4 Nc6 3. d5 Nce7  ->  expected score 54.44% (+0.03 points)
+[  433.1s] Looking for move 29: listing the replies the repertoire leaves unanswered
+[  433.7s] explorer: rate limited (429), waiting 60 s
+[  497.9s] move 29: 1. e4 e5 2. d4 Nc6 3. d5 Nce7 4. c4 Nf6  ->  expected score 54.50% (+0.07 points)
+[  497.9s] Looking for move 30: listing the replies the repertoire leaves unanswered
+[  500.6s] move 30: 1. e4 e5 2. d4 Nc6 3. d5 Nce7 4. f4 Ng6  ->  expected score 54.54% (+0.03 points)
+[  500.6s] Looking for move 31: listing the replies the repertoire leaves unanswered
+[  502.3s] move 31: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. Nc3 Bd6 5. Bc4 e4  ->  expected score 54.57% (+0.03 points)
+[  502.3s] Looking for move 32: listing the replies the repertoire leaves unanswered
+[  505.1s] move 32: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. Nc3 Bd6 5. d3 h6  ->  expected score 54.61% (+0.04 points)
+[  505.1s] Looking for move 33: listing the replies the repertoire leaves unanswered
+[  507.2s] move 33: 1. e4 e5 2. Nf3 d5 3. d4 dxe4  ->  expected score 54.64% (+0.03 points)
+[  507.2s] Looking for move 34: listing the replies the repertoire leaves unanswered
+[  508.8s] move 34: 1. e4 e5 2. Nf3 d5 3. d4 dxe4 4. Nxe5 Nd7  ->  expected score 54.80% (+0.16 points)
+[  508.8s] Looking for move 35: listing the replies the repertoire leaves unanswered
+[  511.7s] explorer: rate limited (429), waiting 60 s
+[  576.1s] move 35: 1. e4 e5 2. Nf3 d5 3. d4 dxe4 4. Nxe5 Nd7 5. Nc4 Nb6  ->  expected score 54.87% (+0.07 points)
+[  576.1s] Looking for move 36: listing the replies the repertoire leaves unanswered
+[  579.2s] move 36: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Nd3 Nc6 6. c3 dxe4  ->  expected score 54.90% (+0.03 points)
+[  579.2s] Looking for move 37: listing the replies the repertoire leaves unanswered
+[  582.1s] move 37: 1. e4 e5 2. Nc3 Nf6  ->  expected score 54.92% (+0.03 points)
+[  582.1s] Looking for move 38: listing the replies the repertoire leaves unanswered
+[  587.8s] move 38: 1. e4 e5 2. Nc3 Nf6 3. f4 d5  ->  expected score 55.06% (+0.14 points)
+[  587.8s] Looking for move 39: listing the replies the repertoire leaves unanswered
+[  588.8s] explorer: rate limited (429), waiting 60 s
+[  651.0s] move 39: 1. e4 e5 2. Nc3 Nf6 3. Bc4 Nxe4  ->  expected score 55.11% (+0.04 points)
+[  651.0s] Looking for move 40: listing the replies the repertoire leaves unanswered
+[  655.4s] move 40: 1. e4 e5 2. Nc3 Nf6 3. Nf3 Bb4  ->  expected score 55.15% (+0.04 points)
+[  655.4s] Looking for move 41: listing the replies the repertoire leaves unanswered
+[  659.6s] move 41: 1. e4 e5 2. Nc3 Nf6 3. g3 d5  ->  expected score 55.18% (+0.03 points)
+[  659.6s] Looking for move 42: listing the replies the repertoire leaves unanswered
+[  662.0s] move 42: 1. e4 e5 2. Nc3 Nf6 3. g3 d5 4. exd5 Bg4  ->  expected score 55.26% (+0.08 points)
+[  662.0s] Looking for move 43: listing the replies the repertoire leaves unanswered
+[  663.0s] move 43: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Nf3 dxe4 6. Nfd2 f5 7. Bc4 Nf6  ->  expected score 55.28% (+0.02 points)
+[  663.0s] Looking for move 44: listing the replies the repertoire leaves unanswered
+[  664.3s] explorer: rate limited (429), waiting 60 s
+[  724.7s] move 44: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. d4 f6 5. Nf3 dxe4 6. Nfd2 f5 7. Bc4 Nf6 8. O-O Nc6  ->  expected score 55.31% (+0.03 points)
+[  724.7s] Looking for move 45: listing the replies the repertoire leaves unanswered
+[  727.5s] move 45: 1. e4 e5 2. Nf3 d5 3. Nxe5 Qe7 4. Ng4 Qxe4+  ->  expected score 55.33% (+0.02 points)
+[  727.5s] Looking for move 46: listing the replies the repertoire leaves unanswered
+[  728.7s] move 46: 1. e4 e5 2. Nf3 d5 3. Nc3 dxe4 4. Nxe5 Qe7  ->  expected score 55.35% (+0.02 points)
+[  728.7s] Looking for move 47: listing the replies the repertoire leaves unanswered
+[  729.5s] move 47: 1. e4 e5 2. Bc4 f5 3. Nf3 fxe4  ->  expected score 55.38% (+0.02 points)
+[  729.5s] Looking for move 48: listing the replies the repertoire leaves unanswered
+[  732.3s] move 48: 1. e4 e5 2. d4 Nc6 3. c3 Nf6  ->  expected score 55.40% (+0.02 points)
+[  732.3s] Looking for move 49: listing the replies the repertoire leaves unanswered
+[  733.1s] move 49: 1. e4 e5 2. Nf3 d5 3. d4 dxe4 4. Nxe5 Nd7 5. Bf4 Ngf6  ->  expected score 55.42% (+0.02 points)
+[  733.1s] Looking for move 50: listing the replies the repertoire leaves unanswered
+[  735.9s] move 50: 1. e4 e5 2. Nf3 d5 3. exd5 Nf6 4. d3 Qxd5 5. Be2 Nc6  ->  expected score 55.44% (+0.02 points)
+[  736.0s] done
+
+50 moves added: 193 explorer requests, 0 answers from the cache, in 736 s.
+
+2. Nf3  (70%)
+  2... d5
+    3. Nxe5
+      3... Qe7
+        4. d4
+          4... f6
+            5. Nd3
+              5... Nc6
+                6. c3
+                  6... dxe4
+            5. Ng4
+              5... Nc6
+            5. Nf3
+              5... dxe4
+                6. Nfd2
+                  6... f5
+                    7. Bc4
+                      7... Nf6
+                        8. O-O
+                          8... Nc6
+                6. Ng1
+                  6... Be6
+        4. Ng4
+          4... Qxe4+
+    3. exd5
+      3... Nf6
+        4. Nc3
+          4... Bd6
+            5. Bc4
+              5... e4
+            5. d3
+              5... h6
+        4. Qe2
+          4... Bd6
+        4. d3
+          4... Qxd5
+            5. Be2
+              5... Nc6
+        4. c4
+          4... e4
+            5. Nd4
+              5... Ng4
+            5. Qe2
+              5... c6
+            5. Ng1
+              5... c6
+        4. d4
+          4... Qxd5
+            5. Nxe5
+              5... Nc6
+    3. Nc3
+      3... dxe4
+        4. Nxe5
+          4... Qe7
+    3. d3
+      3... Nc6
+    3. d4
+      3... dxe4
+        4. Nxe5
+          4... Nd7
+            5. Nc4
+              5... Nb6
+            5. Bf4
+              5... Ngf6
+2. f4  (9%)
+  2... Bc5
+    3. Nf3
+      3... d5
+2. Nc3  (7%)
+  2... Nf6
+    3. f4
+      3... d5
+    3. Bc4
+      3... Nxe4
+    3. Nf3
+      3... Bb4
+    3. g3
+      3... d5
+        4. exd5
+          4... Bg4
+2. d4  (6%)
+  2... Nc6
+    3. dxe5
+      3... d6
+    3. d5
+      3... Nce7
+        4. c4
+          4... Nf6
+        4. f4
+          4... Ng6
+    3. c3
+      3... Nf6
+2. Bc4  (6%)
+  2... f5
+    3. d3
+      3... c6
+    3. d4
+      3... Nc6
+    3. Nf3
+      3... fxe4
+
+(50 of your moves in this tree.)
+
+Wrote /tmp/claude-1000/-home-urbain-documents-lirep/2d8a0789-1edf-438d-a90d-1241d2d6ebd2/scratchpad/rep/open-games.lirep.json (import it on Lirep's home page).
