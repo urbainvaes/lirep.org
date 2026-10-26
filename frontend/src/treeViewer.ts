@@ -385,6 +385,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      check: chess.isCheck(),
       lastMove: lastMoveAt(tree, currentId),
       // Read-only: nothing on the board can be moved.
       movable: { color: undefined, dests: new Map() },

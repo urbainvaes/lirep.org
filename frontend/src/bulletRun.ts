@@ -342,6 +342,7 @@ export class BulletGame {
     this.board?.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      check: chess.isCheck(),
       lastMove: lastMoveAt(this.tree, at),
       movable: interactive ? { color: toColor(chess), dests: computeDests(chess) } : { color: undefined, dests: new Map() },
       drawable: { autoShapes: [] },

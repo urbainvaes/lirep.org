@@ -272,6 +272,7 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      check: chess.isCheck(),
       lastMove: lastMoveAt(tree, nodeId),
       movable: interactive ? { color: toColor(chess), dests: computeDests(chess) } : { color: undefined, dests: new Map() },
     });

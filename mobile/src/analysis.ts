@@ -244,6 +244,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      check: chess.isCheck(),
       lastMove,
       movable: { color: toColor(chess), dests: computeDests(chess) },
       drawable: { autoShapes: prepShapes },

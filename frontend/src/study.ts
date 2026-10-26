@@ -1185,6 +1185,7 @@ function renderEditor(
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      check: chess.isCheck(),
       lastMove: lastMoveAt(tree, currentId),
       movable: { color: toColor(chess), dests: computeDests(chess) },
     });
@@ -1576,7 +1577,7 @@ function renderEditor(
       const move = chess.move(san);
       lastMove = [move.from as Key, move.to as Key];
     }
-    board.set({ fen: chess.fen(), turnColor: toColor(chess), lastMove, movable: { color: undefined, dests: new Map() } });
+    board.set({ fen: chess.fen(), turnColor: toColor(chess), check: chess.isCheck(), lastMove, movable: { color: undefined, dests: new Map() } });
   });
 
   board = createBoard(boardEl, onMove, boardOrientation);

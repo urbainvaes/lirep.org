@@ -127,6 +127,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     board.set({
       fen: chess.fen(),
       turnColor: toColor(chess),
+      check: chess.isCheck(),
       lastMove: lastMoveAt(tree, nodeId),
       movable: interactive ? { color: toColor(chess), dests: computeDests(chess) } : { color: undefined, dests: new Map() },
     });
