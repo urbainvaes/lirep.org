@@ -1666,8 +1666,8 @@ body {
 }
 
 .piece-badge--none {
-  --piece-c1: #8a8a8a;
-  --piece-c2: #55555a;
+  --piece-c1: #b4b4b8;
+  --piece-c2: #8c8c91;
   filter: none;
 }
 
