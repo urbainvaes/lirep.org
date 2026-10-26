@@ -665,7 +665,7 @@ function renderEditor(
       reportConflict(conflict);
       return;
     }
-    playMoveSound(move, chess);
+    playMoveSound(move);
     goTo(addMove(tree, currentId, move.san));
     scheduleAutoSave();
   }
@@ -680,7 +680,7 @@ function renderEditor(
       reportConflict(conflict);
       return;
     }
-    playMoveSound(move, chess);
+    playMoveSound(move);
     goTo(addMove(tree, currentId, move.san));
     scheduleAutoSave();
   }
@@ -719,7 +719,7 @@ function renderEditor(
       reportConflict(conflict);
       return;
     }
-    playMoveSound(move, chess);
+    playMoveSound(move);
     goTo(addMove(tree, currentId, move.san));
     scheduleAutoSave();
   }

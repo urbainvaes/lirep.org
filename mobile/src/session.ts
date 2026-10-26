@@ -225,7 +225,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     const chess = positionAt(tree, tree.nodes[nodeId].parentId as number);
     const move = chess.move({ from: orig, to: dest, promotion: "q" });
     if (!move) return;
-    playMoveSound(move, chess);
+    playMoveSound(move);
     const correct = move.san === tree.nodes[nodeId].san;
     if (!graded) {
       void firstAnswer(nodeId, correct);

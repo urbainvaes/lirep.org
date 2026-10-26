@@ -23,10 +23,11 @@ export function computeDests(chess: Chess): Dests {
   return dests;
 }
 
+// No check sound: Lichess's standard set has a Check.mp3, but it is silent
+// (Lichess plays the move's own sound for a check, as here).
 const MOVE_SOUND_URLS = {
   move: "https://lichess1.org/assets/sound/standard/Move.mp3",
   capture: "https://lichess1.org/assets/sound/standard/Capture.mp3",
-  check: "https://lichess1.org/assets/sound/standard/Check.mp3",
 } as const;
 type MoveSound = keyof typeof MOVE_SOUND_URLS;
 
@@ -123,8 +124,8 @@ function startMoveBuffer(audioContext: AudioContext, kind: MoveSound): void {
   source.start();
 }
 
-export function playMoveSound(move: ReturnType<Chess["move"]>, chess: Chess): void {
-  const kind: MoveSound = chess.isCheck() ? "check" : move.isCapture() ? "capture" : "move";
+export function playMoveSound(move: ReturnType<Chess["move"]>): void {
+  const kind: MoveSound = move.isCapture() ? "capture" : "move";
   if (!audioContext) return playFallbackSound(kind);
   if (audioContext.state === "running" && moveBuffers.has(kind)) return startMoveBuffer(audioContext, kind);
   loadMoveBuffer(kind);

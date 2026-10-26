@@ -367,7 +367,7 @@ export class BulletGame {
       const move = chess.move(this.tree.nodes[replyId].san as string);
       this.nodeId = replyId;
       this.setBoard(this.nodeId, false);
-      if (move) playMoveSound(move, chess);
+      if (move) playMoveSound(move);
       this.proceed();
     }, COMPUTER_DELAY_MS);
   }
@@ -383,7 +383,7 @@ export class BulletGame {
     const chess = positionAt(this.tree, this.nodeId);
     const move = chess.move({ from: orig, to: dest, promotion: "q" });
     if (!move) return;
-    playMoveSound(move, chess);
+    playMoveSound(move);
     const preparedId = this.tree.nodes[this.nodeId].children[0];
     if (move.san !== this.tree.nodes[preparedId].san) {
       // Show the prepared move, as an arrow from the position before.

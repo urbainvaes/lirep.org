@@ -501,7 +501,7 @@ function renderSession(main: HTMLElement, study: Study, startNodeId: number, ini
     const chess = positionAt(tree, parentId);
     const move = chess.move({ from: orig, to: dest, promotion: "q" });
     if (!move) return;
-    playMoveSound(move, chess);
+    playMoveSound(move);
     const expectedSan = tree.nodes[nodeId].san as string;
     const correct = move.san === expectedSan;
     if (!firstAttemptGraded) {

@@ -142,7 +142,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     const chess = position();
     const move = chess.move({ from: orig, to: dest, promotion: "q" });
     if (!move) return show();
-    playMoveSound(move, chess);
+    playMoveSound(move);
     play(move.san, false);
   }
 
@@ -153,7 +153,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     if (sound) {
       const chess = position();
       const move = chess.move(san);
-      if (move) playMoveSound(move, chess);
+      if (move) playMoveSound(move);
     }
     ply += 1;
     show();
