@@ -35,19 +35,16 @@ type MoveSound = keyof typeof MOVE_SOUND_URLS;
 // board animation on mobile. These tiny Lichess sounds are cached by the CDN.
 // Fetched with CORS (Lichess allows it), like the buffers: the mobile app's
 // service worker would otherwise keep an opaque copy, which fetch() then
-// can't read for Web Audio.
-function moveAudio(url: string): HTMLAudioElement {
+// can't read for Web Audio. Each sound is downloaded once: with Web Audio,
+// the fallback plays the bytes fetched for its buffer (loadMoveBuffer), and
+// only asks the network itself if it must play before they arrive.
+function moveAudio(url: string | null): HTMLAudioElement {
   const audio = new Audio();
   audio.crossOrigin = "anonymous";
   audio.preload = "auto";
-  audio.src = url;
+  if (url) audio.src = url;
   return audio;
 }
-const MOVE_SOUNDS: Record<MoveSound, HTMLAudioElement> = {
-  move: moveAudio(MOVE_SOUND_URLS.move),
-  capture: moveAudio(MOVE_SOUND_URLS.capture),
-  check: moveAudio(MOVE_SOUND_URLS.check),
-};
 
 let audioContext: AudioContext | null = null;
 try {
@@ -55,6 +52,9 @@ try {
 } catch {
   // The HTMLAudio fallback still works if Web Audio is unavailable.
 }
+const MOVE_SOUNDS = Object.fromEntries(
+  (Object.entries(MOVE_SOUND_URLS) as [MoveSound, string][]).map(([kind, url]) => [kind, moveAudio(audioContext ? null : url)]),
+) as Record<MoveSound, HTMLAudioElement>;
 const moveBuffers = new Map<MoveSound, AudioBuffer>();
 const loadingBuffers = new Set<MoveSound>();
 
@@ -92,7 +92,12 @@ function loadMoveBuffer(kind: MoveSound): void {
       if (!response.ok) throw new Error(`Move sound: HTTP ${response.status}`);
       return response.arrayBuffer();
     })
-    .then((data) => context.decodeAudioData(data))
+    .then((data) => {
+      // The fallback's copy (made before decoding takes the bytes).
+      const audio = MOVE_SOUNDS[kind];
+      if (!audio.src) audio.src = URL.createObjectURL(new Blob([data], { type: "audio/mpeg" }));
+      return context.decodeAudioData(data);
+    })
     .then((buffer) => moveBuffers.set(kind, buffer))
     .catch(() => {
       // The HTMLAudio fallback plays it meanwhile.
@@ -103,6 +108,8 @@ function loadMoveBuffer(kind: MoveSound): void {
 
 function playFallbackSound(kind: MoveSound): void {
   const sound = MOVE_SOUNDS[kind];
+  // Before the fetched copy arrives (or if it failed): from the network.
+  if (!sound.src) sound.src = MOVE_SOUND_URLS[kind];
   sound.currentTime = 0;
   void sound.play().catch(() => {
     // Browsers may block sound until the user interacts with the page.
