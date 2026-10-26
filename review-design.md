@@ -86,9 +86,9 @@ The editor has useful global arrow-key navigation, but individual move entries a
 
 **Evidence: Rendered and source.** [mobile/src/lists.ts](mobile/src/lists.ts), [studyCard.ts](frontend/src/studyCard.ts), [index.html](frontend/index.html), [opening.ts](frontend/src/opening.ts).
 
-Desktop study cards expose Edit and Practice separately. In mobile, both the Studies row and Practice row open the same practice session. The Studies tab shows analytical results but offers no direct route to that study's editor or Stats. Desktop's home/study collection is reached through the logo rather than an explicit Studies navigation item. Signing in from a public opening uses a generic login link and loses the specific import context; mobile already preserves its destination.
+Desktop study cards expose Edit and Practice separately. In mobile, the Studies row now opens the study read-only (its moves, along the prep) and its chart icon a stats screen linking to the website's editor and Stats; the Practice row opens a practice session. Desktop's home/study collection is reached through the logo rather than an explicit Studies navigation item. Signing in from a public opening uses a generic login link and loses the specific import context; mobile already preserves its destination.
 
-**Improve:** Make the Studies row open a study overview or offer a clear “Open study on website” action. Keep Practice explicitly labeled. Add a discoverable Studies/Home destination and preserve the current opening through sign-in.
+**Improve:** Keep Practice explicitly labeled. Add a discoverable Studies/Home destination and preserve the current opening through sign-in.
 
 **Acceptance:** Users can predict where a study title takes them and return to the same opening after authentication. Mobile limitations are explained at the point where a missing action is needed.
 
@@ -101,26 +101,6 @@ Desktop Practice begins with the yearly activity grid and internal rankings, the
 **Improve:** Start with “4 positions due · Start review,” plus new-position counts when relevant. Prioritize due work or offer a due filter while preserving the user's normal study order elsewhere. Move activity and best-known rankings below the actionable list or into a collapsed progress section. Use “Practice” and “Bullet” labels.
 
 **Acceptance:** A returning user can start the most useful review from the first screen without interpreting icons or choosing among equally emphasized historical metrics.
-
-### 9. Give open-ended practice a clear stopping point
-
-**Evidence: Source.** [practice-session.ts](frontend/src/practice-session.ts), [mobile/src/session.ts](mobile/src/session.ts), [practice.py](backend/app/practice.py).
-
-Both practice experiences automatically start another round. The backend can offer voluntary review even when nothing is due, so completing the displayed queue does not necessarily end the session. Desktop has End session, whereas mobile uses a back arrow. “Position N of M” or “1 / 4” can read as a finite task even though the app continues indefinitely.
-
-**Improve:** At the end of each round, show a brief summary and explicit “Done” / “Another round” choices. Distinguish due review from optional practice. Offer an intentional continuous mode for people who want it; do not require reaching rounded 100% knowledge to get a meaningful finish.
-
-**Acceptance:** After finishing the initial queue, users know what they completed, whether anything is still due and whether the next round is optional.
-
-### 10. Allow “I don't remember” before requiring a wrong move
-
-**Evidence: Source.** [practice-session.ts](frontend/src/practice-session.ts), [mobile/src/session.ts](mobile/src/session.ts).
-
-Show answer is hidden until the first incorrect attempt. Someone who cannot recall the move must guess to reveal it. The UI then says Correct after a successful retry even though only the first attempt determines the saved result. This can blur the distinction between learning the move and successfully recalling it unaided.
-
-**Improve:** Offer “Show answer” or “I don't remember” from the outset, with a stated grading consequence. Keep the first-attempt record, but label retries as “Got it on retry” or “Answer reviewed.” Consider an optional progressive hint before revealing the complete move.
-
-**Acceptance:** Users can honestly record a lapse without inventing a move, and can understand why the stored score differs from the last green feedback message.
 
 ### 11. Explain missing metrics and simplify the two-dimensional badge
 
@@ -211,7 +191,7 @@ Desktop/mobile already share chess logic but duplicate palette and component rul
 | Pass | Changes | Practical validation |
 | --- | --- | --- |
 | Trust and recovery | Visible sharing, first-use header fit, accurate failures, branch undo | Create/import a private study, simulate a failed load, delete/restore a branch at phone width. |
-| Core task clarity | Accessible move entry, explicit study destinations, due-first practice, round completion and answer reveal | Have a new user build a short line and complete a finite review, including by keyboard. |
+| Core task clarity | Accessible move entry, explicit study destinations, due-first practice | Have a new user build a short line and complete a review, including by keyboard. |
 | Interpretation | Consistent evaluation signs, labeled metrics, unknown/stale badges, clear calculation scope | Ask users to interpret White and Black study results and identify which need recalculation. |
 | Polish and maintenance | Targets/contrast, browsing filters, touch previews, terminology, shared tokens and current notes | Check both themes, enlarged text, real phones and larger collections. |
 
