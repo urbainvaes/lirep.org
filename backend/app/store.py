@@ -329,7 +329,11 @@ def moves_fingerprint(tree: dict[str, Any], start_node_id: int | None) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
-def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
+def _row_to_study(row: sqlite3.Row, *, replay: bool = True) -> dict[str, Any]:
+    """`replay`: check the moves are legal too, by playing them (practice
+    and the stats play them); without, only the tree's shape, which is
+    enough for listings and much quicker over many studies. Writes always
+    check both (see create_study and update_study)."""
     # Merged with defaults so older rows saved before a new explorerSettings
     # field existed (e.g. "speeds") still come back with a sensible value.
     saved_explorer_settings = json.loads(row["explorer_settings"]) if row["explorer_settings"] else {}
@@ -339,7 +343,7 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
     if explorer_settings["source"] == "lirep" and explorer_settings["database"] == "masters":
         explorer_settings["database"] = "lichess"
     tree = json.loads(row["tree"])
-    validate_tree(tree, row["side"] or DEFAULT_SIDE)
+    validate_tree(tree, (row["side"] or DEFAULT_SIDE) if replay else None)
     return {
         "id": row["id"],
         "name": row["name"],
@@ -384,14 +388,14 @@ def _broken_study(row: sqlite3.Row, reason: str) -> dict[str, Any]:
     }
 
 
-def _read_study(row: sqlite3.Row | None, *, keep_broken: bool = False) -> dict[str, Any] | None:
+def _read_study(row: sqlite3.Row | None, *, keep_broken: bool = False, replay: bool = True) -> dict[str, Any] | None:
     """Malformed legacy rows are never deleted: left out of what others see
     and of calculations, and shown to their owner as damaged
     (`keep_broken`)."""
     if row is None:
         return None
     try:
-        return _row_to_study(row)
+        return _row_to_study(row, replay=replay)
     except (InvalidTree, json.JSONDecodeError, RecursionError, ValueError, KeyError, TypeError) as exc:
         logger.warning("Invalid study %s: %s", row["id"], exc)
         return _broken_study(row, str(exc) or type(exc).__name__) if keep_broken else None
@@ -601,14 +605,15 @@ def set_study_shared(owner: str, study_id: int, shared: bool) -> dict[str, Any] 
 
 def list_shared_studies() -> list[tuple[str, dict[str, Any]]]:
     """(owner, study) for every study its owner has chosen to share (and
-    hasn't archived)."""
+    hasn't archived). For the leaderboards, which read them all and never
+    play their moves: their trees' shape is checked, not their moves."""
     with _connect() as conn:
         rows = conn.execute(f"SELECT owner, {_COLUMNS} FROM studies WHERE shared = 1 AND archived_at IS NULL").fetchall()
         counts = dict(conn.execute("SELECT study_id, COUNT(*) FROM study_games GROUP BY study_id").fetchall())
     # The leaderboards' cards show how many games a study has.
     return [
         (row["owner"], {**study, "gameCount": counts.get(row["id"], 0)})
-        for row in rows if (study := _read_study(row)) is not None
+        for row in rows if (study := _read_study(row, replay=False)) is not None
     ]
 
 
