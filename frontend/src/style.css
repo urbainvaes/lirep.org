@@ -387,57 +387,45 @@ body {
   color: var(--text-strong);
 }
 
-.profile-study-list {
-  overflow: hidden;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.profile-study-row {
+.profile-prefs {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 15px 18px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px 32px;
 }
 
-.profile-study-row + .profile-study-row {
-  border-top: 1px solid var(--border);
-}
-
-.profile-study-row__main,
-.profile-study-row__practice {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.profile-study-row__text {
+.profile-pref {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
-.profile-study-row__text strong {
-  overflow-wrap: anywhere;
+.profile-pref legend {
+  margin-bottom: 4px;
   color: var(--text-strong);
-  font-size: 0.94rem;
+  font-weight: 600;
 }
 
-.profile-study-row__text > span,
-.profile-study-row__practice > span {
-  color: var(--text-dim);
-  font-size: 0.78rem;
+.profile-pref label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
-.profile-study-row__practice {
-  flex-shrink: 0;
+/* Every tier, then every piece, as the choices make them look. */
+.profile-pref-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.profile-study-row__practice .btn {
-  padding: 5px 11px;
+.profile-pref-preview > div {
+  display: flex;
+  gap: 12px;
 }
 
 .profile-empty {

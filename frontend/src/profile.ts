@@ -1,5 +1,6 @@
+import { badgeIcons, badgeShine, ICONS, setBadgePrefs, SHINES, type BadgeIcons, type BadgeShine } from "./badgePrefs";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import type { StudyTree } from "./tree";
+import { PIECES, pieceBadgeHtml, TIER_LABELS, TIERS } from "./scoreTiers";
 
 interface RatingInfo {
   rating: number;
@@ -15,21 +16,6 @@ interface ProfileResponse {
   anonymous: boolean;
   serverCache: { allowed: boolean; enabled: boolean };
   ratings: Partial<Record<"bullet" | "blitz" | "rapid" | "classical", RatingInfo>>;
-}
-
-interface ProfileStudy {
-  id: number;
-  name: string;
-  tree: StudyTree;
-  side: "white" | "black";
-  stats: { winProbability?: number } | null;
-}
-
-interface PracticeSummary {
-  totalItems: number;
-  dueCount: number;
-  newCount: number;
-  aggregateKnowledge: number | null;
 }
 
 // Glyph codes from lichess.org's own icon font (see style.css), read off a
@@ -50,12 +36,7 @@ function renderSignedOut(main: HTMLElement): void {
   `;
 }
 
-function renderProfile(
-  main: HTMLElement,
-  profile: ProfileResponse,
-  studies: ProfileStudy[],
-  practice: Record<string, PracticeSummary>,
-): void {
+function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
   const ratedSpeeds = SPEEDS.flatMap(({ key, label }) => {
     const info = profile.ratings[key];
     return info ? [{ label, ...info }] : [];
@@ -75,37 +56,6 @@ function renderProfile(
   }).join("");
 
   const titlePrefix = profile.title ? `${escapeHtml(profile.title)} ` : "";
-
-  function countLines(nodeId: number, tree: StudyTree): number {
-    const children = tree.nodes[nodeId].children;
-    if (children.length === 0) return nodeId === tree.rootId ? 0 : 1;
-    return children.reduce((sum, childId) => sum + countLines(childId, tree), 0);
-  }
-
-  const studyRows = studies
-    .map((study) => {
-      const summary = practice[String(study.id)];
-      const moveCount = Math.max(0, Object.keys(study.tree.nodes).length - 1);
-      const lineCount = countLines(study.tree.rootId, study.tree);
-      const score = study.stats?.winProbability;
-      const hasPracticeMoves = (summary?.totalItems ?? 0) > 0;
-      return `
-        <article class="profile-study-row">
-          <div class="profile-study-row__main">
-            <span class="side-pawn side-pawn--${study.side}">${study.side === "white" ? "♙" : "♟"}</span>
-            <div class="profile-study-row__text">
-              <strong>${escapeHtml(study.name)}</strong>
-              <span title="Expected score = win % + half of the draw %">${moveCount} ${moveCount === 1 ? "move" : "moves"} · ${lineCount} ${lineCount === 1 ? "line" : "lines"}${score === undefined ? "" : ` · ${(score * 100).toFixed(1)}% expected score`}</span>
-            </div>
-          </div>
-          <div class="profile-study-row__practice">
-            <span>${hasPracticeMoves ? `${summary.dueCount} due · ${summary.newCount} new` : "No moves to practice"}</span>
-            ${hasPracticeMoves ? `<a class="btn btn-secondary" href="/practice-session.html?id=${study.id}">Practice</a>` : `<a class="btn btn-secondary" href="/study.html?id=${study.id}">Edit</a>`}
-          </div>
-        </article>
-      `;
-    })
-    .join("");
 
   main.innerHTML = `
     <div class="profile-header">
@@ -128,14 +78,25 @@ function renderProfile(
     <section class="profile-section">
       <div class="profile-section__heading">
         <div>
-          <h2>Your repertoires</h2>
-          <p class="profile-subtitle">Prepared lines, ready for review.</p>
+          <h2>Preferences</h2>
+          <p class="profile-subtitle">How the studies' badges look, here and in the mobile app, in this browser: their
+            shine is the expected score's tier, their piece the expected evaluation's.</p>
         </div>
-        <a class="profile-section__link" href="/">All studies <span aria-hidden="true">→</span></a>
       </div>
-      ${studyRows
-        ? `<div class="profile-study-list">${studyRows}</div>`
-        : `<div class="empty-state profile-empty"><p>No repertoires yet. Start with a line you want to remember.</p><a class="btn btn-primary" href="/study.html">Create your first study</a></div>`}
+      <div class="profile-prefs">
+        <fieldset class="profile-pref">
+          <legend>Shine</legend>
+          ${SHINES.map((s) => `<label title="${escapeHtml(s.title)}"><input type="radio" name="badge-shine" value="${s.value}" ${s.value === badgeShine() ? "checked" : ""} /> ${s.label}</label>`).join("")}
+        </fieldset>
+        <fieldset class="profile-pref">
+          <legend>Icons</legend>
+          ${ICONS.map((i) => `<label title="${escapeHtml(i.title)}"><input type="radio" name="badge-icons" value="${i.value}" ${i.value === badgeIcons() ? "checked" : ""} /> ${i.label}</label>`).join("")}
+        </fieldset>
+        <div class="profile-pref-preview" aria-label="Preview">
+          <div>${[...TIERS.map((t) => t.tier), "none" as const].map((tier) => `<span title="${TIER_LABELS[tier]}">${pieceBadgeHtml(tier)}</span>`).join("")}</div>
+          <div>${PIECES.map((p) => `<span title="${p.label}">${pieceBadgeHtml("gold", "", p.piece)}</span>`).join("")}</div>
+        </div>
+      </div>
     </section>
 
     <section class="profile-section">
@@ -262,6 +223,15 @@ async function showCacheSize(): Promise<void> {
   }
 }
 
+// The badges' look: applied at once, the preview included.
+function bindBadgePrefs(): void {
+  document.querySelector(".profile-prefs")?.addEventListener("change", (e) => {
+    const input = e.target as HTMLInputElement;
+    if (input.name === "badge-shine") setBadgePrefs({ shine: input.value as BadgeShine });
+    else if (input.name === "badge-icons") setBadgePrefs({ icons: input.value as BadgeIcons });
+  });
+}
+
 function bindAnonymousToggle(): void {
   const input = document.getElementById("profile-anonymous") as HTMLInputElement | null;
   const status = document.getElementById("profile-anonymous-status");
@@ -300,22 +270,14 @@ async function init(): Promise<void> {
   }
 
   try {
-    const [profileRes, studiesRes, practiceRes] = await Promise.all([
-      fetch("/api/profile", { credentials: "same-origin" }),
-      fetch("/api/studies", { credentials: "same-origin" }).catch(() => null),
-      fetch("/api/practice/summary", { credentials: "same-origin" }).catch(() => null),
-    ]);
+    const profileRes = await fetch("/api/profile", { credentials: "same-origin" });
     if (!profileRes.ok) {
       renderSignedOut(main);
       return;
     }
     const profile: ProfileResponse = await profileRes.json();
-    // Archived studies are only on the home page.
-    const studies: ProfileStudy[] = studiesRes?.ok
-      ? ((await studiesRes.json()) as (ProfileStudy & { archived?: boolean })[]).filter((study) => !study.archived)
-      : [];
-    const practice: Record<string, PracticeSummary> = practiceRes?.ok ? await practiceRes.json() : {};
-    renderProfile(main, profile, studies, practice);
+    renderProfile(main, profile);
+    bindBadgePrefs();
     bindAnonymousToggle();
     bindServerCacheToggle();
     void showCacheSize();

@@ -1,4 +1,5 @@
 import "./theme";
+import "./badgePrefs";
 import "./sourceLink";
 import "./menu";
 

@@ -9,6 +9,7 @@
 //   #/community   the leaderboards (#/community/eval: by evaluation)
 
 import "@web/theme";
+import "@web/badgePrefs";
 import "./style.css";
 
 import { applyBoardTheme } from "@web/board";

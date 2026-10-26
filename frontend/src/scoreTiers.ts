@@ -66,6 +66,8 @@ export function pieceBadgeHtml(tier: ScoreTier, size: "" | "sm" = "", piece: Eva
   const sizeClass = size ? ` piece-badge--${size}` : "";
   // U+FE0E: the glyph's text form; the pawn's emoji form would ignore the
   // gradient.
+  // The piece's own class: the Lichess pieces option (badgePrefs.ts) draws
+  // its shape instead of the glyph.
   const glyph = PIECES.find((p) => p.piece === piece)!.glyph;
-  return `<span class="piece-badge piece-badge--${tier}${sizeClass}">${glyph}\uFE0E</span>`;
+  return `<span class="piece-badge piece-badge--${tier} piece-badge--p-${piece}${sizeClass}">${glyph}\uFE0E</span>`;
 }

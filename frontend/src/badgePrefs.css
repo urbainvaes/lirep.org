@@ -1,0 +1,59 @@
+/* The badges' look, as chosen on the account page (badgePrefs.ts). Shared
+   by the website and the mobile app, over their own .piece-badge styles. */
+
+.piece-badge--legendary { --badge-flat: #b57bff; }
+.piece-badge--brilliant { --badge-flat: #4fb3d1; }
+.piece-badge--gold { --badge-flat: #e9b22a; }
+.piece-badge--silver { --badge-flat: #a3adb8; }
+.piece-badge--bronze { --badge-flat: #cc7d44; }
+.piece-badge--none { --badge-flat: #a8a8ac; }
+
+/* Subtle: still, without the halo and the sparkles. */
+:root[data-badge-shine="subtle"] .piece-badge,
+:root[data-badge-shine="flat"] .piece-badge {
+  animation: none !important;
+}
+
+:root[data-badge-shine="subtle"] .piece-badge::before,
+:root[data-badge-shine="subtle"] .piece-badge::after,
+:root[data-badge-shine="flat"] .piece-badge::before,
+:root[data-badge-shine="flat"] .piece-badge::after {
+  display: none !important;
+}
+
+/* Flat: one colour. */
+:root[data-badge-shine="flat"] .piece-badge {
+  background-image: linear-gradient(var(--badge-flat), var(--badge-flat)) !important;
+  filter: none !important;
+}
+
+/* The Lichess pieces: the piece's shape, filled with the badge's colours,
+   and the piece itself over them, multiplied: its white takes the colours,
+   its lines stay dark. (No sparkles: the shape would cut them.) */
+:root[data-badge-icons="lichess"] .piece-badge {
+  position: relative;
+  width: 1.05em;
+  height: 1.05em;
+  overflow: hidden;
+  vertical-align: -0.15em;
+  color: transparent;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-mask: var(--badge-mask) center / contain no-repeat;
+  mask: var(--badge-mask) center / contain no-repeat;
+}
+
+:root[data-badge-icons="lichess"] .piece-badge::after {
+  display: block !important;
+  position: absolute;
+  inset: 0;
+  background: var(--badge-mask) center / contain no-repeat;
+  content: "" !important;
+  mix-blend-mode: multiply;
+  opacity: 1;
+  animation: none;
+}
+
+:root[data-badge-icons="lichess"] .piece-badge::before {
+  display: none !important;
+}
