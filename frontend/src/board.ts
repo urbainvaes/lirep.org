@@ -50,6 +50,23 @@ try {
   // The HTMLAudio fallback still works if Web Audio is unavailable.
 }
 const moveBuffers = new Map<MoveSound, AudioBuffer>();
+
+// A phone lets Web Audio start only from a user's gesture: the page's
+// first taps (Start, an answer, any button) turn it on, so that every move
+// sound, the computer's first ones included, plays at once rather than
+// through the slower HTMLAudio fallback until your own first move.
+if (audioContext) {
+  const context = audioContext;
+  const events = ["pointerdown", "touchend", "click", "keydown"] as const;
+  const stop = () => events.forEach((name) => document.removeEventListener(name, unlock, true));
+  const unlock = () => {
+    if (context.state === "running") return stop();
+    void context.resume().then(() => {
+      if (context.state === "running") stop();
+    }, () => {});
+  };
+  events.forEach((name) => document.addEventListener(name, unlock, true));
+}
 if (audioContext) {
   for (const [name, url] of Object.entries(MOVE_SOUND_URLS) as [MoveSound, string][]) {
     void fetch(url)
