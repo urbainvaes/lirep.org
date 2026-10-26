@@ -136,7 +136,7 @@ class TreePersistenceTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             studies.update_study(valid["id"], studies.StudyIn(name="Black", tree=branches, side="white"), self.request)
 
-    def test_bad_legacy_rows_are_preserved_but_do_not_break_other_studies(self):
+    def test_bad_legacy_rows_are_preserved_shown_to_their_owner_and_hidden_from_others(self):
         good = store.create_study("alice", "Good", tree(), {}, "white")
         bad = store.create_study("alice", "Bad", tree(), {}, "white")
         for malformed in (json.dumps(disconnected_cycle()), '{"nodes":'):
@@ -144,9 +144,17 @@ class TreePersistenceTests(unittest.TestCase):
                 with store._connect() as conn:
                     conn.execute("UPDATE studies SET tree = ?, start_node_id = 1 WHERE id = ?", (malformed, bad["id"]))
                 with self.assertLogs("app.store", level="WARNING"):
-                    self.assertIsNone(store.get_study("alice", bad["id"]))
+                    # Its owner sees it, damaged: its name, an empty tree, and why.
+                    damaged = store.get_study("alice", bad["id"])
+                    self.assertEqual(damaged["name"], "Bad")
+                    self.assertTrue(damaged["broken"])
+                    self.assertEqual(damaged["tree"]["nodes"]["0"]["children"], [])
+                    listed = {s["id"]: s for s in store.list_studies("alice")}
+                    self.assertEqual(sorted(listed), sorted([good["id"], bad["id"]]))
+                    self.assertTrue(listed[bad["id"]]["broken"])
+                    self.assertNotIn("broken", listed[good["id"]])
+                    # Others, and calculations, don't.
                     self.assertIsNone(store.get_shared_study(bad["id"]))
-                    self.assertEqual([s["id"] for s in store.list_studies("alice")], [good["id"]])
                     self.assertEqual([s["id"] for _, s in store.list_shared_studies()], [good["id"]])
                     self.assertIsNone(store.duplicate_study("alice", bad["id"], "Copy"))
                 with store._connect() as conn:

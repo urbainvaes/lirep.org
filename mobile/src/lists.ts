@@ -72,10 +72,12 @@ export async function renderStudies(app: HTMLElement): Promise<void> {
     const score = study.stats?.winProbability;
     const evalCp = study.stats?.evalCp;
     const badge = pieceBadgeHtml(scoreTier(score, study.side), "", evalPiece(evalCp));
-    const result = [
-      score === undefined ? "—" : `${(score * 100).toFixed(1)}%`,
-      evalCp === undefined ? "—" : formatExpectedEval(evalCp, study.side),
-    ].join(" · ");
+    const result = study.broken
+      ? "Damaged: its moves can't be read"
+      : [
+          score === undefined ? "—" : `${(score * 100).toFixed(1)}%`,
+          evalCp === undefined ? "—" : formatExpectedEval(evalCp, study.side),
+        ].join(" · ");
     return row(study, badge, result, "study");
   };
   app.innerHTML = shell("studies", "Studies", "", list.length ? grouped(list, studyRow) : empty("No studies yet: create one on"));

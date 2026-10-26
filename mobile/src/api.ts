@@ -42,6 +42,8 @@ export interface Study {
   stats?: StudyStats | null;
   archived?: boolean;
   explorerSettings?: ExplorerSettings | null;
+  /** Why its stored moves can't be read (see the website's studyCard.ts). */
+  broken?: string;
 }
 
 export interface PracticeSummary {

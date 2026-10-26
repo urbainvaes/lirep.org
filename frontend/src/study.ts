@@ -54,6 +54,7 @@ import { cachedExplorerData, errorMessage, fetchExplorerData, hasExplorerData } 
 import { materialBalance, materialHtml } from "./material";
 import { downloadStudyFile } from "./studyFile";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
+import { brokenStudyHtml } from "./studyCard";
 import {
   addMove,
   createEmptyTree,
@@ -93,6 +94,9 @@ interface Study {
   // null (the default) means calculations start at the tree's real root —
   // see starting-point.md.
   startNodeId: number | null;
+  // Why its stored moves can't be read (store.py's _broken_study): then
+  // it isn't opened, so nothing can save over them.
+  broken?: string;
 }
 
 function sidePawn(side: "white" | "black"): HTMLElement {
@@ -1911,6 +1915,10 @@ async function init(): Promise<void> {
   ]);
   if (studyId && !existing) {
     main.innerHTML = `<div class="empty-state"><p>Study not found.</p></div>`;
+    return;
+  }
+  if (existing?.broken) {
+    main.innerHTML = `<div class="empty-state"><h1>${escapeHtml(existing.name)}</h1>${brokenStudyHtml(existing.broken)}<a class="btn btn-secondary" href="/">Back to studies</a></div>`;
     return;
   }
 

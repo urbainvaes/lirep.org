@@ -13,6 +13,14 @@ export interface StudyCardData {
   stats?: { winProbability?: number; evalCp?: number } | null;
   archived?: boolean;
   gameCount?: number;
+  /** Why its stored moves can't be read: the card says so (see
+   * store.py's _broken_study). */
+  broken?: string;
+}
+
+/** What a damaged study's card and editor say. */
+export function brokenStudyHtml(reason: string): string {
+  return `<p class="study-card__broken">This study's moves can't be read (${escapeHtml(reason)}). They are kept as they are: write to <a href="mailto:contact@lirep.org">contact@lirep.org</a> to recover them.</p>`;
 }
 
 export function renderStudyGroups(
@@ -249,7 +257,7 @@ function renderStudyCardContent(study: StudyCardData, headerEnd: string): string
     },
     startLine: sanPathTo(study.tree, startId),
     side: study.side,
-  });
+  }) + (study.broken ? brokenStudyHtml(study.broken) : "");
 }
 
 /** A card's title stays on one line, cut with an ellipsis when too long;

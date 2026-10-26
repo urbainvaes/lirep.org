@@ -359,15 +359,42 @@ def _row_to_study(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-def _read_study(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Quarantine malformed legacy rows from readers, without deleting them."""
+def _broken_study(row: sqlite3.Row, reason: str) -> dict[str, Any]:
+    """A study whose stored moves can't be read, for its owner: its name and
+    settings, an empty tree in place of its moves (which stay in the
+    database, untouched), and why (`broken`), so it shows as damaged rather
+    than disappearing."""
+    empty = {"nodes": {"0": {"id": 0, "san": None, "parentId": None, "children": []}}, "rootId": 0, "nextId": 1}
+    saved_settings = json.loads(row["explorer_settings"]) if row["explorer_settings"] else {}
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "tree": empty,
+        "movesFingerprint": moves_fingerprint(empty, None),
+        "explorerSettings": {**DEFAULT_EXPLORER_SETTINGS, **saved_settings},
+        "side": row["side"] or DEFAULT_SIDE,
+        "stats": None,
+        "evals": None,
+        "startNodeId": None,
+        "shared": bool(row["shared"]),
+        "archived": row["archived_at"] is not None,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "broken": reason,
+    }
+
+
+def _read_study(row: sqlite3.Row | None, *, keep_broken: bool = False) -> dict[str, Any] | None:
+    """Malformed legacy rows are never deleted: left out of what others see
+    and of calculations, and shown to their owner as damaged
+    (`keep_broken`)."""
     if row is None:
         return None
     try:
         return _row_to_study(row)
-    except (InvalidTree, json.JSONDecodeError, RecursionError) as exc:
-        logger.warning("Skipping invalid study %s: %s", row["id"], exc)
-        return None
+    except (InvalidTree, json.JSONDecodeError, RecursionError, ValueError, KeyError, TypeError) as exc:
+        logger.warning("Invalid study %s: %s", row["id"], exc)
+        return _broken_study(row, str(exc) or type(exc).__name__) if keep_broken else None
 
 
 _COLUMNS = "id, name, tree, explorer_settings, side, stats, evals, start_node_id, shared, archived_at, created_at, updated_at"
@@ -633,17 +660,18 @@ def list_studies(owner: str) -> list[dict[str, Any]]:
     # The home page's cards show how many games a study has.
     return [
         {**study, "gameCount": counts.get(row["id"], 0)}
-        for row in rows if (study := _read_study(row)) is not None
+        for row in rows if (study := _read_study(row, keep_broken=True)) is not None
     ]
 
 
 def get_study(owner: str, study_id: int) -> dict[str, Any] | None:
+    """The owner's study; a damaged one (see _broken_study) with `broken`."""
     with _connect() as conn:
         row = conn.execute(
             f"SELECT {_COLUMNS} FROM studies WHERE owner = ? AND id = ?",
             (owner, study_id),
         ).fetchone()
-    return _read_study(row)
+    return _read_study(row, keep_broken=True)
 
 
 def delete_study(owner: str, study_id: int) -> bool:

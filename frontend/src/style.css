@@ -762,6 +762,13 @@ body {
   margin-top: 2px;
 }
 
+/* A study whose moves can't be read (studyCard.ts). */
+.study-card__broken {
+  margin: 8px 0 0;
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+
 .study-card__header:not(:has(.study-card__variation)) + .study-card__score {
   margin-top: 4px;
 }
