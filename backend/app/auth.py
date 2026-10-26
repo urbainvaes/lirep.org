@@ -2,12 +2,13 @@ import base64
 import hashlib
 import logging
 import secrets
+from typing import Literal
 from urllib.parse import quote, urlencode
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .config import FRONTEND_URL, HTTP_TIMEOUT, LICHESS_CLIENT_ID, MAX_USERS, REDIRECT_URI
 from .store import (
@@ -17,8 +18,10 @@ from .store import (
     register_user_limited,
     server_cache_state,
     set_user_anonymous,
+    set_user_preferences,
     touch_user,
     user_aliases,
+    user_preferences,
 )
 
 logger = logging.getLogger(__name__)
@@ -275,6 +278,8 @@ async def me(request: Request) -> dict:
         # Whether the browser also keeps its Stockfish and Explorer data on
         # the server (cache.py).
         "serverCache": server_cache_state(username)[1],
+        # The account's preferences (PreferencesIn), for every page.
+        "preferences": user_preferences(username),
     }
 
 
@@ -332,6 +337,27 @@ def set_anonymous(payload: AnonymousIn, request: Request) -> dict:
     if not set_user_anonymous(username, payload.anonymous):
         raise HTTPException(status_code=404, detail="not found")
     return {"anonymous": payload.anonymous}
+
+
+class PreferencesIn(BaseModel):
+    """How the studies' badges look (the website's badgePrefs.ts), on every
+    device. Only the ones given change."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    badgeShine: Literal["vivid", "subtle", "flat"] | None = None
+    badgeIcons: Literal["symbols", "lichess"] | None = None
+
+
+@router.put("/api/profile/preferences")
+def set_preferences(payload: PreferencesIn, request: Request) -> dict:
+    username = request.session.get("username")
+    if not username or not request.session.get("access_token"):
+        raise HTTPException(status_code=401, detail="not authenticated")
+    preferences = set_user_preferences(username, payload.model_dump(exclude_none=True))
+    if preferences is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return preferences
 
 
 DEFAULT_BOARD_THEME = {"theme": "brown", "pieceSet": "cburnett"}

@@ -1,5 +1,7 @@
-// How the badges (scoreTiers.ts) look, chosen on the account page and
-// remembered in this browser, for the website and the mobile app alike:
+// How the badges (scoreTiers.ts) look, chosen on the account page and saved
+// with the account (/api/profile/preferences), for the website and the
+// mobile app alike, on every device; this browser keeps a copy, applied at
+// once, before the account's arrives with /api/me (syncBadgePrefs):
 //   shine  vivid (animated, sparkles on the top tiers), subtle (the same
 //          metals, still) or flat (one plain colour per tier)
 //   icons  the chess symbols, or the Lichess piece set of the board theme
@@ -73,7 +75,38 @@ export function applyBadgePrefs(): void {
     .join("\n");
 }
 
-export function setBadgePrefs(prefs: { shine?: BadgeShine; icons?: BadgeIcons }): void {
+/** The account's preferences, from /api/me: they replace this browser's
+ * copy. An account without any yet takes this browser's, if chosen here
+ * before they were kept with the account. */
+export function syncBadgePrefs(account: { badgeShine?: string; badgeIcons?: string } | undefined): void {
+  if (!account) return;
+  const shine = SHINES.find((s) => s.value === account.badgeShine)?.value;
+  const icons = ICONS.find((i) => i.value === account.badgeIcons)?.value;
+  if (!shine && !icons) {
+    if (badgeShine() !== "vivid" || badgeIcons() !== "symbols") void saveToAccount({ shine: badgeShine(), icons: badgeIcons() });
+    return;
+  }
+  if ((shine && shine !== badgeShine()) || (icons && icons !== badgeIcons())) keep({ shine, icons });
+}
+
+function saveToAccount(prefs: { shine?: BadgeShine; icons?: BadgeIcons }): Promise<boolean> {
+  return fetch("/api/profile/preferences", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ badgeShine: prefs.shine, badgeIcons: prefs.icons }),
+  }).then((res) => res.ok, () => false);
+}
+
+/** A choice on the account page: applied at once, and saved with the
+ * account (false if that failed). */
+export function setBadgePrefs(prefs: { shine?: BadgeShine; icons?: BadgeIcons }): Promise<boolean> {
+  keep(prefs);
+  return saveToAccount(prefs);
+}
+
+// This browser's copy, applied.
+function keep(prefs: { shine?: BadgeShine; icons?: BadgeIcons }): void {
   try {
     if (prefs.shine) localStorage.setItem(SHINE_KEY, prefs.shine);
     if (prefs.icons) localStorage.setItem(ICONS_KEY, prefs.icons);

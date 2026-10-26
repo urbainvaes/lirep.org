@@ -79,8 +79,8 @@ function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
       <div class="profile-section__heading">
         <div>
           <h2>Preferences</h2>
-          <p class="profile-subtitle">How the studies' badges look, here and in the mobile app, in this browser: their
-            shine is the expected score's tier, their piece the expected evaluation's.</p>
+          <p class="profile-subtitle">How the studies' badges look, here and in the mobile app, on all your devices:
+            their shine is the expected score's tier, their piece the expected evaluation's.</p>
         </div>
       </div>
       <div class="profile-prefs">
@@ -97,6 +97,7 @@ function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
           <div>${PIECES.map((p) => `<span title="${p.label}">${pieceBadgeHtml("gold", "", p.piece)}</span>`).join("")}</div>
         </div>
       </div>
+      <span id="profile-prefs-status" class="profile-subtitle" role="status"></span>
     </section>
 
     <section class="profile-section">
@@ -225,10 +226,14 @@ async function showCacheSize(): Promise<void> {
 
 // The badges' look: applied at once, the preview included.
 function bindBadgePrefs(): void {
-  document.querySelector(".profile-prefs")?.addEventListener("change", (e) => {
+  const status = document.getElementById("profile-prefs-status");
+  document.querySelector(".profile-prefs")?.addEventListener("change", async (e) => {
     const input = e.target as HTMLInputElement;
-    if (input.name === "badge-shine") setBadgePrefs({ shine: input.value as BadgeShine });
-    else if (input.name === "badge-icons") setBadgePrefs({ icons: input.value as BadgeIcons });
+    const saved =
+      input.name === "badge-shine" ? setBadgePrefs({ shine: input.value as BadgeShine })
+      : input.name === "badge-icons" ? setBadgePrefs({ icons: input.value as BadgeIcons })
+      : null;
+    if (saved && status) status.textContent = (await saved) ? "" : "Shown in this browser, but not saved with your account. Please try again.";
   });
 }
 

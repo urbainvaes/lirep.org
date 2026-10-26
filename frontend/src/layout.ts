@@ -1,5 +1,5 @@
 import "./theme";
-import "./badgePrefs";
+import { syncBadgePrefs } from "./badgePrefs";
 import "./sourceLink";
 import "./menu";
 
@@ -8,6 +8,8 @@ export interface MeResponse {
   username?: string;
   displayName?: string; // the pen name, if any, else the username
   title?: string | null;
+  /** The account's preferences (badgePrefs.ts). */
+  preferences?: { badgeShine?: string; badgeIcons?: string };
 }
 
 /** Safe in element content and in quoted attribute values: serializing
@@ -33,6 +35,7 @@ export async function fetchMe(): Promise<MeResponse> {
   try {
     const res = await fetch("/api/me", { credentials: "same-origin" });
     const data: MeResponse = await res.json();
+    syncBadgePrefs(data.preferences);
     try {
       sessionStorage.setItem("auth-state", JSON.stringify(data));
     } catch {

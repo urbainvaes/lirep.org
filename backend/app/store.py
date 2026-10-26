@@ -147,6 +147,10 @@ def init_db() -> None:
         # Explorer data there: NULL until they choose, meaning yes.
         if "server_cache" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN server_cache INTEGER")
+        # The account's preferences (how badges look: see auth.py's
+        # PreferencesIn), as JSON; NULL until one is chosen.
+        if "preferences" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN preferences TEXT")
         # The server's cache of Explorer answers and Stockfish evaluations,
         # shared by the users allowed server storage (see cache.py): an
         # answer is the browser's, by its cache key (explorerClient.ts), and
@@ -499,6 +503,28 @@ def set_user_anonymous(username: str, anonymous: bool) -> bool:
             "UPDATE users SET anonymous = ? WHERE username = ? COLLATE NOCASE", (1 if anonymous else 0, username)
         )
     return cur.rowcount > 0
+
+
+def user_preferences(username: str) -> dict[str, Any]:
+    """The account's preferences; empty until one is chosen."""
+    with _connect() as conn:
+        row = conn.execute("SELECT preferences FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
+    return json.loads(row["preferences"]) if row and row["preferences"] else {}
+
+
+def set_user_preferences(username: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    """Merges `updates` into the account's preferences; None if the user
+    is not registered."""
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT preferences FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
+        if row is None:
+            return None
+        preferences = {**(json.loads(row["preferences"]) if row["preferences"] else {}), **updates}
+        conn.execute(
+            "UPDATE users SET preferences = ? WHERE username = ? COLLATE NOCASE", (json.dumps(preferences), username)
+        )
+    return preferences
 
 
 def server_cache_state(username: str) -> tuple[bool, bool]:

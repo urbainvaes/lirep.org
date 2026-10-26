@@ -9,7 +9,7 @@
 //   #/community   the leaderboards (#/community/eval: by evaluation)
 
 import "@web/theme";
-import "@web/badgePrefs";
+import { syncBadgePrefs } from "@web/badgePrefs";
 import "./style.css";
 
 import { applyBoardTheme } from "@web/board";
@@ -98,7 +98,9 @@ async function start(): Promise<void> {
   // current one.
   void applyBoardTheme();
   try {
-    if (!(await me()).authenticated) return signedOut();
+    const account = await me();
+    if (!account.authenticated) return signedOut();
+    syncBadgePrefs(account.preferences);
   } catch {
     // Offline: the route shows the error and a retry.
   }

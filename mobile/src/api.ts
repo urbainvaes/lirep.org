@@ -92,7 +92,7 @@ export function prefetch(): void {
   for (const load of [studies, practiceSummary, () => leaderboard("score")]) void load().catch(() => {});
 }
 
-export async function me(): Promise<{ authenticated: boolean; displayName?: string }> {
+export async function me(): Promise<{ authenticated: boolean; displayName?: string; preferences?: { badgeShine?: string; badgeIcons?: string } }> {
   return get("/api/me");
 }
 
