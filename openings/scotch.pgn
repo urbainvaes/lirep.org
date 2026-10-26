@@ -1,0 +1,7 @@
+[Opening "Scotch Game"]
+[Side "white"]
+[ECO "C44-C45"]
+[Start "e4 e5 Nf3 Nc6 d4 exd4 Nxd4"]
+[Description "White opens the centre at once with d4 and recaptures with the knight, for free development and play against Black's pawn structure."]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Nf6 (4... Bc5 5. Nxc6 Qf6 6. Qd2 dxc6 7. Nc3 Be6 8. Na4 Rd8 9. Bd3 Bd4 10. O-O Ne7) (4... Qh4 5. Nb5 Bb4+ 6. Bd2 Qxe4+ 7. Be2 Kd8 8. O-O Bxd2 9. Nxd2 Qg6) 5. Nxc6 bxc6 6. e5 Qe7 7. Qe2 Nd5 8. c4 Ba6 9. b3 *

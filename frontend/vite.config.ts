@@ -29,6 +29,7 @@ export default defineConfig({
         community: resolve(__dirname, "community.html"),
         players: resolve(__dirname, "players.html"),
         opening: resolve(__dirname, "opening.html"),
+        browse: resolve(__dirname, "browse.html"),
         forum: resolve(__dirname, "forum.html"),
         games: resolve(__dirname, "games.html"),
         player: resolve(__dirname, "player.html"),

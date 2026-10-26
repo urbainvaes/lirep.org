@@ -5094,6 +5094,11 @@ details[open] > summary.tree-fold__head::before {
   font-size: 0.85rem;
 }
 
+/* Browse (browse.ts): a card's description, under its title. */
+.browse-description {
+  line-height: 1.4;
+}
+
 .study-share {
   display: inline-flex;
   align-items: center;

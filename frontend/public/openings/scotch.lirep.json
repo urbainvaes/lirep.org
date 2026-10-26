@@ -1,0 +1,156 @@
+{
+  "format": "lirep-study",
+  "version": 1,
+  "name": "Scotch Game",
+  "side": "white",
+  "start": [
+    "e4",
+    "e5",
+    "Nf3",
+    "Nc6",
+    "d4",
+    "exd4",
+    "Nxd4"
+  ],
+  "explorerSettings": {
+    "source": "lichess",
+    "database": "lichess",
+    "minRating": null,
+    "speeds": [
+      "blitz",
+      "rapid",
+      "classical"
+    ]
+  },
+  "moves": [
+    {
+      "san": "e4"
+    },
+    {
+      "san": "e5"
+    },
+    {
+      "san": "Nf3"
+    },
+    {
+      "san": "Nc6"
+    },
+    {
+      "san": "d4"
+    },
+    {
+      "san": "exd4"
+    },
+    {
+      "san": "Nxd4"
+    },
+    {
+      "san": "Nf6",
+      "variations": [
+        [
+          {
+            "san": "Bc5"
+          },
+          {
+            "san": "Nxc6"
+          },
+          {
+            "san": "Qf6"
+          },
+          {
+            "san": "Qd2"
+          },
+          {
+            "san": "dxc6"
+          },
+          {
+            "san": "Nc3"
+          },
+          {
+            "san": "Be6"
+          },
+          {
+            "san": "Na4"
+          },
+          {
+            "san": "Rd8"
+          },
+          {
+            "san": "Bd3"
+          },
+          {
+            "san": "Bd4"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Ne7"
+          }
+        ],
+        [
+          {
+            "san": "Qh4"
+          },
+          {
+            "san": "Nb5"
+          },
+          {
+            "san": "Bb4+"
+          },
+          {
+            "san": "Bd2"
+          },
+          {
+            "san": "Qxe4+"
+          },
+          {
+            "san": "Be2"
+          },
+          {
+            "san": "Kd8"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Bxd2"
+          },
+          {
+            "san": "Nxd2"
+          },
+          {
+            "san": "Qg6"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "Nxc6"
+    },
+    {
+      "san": "bxc6"
+    },
+    {
+      "san": "e5"
+    },
+    {
+      "san": "Qe7"
+    },
+    {
+      "san": "Qe2"
+    },
+    {
+      "san": "Nd5"
+    },
+    {
+      "san": "c4"
+    },
+    {
+      "san": "Ba6"
+    },
+    {
+      "san": "b3"
+    }
+  ]
+}

@@ -1,0 +1,306 @@
+{
+  "format": "lirep-study",
+  "version": 1,
+  "name": "Sicilian Defence: Najdorf Variation",
+  "side": "black",
+  "start": [
+    "e4",
+    "c5",
+    "Nf3",
+    "d6",
+    "d4",
+    "cxd4",
+    "Nxd4",
+    "Nf6",
+    "Nc3",
+    "a6"
+  ],
+  "explorerSettings": {
+    "source": "lichess",
+    "database": "lichess",
+    "minRating": null,
+    "speeds": [
+      "blitz",
+      "rapid",
+      "classical"
+    ]
+  },
+  "moves": [
+    {
+      "san": "e4"
+    },
+    {
+      "san": "c5"
+    },
+    {
+      "san": "Nf3"
+    },
+    {
+      "san": "d6"
+    },
+    {
+      "san": "d4"
+    },
+    {
+      "san": "cxd4"
+    },
+    {
+      "san": "Nxd4"
+    },
+    {
+      "san": "Nf6"
+    },
+    {
+      "san": "Nc3"
+    },
+    {
+      "san": "a6"
+    },
+    {
+      "san": "Be3",
+      "variations": [
+        [
+          {
+            "san": "Bg5"
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "f4"
+          },
+          {
+            "san": "Be7"
+          },
+          {
+            "san": "Qf3"
+          },
+          {
+            "san": "Qc7"
+          },
+          {
+            "san": "O-O-O"
+          },
+          {
+            "san": "Nbd7"
+          },
+          {
+            "san": "g4"
+          },
+          {
+            "san": "b5"
+          },
+          {
+            "san": "Bxf6"
+          },
+          {
+            "san": "Nxf6"
+          },
+          {
+            "san": "g5"
+          },
+          {
+            "san": "Nd7"
+          }
+        ],
+        [
+          {
+            "san": "Be2"
+          },
+          {
+            "san": "e5"
+          },
+          {
+            "san": "Nb3"
+          },
+          {
+            "san": "Be7"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Be3"
+          },
+          {
+            "san": "Be6"
+          },
+          {
+            "san": "Qd2"
+          },
+          {
+            "san": "Nbd7"
+          }
+        ],
+        [
+          {
+            "san": "Bc4"
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "Bb3"
+          },
+          {
+            "san": "b5"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Be7"
+          },
+          {
+            "san": "Qf3"
+          },
+          {
+            "san": "Qc7"
+          },
+          {
+            "san": "Qg3"
+          },
+          {
+            "san": "O-O"
+          }
+        ],
+        [
+          {
+            "san": "h3"
+          },
+          {
+            "san": "e5"
+          },
+          {
+            "san": "Nde2"
+          },
+          {
+            "san": "h5"
+          },
+          {
+            "san": "g3"
+          },
+          {
+            "san": "Be6"
+          }
+        ],
+        [
+          {
+            "san": "f3"
+          },
+          {
+            "san": "e5"
+          },
+          {
+            "san": "Nb3"
+          },
+          {
+            "san": "Be6"
+          },
+          {
+            "san": "Be3"
+          },
+          {
+            "san": "Be7"
+          },
+          {
+            "san": "Qd2"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "O-O-O"
+          },
+          {
+            "san": "Nbd7"
+          }
+        ],
+        [
+          {
+            "san": "g3"
+          },
+          {
+            "san": "e5"
+          },
+          {
+            "san": "Nde2"
+          },
+          {
+            "san": "Be7"
+          },
+          {
+            "san": "Bg2"
+          },
+          {
+            "san": "O-O"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "e5"
+    },
+    {
+      "san": "Nb3",
+      "variations": [
+        [
+          {
+            "san": "Nf3"
+          },
+          {
+            "san": "Be7"
+          },
+          {
+            "san": "Bc4"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Be6"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "Be6"
+    },
+    {
+      "san": "f3"
+    },
+    {
+      "san": "Be7"
+    },
+    {
+      "san": "Qd2"
+    },
+    {
+      "san": "O-O"
+    },
+    {
+      "san": "O-O-O"
+    },
+    {
+      "san": "Nbd7"
+    },
+    {
+      "san": "g4"
+    },
+    {
+      "san": "b5"
+    },
+    {
+      "san": "g5"
+    },
+    {
+      "san": "b4"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+[Opening "Sicilian Defence: Najdorf Variation"]
+[Side "black"]
+[ECO "B90-B99"]
+[Start "e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6"]
+[Description "5...a6 keeps White's pieces off b5 and prepares ...e5 or ...e6. Against the English Attack (6.Be3), 6.Bg5, 6.Be2, 6.Bc4, 6.h3, 6.f3 and 6.g3."]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Be3 (6. Bg5 e6 7. f4 Be7 8. Qf3 Qc7 9. O-O-O Nbd7 10. g4 b5 11. Bxf6 Nxf6 12. g5 Nd7) (6. Be2 e5 7. Nb3 Be7 8. O-O O-O 9. Be3 Be6 10. Qd2 Nbd7) (6. Bc4 e6 7. Bb3 b5 8. O-O Be7 9. Qf3 Qc7 10. Qg3 O-O) (6. h3 e5 7. Nde2 h5 8. g3 Be6) (6. f3 e5 7. Nb3 Be6 8. Be3 Be7 9. Qd2 O-O 10. O-O-O Nbd7) (6. g3 e5 7. Nde2 Be7 8. Bg2 O-O) 6... e5 7. Nb3 (7. Nf3 Be7 8. Bc4 O-O 9. O-O Be6) 7... Be6 8. f3 Be7 9. Qd2 O-O 10. O-O-O Nbd7 11. g4 b5 12. g5 b4 *

@@ -1,0 +1,244 @@
+{
+  "format": "lirep-study",
+  "version": 1,
+  "name": "English Opening",
+  "side": "white",
+  "start": [
+    "c4"
+  ],
+  "explorerSettings": {
+    "source": "lichess",
+    "database": "lichess",
+    "minRating": null,
+    "speeds": [
+      "blitz",
+      "rapid",
+      "classical"
+    ]
+  },
+  "moves": [
+    {
+      "san": "c4"
+    },
+    {
+      "san": "e5",
+      "variations": [
+        [
+          {
+            "san": "c5"
+          },
+          {
+            "san": "Nc3"
+          },
+          {
+            "san": "Nc6"
+          },
+          {
+            "san": "g3"
+          },
+          {
+            "san": "g6"
+          },
+          {
+            "san": "Bg2"
+          },
+          {
+            "san": "Bg7"
+          },
+          {
+            "san": "Nf3"
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Nge7"
+          },
+          {
+            "san": "d3"
+          },
+          {
+            "san": "O-O"
+          }
+        ],
+        [
+          {
+            "san": "Nf6"
+          },
+          {
+            "san": "Nc3"
+          },
+          {
+            "san": "g6",
+            "variations": [
+              [
+                {
+                  "san": "e6"
+                },
+                {
+                  "san": "Nf3"
+                },
+                {
+                  "san": "d5"
+                },
+                {
+                  "san": "d4"
+                },
+                {
+                  "san": "Be7"
+                }
+              ]
+            ]
+          },
+          {
+            "san": "g3"
+          },
+          {
+            "san": "Bg7"
+          },
+          {
+            "san": "Bg2"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "e4"
+          },
+          {
+            "san": "d6"
+          },
+          {
+            "san": "Nge2"
+          }
+        ],
+        [
+          {
+            "san": "e6"
+          },
+          {
+            "san": "Nf3"
+          },
+          {
+            "san": "d5"
+          },
+          {
+            "san": "g3"
+          },
+          {
+            "san": "Nf6"
+          },
+          {
+            "san": "Bg2"
+          },
+          {
+            "san": "Be7"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "b3"
+          },
+          {
+            "san": "c5"
+          },
+          {
+            "san": "Bb2"
+          },
+          {
+            "san": "Nc6"
+          },
+          {
+            "san": "e3"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "Nc3"
+    },
+    {
+      "san": "Nf6"
+    },
+    {
+      "san": "Nf3"
+    },
+    {
+      "san": "Nc6"
+    },
+    {
+      "san": "g3"
+    },
+    {
+      "san": "d5",
+      "variations": [
+        [
+          {
+            "san": "Bb4"
+          },
+          {
+            "san": "Bg2"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "e4"
+          },
+          {
+            "san": "Ne1"
+          },
+          {
+            "san": "Bxc3"
+          },
+          {
+            "san": "dxc3"
+          },
+          {
+            "san": "h6"
+          },
+          {
+            "san": "Nc2"
+          },
+          {
+            "san": "b6"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "cxd5"
+    },
+    {
+      "san": "Nxd5"
+    },
+    {
+      "san": "Bg2"
+    },
+    {
+      "san": "Nb6"
+    },
+    {
+      "san": "O-O"
+    },
+    {
+      "san": "Be7"
+    },
+    {
+      "san": "d3"
+    },
+    {
+      "san": "O-O"
+    }
+  ]
+}

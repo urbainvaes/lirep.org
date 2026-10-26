@@ -1,0 +1,442 @@
+{
+  "format": "lirep-study",
+  "version": 1,
+  "name": "Caro-Kann Defence",
+  "side": "black",
+  "start": [
+    "e4",
+    "c6"
+  ],
+  "explorerSettings": {
+    "source": "lichess",
+    "database": "lichess",
+    "minRating": null,
+    "speeds": [
+      "blitz",
+      "rapid",
+      "classical"
+    ]
+  },
+  "moves": [
+    {
+      "san": "e4"
+    },
+    {
+      "san": "c6"
+    },
+    {
+      "san": "d4",
+      "variations": [
+        [
+          {
+            "san": "Nc3"
+          },
+          {
+            "san": "d5"
+          },
+          {
+            "san": "Nf3"
+          },
+          {
+            "san": "Bg4"
+          },
+          {
+            "san": "h3"
+          },
+          {
+            "san": "Bxf3"
+          },
+          {
+            "san": "Qxf3"
+          },
+          {
+            "san": "e6"
+          }
+        ],
+        [
+          {
+            "san": "c4"
+          },
+          {
+            "san": "d5"
+          },
+          {
+            "san": "exd5"
+          },
+          {
+            "san": "cxd5"
+          },
+          {
+            "san": "cxd5"
+          },
+          {
+            "san": "Nf6"
+          },
+          {
+            "san": "Nc3"
+          },
+          {
+            "san": "Nxd5"
+          },
+          {
+            "san": "Nf3"
+          },
+          {
+            "san": "Nc6"
+          }
+        ],
+        [
+          {
+            "san": "d3"
+          },
+          {
+            "san": "d5"
+          },
+          {
+            "san": "Nd2"
+          },
+          {
+            "san": "e5"
+          },
+          {
+            "san": "Ngf3"
+          },
+          {
+            "san": "Bd6"
+          },
+          {
+            "san": "g3"
+          },
+          {
+            "san": "Nf6"
+          },
+          {
+            "san": "Bg2"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Re8"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "d5"
+    },
+    {
+      "san": "Nc3",
+      "variations": [
+        [
+          {
+            "san": "e5"
+          },
+          {
+            "san": "Bf5"
+          },
+          {
+            "san": "Nf3",
+            "variations": [
+              [
+                {
+                  "san": "Nc3"
+                },
+                {
+                  "san": "e6"
+                },
+                {
+                  "san": "g4"
+                },
+                {
+                  "san": "Bg6"
+                },
+                {
+                  "san": "Nge2"
+                },
+                {
+                  "san": "c5"
+                }
+              ],
+              [
+                {
+                  "san": "h4"
+                },
+                {
+                  "san": "h5"
+                },
+                {
+                  "san": "c4"
+                },
+                {
+                  "san": "e6"
+                },
+                {
+                  "san": "Nc3"
+                },
+                {
+                  "san": "Ne7"
+                }
+              ],
+              [
+                {
+                  "san": "c3"
+                },
+                {
+                  "san": "e6"
+                },
+                {
+                  "san": "Be2"
+                },
+                {
+                  "san": "c5"
+                }
+              ]
+            ]
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "Be2"
+          },
+          {
+            "san": "c5"
+          },
+          {
+            "san": "O-O"
+          },
+          {
+            "san": "Nc6"
+          },
+          {
+            "san": "c3"
+          },
+          {
+            "san": "cxd4"
+          },
+          {
+            "san": "cxd4"
+          },
+          {
+            "san": "Nge7"
+          }
+        ],
+        [
+          {
+            "san": "exd5"
+          },
+          {
+            "san": "cxd5"
+          },
+          {
+            "san": "Bd3",
+            "variations": [
+              [
+                {
+                  "san": "c4"
+                },
+                {
+                  "san": "Nf6"
+                },
+                {
+                  "san": "Nc3"
+                },
+                {
+                  "san": "e6"
+                },
+                {
+                  "san": "Nf3"
+                },
+                {
+                  "san": "Be7"
+                },
+                {
+                  "san": "cxd5"
+                },
+                {
+                  "san": "Nxd5"
+                },
+                {
+                  "san": "Bd3"
+                },
+                {
+                  "san": "Nc6"
+                },
+                {
+                  "san": "O-O"
+                },
+                {
+                  "san": "O-O"
+                }
+              ]
+            ]
+          },
+          {
+            "san": "Nc6"
+          },
+          {
+            "san": "c3"
+          },
+          {
+            "san": "Nf6"
+          },
+          {
+            "san": "Bf4"
+          },
+          {
+            "san": "Bg4"
+          },
+          {
+            "san": "Qb3"
+          },
+          {
+            "san": "Qd7"
+          },
+          {
+            "san": "Nd2"
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "Ngf3"
+          },
+          {
+            "san": "Bxf3"
+          },
+          {
+            "san": "Nxf3"
+          },
+          {
+            "san": "Bd6"
+          }
+        ],
+        [
+          {
+            "san": "Nd2"
+          },
+          {
+            "san": "dxe4"
+          },
+          {
+            "san": "Nxe4"
+          },
+          {
+            "san": "Bf5"
+          },
+          {
+            "san": "Ng3"
+          },
+          {
+            "san": "Bg6"
+          },
+          {
+            "san": "h4"
+          },
+          {
+            "san": "h6"
+          },
+          {
+            "san": "Nf3"
+          },
+          {
+            "san": "Nd7"
+          },
+          {
+            "san": "h5"
+          },
+          {
+            "san": "Bh7"
+          },
+          {
+            "san": "Bd3"
+          },
+          {
+            "san": "Bxd3"
+          },
+          {
+            "san": "Qxd3"
+          },
+          {
+            "san": "e6"
+          }
+        ],
+        [
+          {
+            "san": "f3"
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "Nc3"
+          },
+          {
+            "san": "Bb4"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "dxe4"
+    },
+    {
+      "san": "Nxe4"
+    },
+    {
+      "san": "Bf5"
+    },
+    {
+      "san": "Ng3"
+    },
+    {
+      "san": "Bg6"
+    },
+    {
+      "san": "h4"
+    },
+    {
+      "san": "h6"
+    },
+    {
+      "san": "Nf3"
+    },
+    {
+      "san": "Nd7"
+    },
+    {
+      "san": "h5"
+    },
+    {
+      "san": "Bh7"
+    },
+    {
+      "san": "Bd3"
+    },
+    {
+      "san": "Bxd3"
+    },
+    {
+      "san": "Qxd3"
+    },
+    {
+      "san": "e6"
+    },
+    {
+      "san": "Bd2"
+    },
+    {
+      "san": "Ngf6"
+    },
+    {
+      "san": "O-O-O"
+    },
+    {
+      "san": "Be7"
+    }
+  ]
+}

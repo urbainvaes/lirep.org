@@ -1,0 +1,146 @@
+{
+  "format": "lirep-study",
+  "version": 1,
+  "name": "London System",
+  "side": "white",
+  "start": [
+    "d4",
+    "d5",
+    "Bf4"
+  ],
+  "explorerSettings": {
+    "source": "lichess",
+    "database": "lichess",
+    "minRating": null,
+    "speeds": [
+      "blitz",
+      "rapid",
+      "classical"
+    ]
+  },
+  "moves": [
+    {
+      "san": "d4"
+    },
+    {
+      "san": "d5"
+    },
+    {
+      "san": "Bf4"
+    },
+    {
+      "san": "Nf6"
+    },
+    {
+      "san": "e3"
+    },
+    {
+      "san": "e6",
+      "variations": [
+        [
+          {
+            "san": "c5"
+          },
+          {
+            "san": "c3"
+          },
+          {
+            "san": "Nc6"
+          },
+          {
+            "san": "Nd2"
+          },
+          {
+            "san": "Qb6"
+          },
+          {
+            "san": "Qb3"
+          },
+          {
+            "san": "c4"
+          },
+          {
+            "san": "Qc2"
+          },
+          {
+            "san": "Bf5"
+          },
+          {
+            "san": "Qc1"
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "Ngf3"
+          }
+        ],
+        [
+          {
+            "san": "Bf5"
+          },
+          {
+            "san": "c4"
+          },
+          {
+            "san": "e6"
+          },
+          {
+            "san": "Nc3"
+          },
+          {
+            "san": "c6"
+          },
+          {
+            "san": "Qb3"
+          },
+          {
+            "san": "Qb6"
+          },
+          {
+            "san": "c5"
+          },
+          {
+            "san": "Qxb3"
+          },
+          {
+            "san": "axb3"
+          }
+        ]
+      ]
+    },
+    {
+      "san": "Nf3"
+    },
+    {
+      "san": "c5"
+    },
+    {
+      "san": "c3"
+    },
+    {
+      "san": "Nc6"
+    },
+    {
+      "san": "Nbd2"
+    },
+    {
+      "san": "Bd6"
+    },
+    {
+      "san": "Bg3"
+    },
+    {
+      "san": "O-O"
+    },
+    {
+      "san": "Bd3"
+    },
+    {
+      "san": "b6"
+    },
+    {
+      "san": "Ne5"
+    }
+  ]
+}
