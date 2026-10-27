@@ -1,6 +1,6 @@
 import type { Api } from "@lichess-org/chessground/api";
 import type { Key } from "@lichess-org/chessground/types";
-import { Chess } from "chess.js";
+import { Chess, type Move } from "chess.js";
 
 import { applyLichessBoardTheme, computeDests, createBoard, formatMoves, playMoveSound, toColor } from "./board";
 import {
@@ -248,14 +248,20 @@ function renderEditor(
                 <span id="focus-save-status" class="focus-save-status" role="status" aria-live="polite"></span>
                 <button id="keyboard-help-btn" class="btn btn-secondary study-keyboard-help-btn" type="button" aria-label="Show keyboard shortcuts" aria-expanded="false" aria-controls="keyboard-help">?</button>
               </div>
+              <div id="off-prep-bar" class="study-actions off-prep-bar" hidden>
+                <span class="off-prep-bar__label">Out of prep</span>
+                <button id="replace-prep-btn" class="btn btn-secondary btn-small" type="button" title="Put this line in the study in place of the move you had here">Replace prep</button>
+                <button id="back-to-prep-btn" class="btn btn-primary btn-small" type="button" title="Back to where the line left the prep (Esc)">Back to prep</button>
+              </div>
               <div id="keyboard-help" class="study-keyboard-help" role="region" aria-label="Keyboard shortcuts" tabindex="-1" hidden>
                 <p class="study-keyboard-help__title">Keyboard shortcuts</p>
-                <p class="study-keyboard-help__intro">Click a move to jump there. Play a different move from any point to start a variation.</p>
+                <p class="study-keyboard-help__intro">Click a move to jump there. Play a different move from any point to start a variation; a different move of yours where you have one leaves the prep, without changing the study.</p>
                 <ul>
                   <li><kbd>←</kbd> / <kbd>→</kbd> Previous / next move</li>
                   <li><kbd>↑</kbd> / <kbd>↓</kbd> Previous / next variation</li>
                   <li><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> Start / end of line</li>
                   <li><kbd>Delete</kbd> Delete selected move and its branches</li>
+                  <li><kbd>Esc</kbd> Back to prep</li>
                   <li><kbd>C</kbd> Comment on this position</li>
                   <li><kbd>F</kbd> Flip the board</li>
                   ${FOCUS_SHORTCUT_HTML}
@@ -264,7 +270,6 @@ function renderEditor(
               </div>
               <p id="live-score" class="live-score" aria-live="polite" hidden></p>
               <div id="tree-view" class="tree-view"></div>
-              <p id="move-conflict" class="move-conflict" hidden></p>
               <div class="study-comment-editor" id="comment-editor" hidden>
                 <textarea id="study-comment" rows="2" placeholder="Comment on this position" aria-label="Comment on selected position"></textarea>
               </div>
@@ -419,7 +424,9 @@ function renderEditor(
   const sharedInput = document.getElementById("study-shared") as HTMLInputElement;
   const deleteBtn = document.getElementById("delete-btn") as HTMLButtonElement;
   const flipBoardBtn = document.getElementById("flip-board-btn") as HTMLButtonElement;
-  const moveConflictEl = document.getElementById("move-conflict") as HTMLElement;
+  const movesCardEl = main.querySelector(".study-card--moves") as HTMLElement;
+  const actionsEl = movesCardEl.querySelector(".study-actions") as HTMLElement;
+  const offPrepBarEl = document.getElementById("off-prep-bar") as HTMLElement;
   const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
   const navStartBtn = document.getElementById("nav-start") as HTMLButtonElement;
   const gaugeEl = document.getElementById("eval-gauge") as HTMLElement;
@@ -637,9 +644,9 @@ function renderEditor(
     }
   }
 
-  // Enforces "only one reply for the studied side at any position" (the
+  // Keeps "only one reply for the studied side at any position" (the
   // opponent can still branch freely). Returns the SAN of the move already
-  // recorded there if `san` would violate that, or null if the move is fine
+  // recorded there if `san` would break that, or null if the move is fine
   // (a fresh position, the opponent's move, or replaying the existing move).
   function conflictingMove(nodeId: number, san: string, moveColor: "w" | "b"): string | null {
     const isStudiedSide = (moveColor === "w") === (currentSide() === "white");
@@ -650,39 +657,53 @@ function renderEditor(
     return tree.nodes[node.children[0]].san;
   }
 
-  function reportConflict(existingSan: string): void {
-    moveConflictEl.textContent = `You already have a move here (${existingSan}). Delete it first to replace it.`;
-    moveConflictEl.hidden = false;
+  // Out of prep: a move of yours other than the one the study has there
+  // leaves the prep. The line goes on from that position, in place of the
+  // move list, and none of it goes into the study unless it replaces the
+  // prep. `from` is where it left (currentId stays there), `ply` how many of
+  // its moves are on the board.
+  let offPrep: { from: number; line: string[]; ply: number } | null = null;
+
+  // The position after the out-of-prep line's first `ply` moves.
+  function offPrepPosition(ply: number): Chess {
+    const chess = positionAt(tree, offPrep!.from);
+    for (const san of offPrep!.line.slice(0, ply)) chess.move(san);
+    return chess;
+  }
+
+  // The position on the board: in the study, or out of prep.
+  function currentChess(): Chess {
+    return offPrep ? offPrepPosition(offPrep.ply) : positionAt(tree, currentId);
+  }
+
+  function playMove(move: Move): void {
+    playMoveSound(move);
+    // Out of prep, the line goes on (or changes from the move shown); from
+    // where it left, a move is played as in the study again.
+    if (offPrep && (offPrep.ply > 0 || offPrep.line[0] === move.san)) {
+      if (offPrep.line[offPrep.ply] !== move.san) offPrep.line = [...offPrep.line.slice(0, offPrep.ply), move.san];
+      offPrep.ply += 1;
+      showOffPrep();
+      return;
+    }
+    offPrep = null;
+    if (conflictingMove(currentId, move.san, move.color)) {
+      offPrep = { from: currentId, line: [move.san], ply: 1 };
+      showOffPrep();
+      return;
+    }
+    goTo(addMove(tree, currentId, move.san));
+    scheduleAutoSave();
   }
 
   function playSan(san: string): void {
-    const chess = positionAt(tree, currentId);
-    const move = chess.move(san);
-    if (!move) return;
-    const conflict = conflictingMove(currentId, move.san, move.color);
-    if (conflict) {
-      goTo(currentId);
-      reportConflict(conflict);
-      return;
-    }
-    playMoveSound(move);
-    goTo(addMove(tree, currentId, move.san));
-    scheduleAutoSave();
+    const move = currentChess().move(san);
+    if (move) playMove(move);
   }
 
   function onMove(orig: Key, dest: Key): void {
-    const chess = positionAt(tree, currentId);
-    const move = chess.move({ from: orig, to: dest, promotion: "q" });
-    if (!move) return;
-    const conflict = conflictingMove(currentId, move.san, move.color);
-    if (conflict) {
-      goTo(currentId); // snap the piece back — chessground already moved it visually
-      reportConflict(conflict);
-      return;
-    }
-    playMoveSound(move);
-    goTo(addMove(tree, currentId, move.san));
-    scheduleAutoSave();
+    const move = currentChess().move({ from: orig, to: dest, promotion: "q" });
+    if (move) playMove(move);
   }
 
   async function updateExplorer(fen: string): Promise<void> {
@@ -693,13 +714,13 @@ function renderEditor(
       const data = await fetchExplorerData(fen, settings, currentSide(), { priority: "interactive" });
       if (requestId !== explorerRequestId) return;
       explorerFetched(fen);
-      const chess = positionAt(tree, currentId);
+      const chess = currentChess();
       renderExplorer(
         explorerPanelEl,
         data,
         playSan,
         {
-          inTree: new Set(tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
+          inTree: new Set(offPrep ? [] : tree.nodes[currentId].children.map((id) => tree.nodes[id].san as string)),
           yourTurn: (chess.turn() === "w") === (currentSide() === "white"),
         },
         explorerSummary(settings),
@@ -710,18 +731,8 @@ function renderEditor(
   }
 
   function playUci(uci: string): void {
-    const chess = positionAt(tree, currentId);
-    const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
-    if (!move) return;
-    const conflict = conflictingMove(currentId, move.san, move.color);
-    if (conflict) {
-      goTo(currentId);
-      reportConflict(conflict);
-      return;
-    }
-    playMoveSound(move);
-    goTo(addMove(tree, currentId, move.san));
-    scheduleAutoSave();
+    const move = currentChess().move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
+    if (move) playMove(move);
   }
 
   // Lichess's evaluation gauge, beside the board while Stockfish is on:
@@ -734,7 +745,7 @@ function renderEditor(
   // The material balance above and below the board, as during a Lichess
   // game: the row nearest each side's pieces shows what that side is up.
   function renderMaterial(): void {
-    const balance = materialBalance(positionAt(tree, currentId));
+    const balance = materialBalance(currentChess());
     const bottom = boardOrientation === "white" ? "w" : "b";
     const top = bottom === "w" ? "b" : "w";
     materialTopEl.innerHTML = materialHtml(balance[top]);
@@ -763,6 +774,7 @@ function renderEditor(
       board.set({ drawable: { autoShapes: [] } });
       setGauge(chess.isCheckmate() ? (chess.turn() === "w" ? 0 : 1) : 0.5);
       engineStatusEl.textContent = "Game over";
+      engineStatusEl.classList.remove("engine-eval--busy");
       enginePanelEl.innerHTML = "";
       return;
     }
@@ -786,7 +798,8 @@ function renderEditor(
     const depth = engineDepth;
     let analysis = topLines?.fen === fen && topLines.depth === depth ? topLines.analysis : null;
     if (!analysis) {
-      engineStatusEl.textContent = `depth ${depth}…`;
+      engineStatusEl.textContent = `depth ${depth}`;
+      engineStatusEl.classList.add("engine-eval--busy");
       analysis = await engine.analyze(fen, depth);
       if (stale()) return;
       topLines = { fen, depth, analysis };
@@ -799,7 +812,8 @@ function renderEditor(
     const lines = [...analysis.lines];
     const extra = missingPopularMoves(lines, shares);
     if (extra.length) {
-      engineStatusEl.textContent = `depth ${depth}…`;
+      engineStatusEl.textContent = `depth ${depth}`;
+      engineStatusEl.classList.add("engine-eval--busy");
       engineStatusEl.title = "Evaluating popular Explorer moves";
       const more = await engine.analyze(fen, depth, extra);
       if (stale()) return;
@@ -810,6 +824,7 @@ function renderEditor(
     board.set({ drawable: { autoShapes: shapes } });
     shownFen = fen;
     engineStatusEl.textContent = `depth ${depth}`;
+    engineStatusEl.classList.remove("engine-eval--busy");
     engineStatusEl.title = "Stockfish's search depth, in this browser";
     enginePanelEl.innerHTML = chipsHtml;
 
@@ -1093,6 +1108,7 @@ function renderEditor(
   }
 
   function renderTreeView(): void {
+    if (offPrep) return renderOffPrepLine();
     // Folded, the folds on the way to the current move are open too.
     const open = new Set(openFolds);
     for (const node of pathTo(tree, currentId)) open.add(node.id);
@@ -1138,6 +1154,90 @@ function renderEditor(
     }
   }
 
+  // Out of prep, the move list is the line from the start: the study's moves
+  // up to where it left (clicking one goes back to the prep), then its own.
+  function renderOffPrepLine(): void {
+    const { from, line, ply } = offPrep!;
+    const prep = pathTo(tree, from).slice(1);
+    const number = (i: number, first: boolean) =>
+      i % 2 === 0 ? `<span class="tree-move-number">${i / 2 + 1}.</span> ` : first ? `<span class="tree-move-number">${(i + 1) / 2}...</span> ` : "";
+    const prepHtml = prep.map(
+      (node, i) =>
+        `${number(i, i === 0)}<span class="tree-move${ply === 0 && node.id === from ? " tree-move--current" : ""}" data-node-id="${node.id}">${escapeHtml(node.san as string)}</span>`,
+    );
+    const lineHtml = line.map(
+      (san, k) =>
+        `${number(prep.length + k, prep.length + k === 0)}<span class="tree-move tree-move--off-prep${k + 1 === ply ? " tree-move--current" : ""}" data-off-ply="${k + 1}">${escapeHtml(san)}</span>`,
+    );
+    treeViewEl.innerHTML = `<p class="off-prep-line">${[...prepHtml, ...lineHtml].join(" ")}</p>`;
+    treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
+      el.addEventListener("click", () => goTo(Number(el.dataset.nodeId)));
+    });
+    treeViewEl.querySelectorAll<HTMLElement>("[data-off-ply]").forEach((el) => {
+      el.addEventListener("click", () => {
+        offPrep!.ply = Number(el.dataset.offPly);
+        showOffPrep();
+      });
+    });
+    treeViewEl.querySelector(".tree-move--current")?.scrollIntoView({ block: "nearest" });
+  }
+
+  // The move list's toolbar, or the out-of-prep one in its place.
+  function applyOffPrepUI(): void {
+    movesCardEl.classList.toggle("study-card--off-prep", offPrep !== null);
+    actionsEl.hidden = offPrep !== null;
+    offPrepBarEl.hidden = offPrep === null;
+    if (offPrep) closeKeyboardHelp();
+  }
+
+  function showOffPrep(): void {
+    const { line, ply } = offPrep!;
+    const chess = offPrepPosition(ply);
+    let lastMove = lastMoveAt(tree, offPrep!.from);
+    if (ply > 0) {
+      const move = offPrepPosition(ply - 1).move(line[ply - 1]);
+      lastMove = [move.from as Key, move.to as Key];
+    }
+    board.set({
+      fen: chess.fen(),
+      turnColor: toColor(chess),
+      check: chess.isCheck(),
+      lastMove,
+      movable: { color: toColor(chess), dests: computeDests(chess) },
+    });
+    renderMaterial();
+    applyOffPrepUI();
+    renderTreeView();
+    navBackBtn.disabled = navStartBtn.disabled = false;
+    navForwardBtn.disabled = navEndBtn.disabled = ply === line.length;
+    void updateExplorer(chess.fen());
+    void updateEngine(chess);
+  }
+
+  function backToPrep(): void {
+    if (offPrep) goTo(offPrep.from);
+  }
+
+  // The line goes into the study in place of the move you had where it
+  // left, and of everything after that move.
+  function replacePrep(): void {
+    if (!offPrep) return;
+    const { from, line, ply } = offPrep;
+    const replaced = tree.nodes[from].children.filter((id) => tree.nodes[id].san !== line[0]);
+    const size = (id: number): number => 1 + tree.nodes[id].children.reduce((n, child) => n + size(child), 0);
+    const after = replaced.reduce((n, id) => n + size(id) - 1, 0);
+    const old = replaced.map((id) => tree.nodes[id].san).join(", ");
+    const what = `${numbered(sanPathTo(tree, from).length, old)}${after ? ` and the ${after} move${after === 1 ? "" : "s"} after it` : ""}`;
+    if (!window.confirm(`Are you sure? This replaces ${what} with this line.`)) return;
+    for (const id of replaced) deleteSubtree(tree, id);
+    forgetDeleted();
+    let nodeId = from;
+    const ids = [from];
+    for (const san of line) ids.push((nodeId = addMove(tree, nodeId, san)));
+    goTo(ids[ply]);
+    scheduleAutoSave();
+  }
+
   // Keeps the name-row badge and the "Set/Clear starting point" button's
   // label in sync with `startNodeId` and wherever you're currently viewing —
   // called after navigation and after toggling the starting point itself.
@@ -1158,7 +1258,8 @@ function renderEditor(
   }
 
   function goTo(nodeId: number): void {
-    moveConflictEl.hidden = true;
+    offPrep = null;
+    applyOffPrepUI();
 
     // Record the path taken so arrow-key navigation can follow it later.
     const path = pathTo(tree, nodeId);
@@ -1203,17 +1304,32 @@ function renderEditor(
   }
 
   function stepBack(): void {
+    if (offPrep && offPrep.ply > 0) {
+      offPrep.ply -= 1;
+      return showOffPrep();
+    }
     const parentId = tree.nodes[currentId].parentId;
     if (parentId !== null) goTo(parentId);
   }
 
   function stepForward(): void {
+    if (offPrep) {
+      if (offPrep.ply < offPrep.line.length) {
+        offPrep.ply += 1;
+        showOffPrep();
+      }
+      return;
+    }
     const node = tree.nodes[currentId];
     const next = lastChild[currentId] ?? node.children[0];
     if (next !== undefined) goTo(next);
   }
 
   function goToLineEnd(): void {
+    if (offPrep) {
+      offPrep.ply = offPrep.line.length;
+      return showOffPrep();
+    }
     let nodeId = currentId;
     let next = lastChild[nodeId] ?? tree.nodes[nodeId].children[0];
     while (next !== undefined) {
@@ -1254,7 +1370,7 @@ function renderEditor(
   // The Explorer panel, and Stockfish's arrow widths, which follow the
   // Explorer's frequencies (Stockfish's own top lines are reused).
   function refreshExplorerViews(): void {
-    const chess = positionAt(tree, currentId);
+    const chess = currentChess();
     void updateExplorer(chess.fen());
     if (shownTools.has("engine")) void updateEngine(chess);
   }
@@ -1273,7 +1389,7 @@ function renderEditor(
     const on = shownTools.has(tool);
     if (tool === "engine") {
       if (on) {
-        void updateEngine(positionAt(tree, currentId));
+        void updateEngine(currentChess());
       } else {
         // Stockfish stops when turned off: it is the expensive one.
         engineAnalysisId++;
@@ -1304,11 +1420,11 @@ function renderEditor(
 
   depthDownBtn.addEventListener("click", () => {
     setEngineDepth(engineDepth - ENGINE_DEPTH_STEP);
-    void updateEngine(positionAt(tree, currentId));
+    void updateEngine(currentChess());
   });
   depthUpBtn.addEventListener("click", () => {
     setEngineDepth(engineDepth + ENGINE_DEPTH_STEP);
-    void updateEngine(positionAt(tree, currentId));
+    void updateEngine(currentChess());
   });
   setEngineDepth(engineDepth);
 
@@ -1596,10 +1712,8 @@ function renderEditor(
     flipBoardBtn.title = `Flip board — f (${boardOrientation === "white" ? "White" : "Black"} at bottom)`;
   }
 
-  function deleteCurrentMove(): void {
-    if (currentId === tree.rootId) return;
-    const parentId = tree.nodes[currentId].parentId as number;
-    deleteSubtree(tree, currentId);
+  // After moves are deleted from the study: what pointed at them goes.
+  function forgetDeleted(): void {
     for (const [id, childId] of Object.entries(lastChild)) {
       if (!tree.nodes[Number(id)]?.children.includes(childId)) delete lastChild[Number(id)];
     }
@@ -1607,6 +1721,20 @@ function renderEditor(
     // rather than pointing at a node that no longer exists, fall back to the
     // default (the real root). See doc/starting-point.md.
     if (startNodeId !== null && !(startNodeId in tree.nodes)) startNodeId = null;
+  }
+
+  function deleteCurrentMove(): void {
+    // Out of prep: the move shown and those after it leave the line.
+    if (offPrep) {
+      if (offPrep.ply === 0) return;
+      offPrep.line = offPrep.line.slice(0, offPrep.ply - 1);
+      offPrep.ply -= 1;
+      return offPrep.line.length ? showOffPrep() : backToPrep();
+    }
+    if (currentId === tree.rootId) return;
+    const parentId = tree.nodes[currentId].parentId as number;
+    deleteSubtree(tree, currentId);
+    forgetDeleted();
     goTo(parentId);
     scheduleAutoSave();
   }
@@ -1635,6 +1763,8 @@ function renderEditor(
   });
 
   deleteBtn.addEventListener("click", deleteCurrentMove);
+  document.getElementById("back-to-prep-btn")!.addEventListener("click", backToPrep);
+  document.getElementById("replace-prep-btn")!.addEventListener("click", replacePrep);
 
   function setStartPoint(nodeId: number | null): void {
     startNodeId = nodeId;
@@ -1830,6 +1960,7 @@ function renderEditor(
 
   // The previous (-1) or next (1) variation; nothing at either end.
   function switchVariation(step: -1 | 1): void {
+    if (offPrep) return;
     const target = siblingVariation(tree, currentId, step);
     if (target !== undefined) goTo(target);
   }
@@ -1844,6 +1975,11 @@ function renderEditor(
     if (e.key === "Escape" && !keyboardHelpPanel.hidden) {
       e.preventDefault();
       closeKeyboardHelp(true);
+      return;
+    }
+    if (e.key === "Escape" && offPrep && !(e.target as HTMLElement).closest("input, select, textarea")) {
+      e.preventDefault();
+      backToPrep();
       return;
     }
     const target = e.target as HTMLElement;
@@ -1878,6 +2014,7 @@ function renderEditor(
       case "C":
         // Opens the comment box (or goes back to it) without typing the c.
         e.preventDefault();
+        if (offPrep) break;
         commentRequested = true;
         updateCommentEditor();
         commentInputEl.focus();

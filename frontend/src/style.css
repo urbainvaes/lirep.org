@@ -1954,12 +1954,6 @@ body {
   white-space: nowrap;
 }
 
-.move-conflict {
-  margin: 0;
-  color: var(--bad);
-  font-size: 0.8rem;
-}
-
 .study-grid {
   display: grid;
   grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
@@ -2357,6 +2351,45 @@ button.study-head__link:disabled:hover {
   margin-left: auto;
 }
 
+/* Out of prep (see study.ts): the move list's toolbar gives way to this
+   one, in the warning colour, and the line's own moves take that colour. */
+.study-editor--edit .off-prep-bar {
+  background: color-mix(in srgb, var(--warn) 22%, var(--card-nested-bg));
+  border-bottom-color: var(--warn);
+}
+
+.off-prep-bar__label {
+  margin-right: auto;
+  color: var(--warn);
+  font-weight: 600;
+  line-height: 32px;
+}
+
+.study-editor--edit .study-card--off-prep {
+  outline: 1px solid var(--warn);
+  outline-offset: -1px;
+}
+
+.study-card--off-prep > .live-score,
+.study-card--off-prep > .study-comment-editor {
+  display: none;
+}
+
+.off-prep-line {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.tree-move--off-prep {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.tree-move--off-prep.tree-move--current {
+  background: var(--warn);
+  color: var(--panel-bg);
+}
+
 .btn--active {
   border-color: var(--primary);
   color: var(--primary);
@@ -2547,8 +2580,29 @@ button.study-head__link:disabled:hover {
 }
 
 .engine-depth .engine-eval {
-  min-width: 5.5em;
+  min-width: 6.5em;
   text-align: center;
+}
+
+/* While Stockfish works on the position at the depth shown: the arrows on
+   the board are still the previous analysis'. */
+.engine-eval--busy::after {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 0.4em;
+  vertical-align: -0.05em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: engine-eval-spin 0.7s linear infinite;
+}
+
+@keyframes engine-eval-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .engine-depth__btn {
