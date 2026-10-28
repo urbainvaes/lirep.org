@@ -148,6 +148,9 @@ export interface TreeMarks {
   /** Moves (or the starting point) whose figures lack Explorer data: a
    * Calculate button, or what a running calculation says. */
   calculate?: { buttons: ReadonlySet<number>; busy: ReadonlyMap<number, string> };
+  /** Your moves that differ from yours in the same position reached by
+   * another line (see transpositionMismatches), with what that line plays. */
+  mismatches?: ReadonlyMap<number, string>;
   /** A flag after the starting point's move, which clears it when clicked. */
   startFlag?: boolean;
   /** Fold the moves at each branching, each with what follows it. */
@@ -158,6 +161,47 @@ export interface TreeMarks {
     others?: ReadonlyMap<number, { probability: number; score: number }>;
   };
 }
+
+/** Transpositions where the prep disagrees with itself: the same position,
+ * with you to move, reached by several lines that don't play the same move
+ * there. By your move in each: what you play in the other lines, and after
+ * which moves. The move counters don't count; a line where your prep ends
+ * there doesn't disagree. */
+export function transpositionMismatches(tree: StudyTree, side: "white" | "black"): Map<number, string> {
+  const byPosition = new Map<string, number[]>(); // node ids where you are to move, with a move
+  const visit = (nodeId: number, chess: Chess): void => {
+    const children = tree.nodes[nodeId].children;
+    if (!children.length) return;
+    if ((chess.turn() === "w") === (side === "white")) {
+      const key = chess.fen().split(" ").slice(0, 4).join(" ");
+      byPosition.set(key, [...(byPosition.get(key) ?? []), nodeId]);
+    }
+    for (const childId of children) {
+      const next = new Chess(chess.fen());
+      next.move(tree.nodes[childId].san as string);
+      visit(childId, next);
+    }
+  };
+  visit(tree.rootId, positionAt(tree, tree.rootId));
+  const mismatches = new Map<number, string>();
+  const ownMoves = (nodeId: number) => tree.nodes[nodeId].children.map((id) => tree.nodes[id].san as string);
+  for (const nodeIds of byPosition.values()) {
+    if (new Set(nodeIds.map((id) => ownMoves(id).join(" "))).size < 2) continue;
+    for (const nodeId of nodeIds) {
+      const mine = ownMoves(nodeId).join(" ");
+      const others = nodeIds
+        .filter((other) => ownMoves(other).join(" ") !== mine)
+        .map((other) => `${ownMoves(other).join(", ")} after ${formatLine(sanPathTo(tree, other))}`);
+      for (const childId of tree.nodes[nodeId].children) {
+        mismatches.set(childId, `The same position comes up in another line, where you play ${others.join("; ")}`);
+      }
+    }
+  }
+  return mismatches;
+}
+
+// "1. d4 Nf6 2. c4", numbered from the initial position.
+const formatLine = (sans: string[]) => sans.map((san, i) => (i % 2 === 0 ? `${i / 2 + 1}. ${san}` : san)).join(" ");
 
 // The Fold branches and Auto-fold switches, shared by the study editor and
 // the read-only viewer: folding is on unless switched off in this browser,
@@ -220,7 +264,11 @@ function renderMove(
   if (isWhite === (side === "white")) classes.push("tree-move--mine");
   if (nodeId === currentId) classes.push("tree-move--current");
   if (nodeId === studyStartNodeId) classes.push("tree-move--start-point");
-  const title = nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
+  const mismatch = marks.mismatches?.get(nodeId);
+  if (mismatch) classes.push("tree-move--mismatch");
+  const title = mismatch
+    ? ` title="${escapeHtml(mismatch)}"`
+    : nodeId === studyStartNodeId ? ' title="This study\'s starting point — stats are calculated from here"' : "";
   const hasComment = Boolean(tree.nodes[nodeId].comment?.trim());
   const unfetchedMarker = marks.unfetched?.has(nodeId)
     ? '<span class="tree-move-unfetched" title="The expected score needs Opening Explorer data for the position after this move, not loaded yet: open this move to load it"></span>'

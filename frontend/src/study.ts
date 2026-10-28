@@ -70,6 +70,7 @@ import {
   sanPathTo,
   setLichessOrientation,
   siblingVariation,
+  transpositionMismatches,
   type StudyTree,
 } from "./tree";
 
@@ -1107,6 +1108,15 @@ function renderEditor(
     renderTreeView();
   }
 
+  // Transpositions where your moves disagree, worked out again only after
+  // an edit (or a change of side).
+  let mismatchCache: { key: string; mismatches: Map<number, string> } | null = null;
+  function mismatches(): Map<number, string> {
+    const key = `${editVersion}:${currentSide()}`;
+    if (mismatchCache?.key !== key) mismatchCache = { key, mismatches: transpositionMismatches(tree, currentSide()) };
+    return mismatchCache.mismatches;
+  }
+
   function renderTreeView(): void {
     if (offPrep) return renderOffPrepLine();
     // Folded, the folds on the way to the current move are open too.
@@ -1117,6 +1127,7 @@ function renderEditor(
       moveStats,
       startStat,
       calculate: { buttons: calcButtons, busy: calcBusy },
+      mismatches: mismatches(),
       startFlag: true,
       folding: foldBranches ? { open, others: otherReplies } : undefined,
     });

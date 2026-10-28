@@ -3304,6 +3304,15 @@ button.tree-calc:hover {
   color: var(--primary-hover);
 }
 
+/* A move of yours that another line, reaching the same position, doesn't
+   play (see transpositionMismatches in tree.ts). The wavy underline stays
+   on the selected move's blue. */
+.tree-move--mismatch {
+  color: var(--bad-soft);
+  text-decoration: underline wavy var(--bad-soft);
+  text-underline-offset: 3px;
+}
+
 .tree-move-number {
   color: var(--good);
 }

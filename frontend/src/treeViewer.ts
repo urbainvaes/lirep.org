@@ -46,6 +46,7 @@ import {
   sanPathTo,
   setLichessOrientation,
   siblingVariation,
+  transpositionMismatches,
   type StudyTree,
 } from "./tree";
 
@@ -91,6 +92,8 @@ export interface TreeView {
  * caller's own buttons. */
 export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: boolean): HTMLElement {
   const { tree, side } = view;
+  // The tree doesn't change here: its disagreeing transpositions, once.
+  const mismatches = transpositionMismatches(tree, side);
   const startNodeId = view.startNodeId !== null && view.startNodeId in tree.nodes ? view.startNodeId : null;
   const startPoint = describeStartPoint(tree, startNodeId);
   const sideLabel = side === "white" ? "Playing White" : "Playing Black";
@@ -386,6 +389,7 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
     const open = new Set(openFolds);
     for (const node of pathTo(tree, currentId)) open.add(node.id);
     treeViewEl.innerHTML = renderTree(tree, currentId, side, startNodeId, {
+      mismatches,
       folding: foldBranches ? { open } : undefined,
     });
     treeViewEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
