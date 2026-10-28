@@ -3,7 +3,7 @@
 
 import type { BulletStats } from "@web/bulletStats";
 import type { ExplorerSettings } from "@web/explorer";
-import type { StudyTree } from "@web/tree";
+import { addMove, deleteSubtree, type StudyTree } from "@web/tree";
 
 import { send } from "./outbox";
 
@@ -102,6 +102,47 @@ export async function studies(): Promise<Study[]> {
 }
 
 export const study = (id: number) => keptGet<Study>(`/api/studies/${id}`);
+
+/** Puts `line` (from the initial position) into study `id` in place of
+ * the move of yours where it leaves the prep, and of everything after that
+ * move, as the website's Replace prep does; the study's tree as saved. The
+ * study is read afresh first, so what was edited elsewhere meanwhile stays. */
+export async function replacePrep(id: number, line: string[]): Promise<StudyTree> {
+  const study = await get<Study>(`/api/studies/${id}`);
+  const tree = study.tree;
+  let nodeId = tree.rootId;
+  let at = 0;
+  for (; at < line.length; at++) {
+    const next = tree.nodes[nodeId].children.find((child) => tree.nodes[child].san === line[at]);
+    if (next === undefined) break;
+    nodeId = next;
+  }
+  const yours = (at % 2 === 0) === (study.side === "white");
+  const replaced = tree.nodes[nodeId].children;
+  if (at === line.length || !yours || !replaced.length) {
+    throw new Error("The study has changed meanwhile: this line no longer leaves its prep there. Nothing was saved.");
+  }
+  for (const child of [...replaced]) deleteSubtree(tree, child);
+  for (const san of line.slice(at)) nodeId = addMove(tree, nodeId, san);
+  // A starting point in what was deleted goes back to the default.
+  const startNodeId = study.startNodeId !== null && study.startNodeId in tree.nodes ? study.startNodeId : null;
+  let res: Response;
+  try {
+    res = await fetch(`/api/studies/${id}`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: study.name, tree, explorerSettings: study.explorerSettings ?? undefined, side: study.side, startNodeId }),
+    });
+  } catch {
+    throw new Error("No connection: nothing was saved.");
+  }
+  if (res.status === 401) throw new Error("Signed out: sign in again to save.");
+  if (!res.ok) throw new Error("The study couldn't be saved.");
+  kept.delete(`/api/studies/${id}`);
+  kept.delete("/api/studies");
+  return tree;
+}
 
 export const practiceSummary = () => keptGet<Record<string, PracticeSummary>>("/api/practice/summary");
 

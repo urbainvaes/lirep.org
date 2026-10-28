@@ -1,5 +1,6 @@
-// A study, read-only (#/study/ID, from the home screen): the analysis as a
-// screen of its own, from the study's starting point, along its prep.
+// A study (#/study/ID, from the home screen): the analysis as a screen of
+// its own, from the study's starting point, along its prep. Its only edit:
+// a line out of prep can replace the prep (Replace prep).
 
 import { sanPathTo } from "@web/tree";
 
@@ -16,6 +17,7 @@ export async function renderStudyView(app: HTMLElement, id: number): Promise<() 
     side: study.side,
     explorerSettings: study.explorerSettings,
     tree: study.tree,
+    studyId: id,
     title: study.name,
     screen: { root: app, back: "#/studies" },
     onClose: () => {},

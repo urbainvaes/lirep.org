@@ -169,6 +169,7 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
     showOptions();
   });
   startBtn.addEventListener("click", () => void startRun());
+  let replaced = false; // Replace prep, from the analysis
   analysisBtn.addEventListener("click", () => {
     window.clearTimeout(restartTimer); // no auto-restart under the analysis
     doneEl.hidden = true;
@@ -177,7 +178,15 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
       orientation: board.state.orientation,
       side: study.side,
       explorerSettings: study.explorerSettings,
-      onClose: () => {},
+      tree: study.tree,
+      studyId: id,
+      replaceNote: "Bullet starts again when you close the analysis.",
+      onReplaced: () => (replaced = true),
+      // The study's moves changed under the game: it starts again (the
+      // router renders this screen afresh).
+      onClose: () => {
+        if (replaced) window.dispatchEvent(new HashChangeEvent("hashchange"));
+      },
     });
   });
   doneEl.addEventListener("click", () => {

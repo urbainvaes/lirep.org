@@ -250,6 +250,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     const line = sanPathTo(tree, previous);
     analyse(line, line.length - 1);
   });
+  let replaced = false; // Replace prep, from the analysis
   function analyse(line: string[], at?: number): void {
     const resume = pending;
     window.clearTimeout(timer);
@@ -261,8 +262,14 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
       side: study.side,
       explorerSettings: study.explorerSettings,
       tree,
+      studyId: id,
+      replaceNote: "The practice session starts again when you close the analysis.",
+      onReplaced: () => (replaced = true),
       onClose: () => {
-        if (resume && !left) later(resume, 300);
+        // The study's moves changed under the session: it starts again
+        // (the router renders this screen afresh).
+        if (replaced && !left) window.dispatchEvent(new HashChangeEvent("hashchange"));
+        else if (resume && !left) later(resume, 300);
       },
     });
   }

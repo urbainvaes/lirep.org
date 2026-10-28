@@ -32,6 +32,7 @@ import { cachedExplorerData, errorMessage, fetchExplorerData } from "@web/explor
 import { escapeHtml } from "@web/layout";
 import type { StudyTree } from "@web/tree";
 
+import { replacePrep } from "./api";
 import { FLIP_ICON } from "./icons";
 
 export interface AnalysisOptions {
@@ -44,6 +45,12 @@ export interface AnalysisOptions {
   explorerSettings?: ExplorerSettings | null;
   /** The study's moves: the prep is shown along them. */
   tree?: StudyTree;
+  /** The study's id, when the line can replace its prep (Replace prep). */
+  studyId?: number;
+  /** Added to Replace prep's confirmation: what else it does. */
+  replaceNote?: string;
+  /** Called once Replace prep has saved. */
+  onReplaced?(): void;
   /** The bar's title (else "Analysis"). */
   title?: string;
   /** A screen of its own, in `root`, rather than a layer: the back arrow
@@ -135,6 +142,40 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     return node === null ? [] : o.tree!.nodes[node].children.map((child) => o.tree!.nodes[child].san as string);
   };
 
+  // Where the line leaves the prep with a move of yours other than the
+  // study's: the line can replace the study's moves from there (`ids`).
+  const replaceable = (): { at: number; ids: number[] } | null => {
+    if (o.studyId === undefined || !o.tree) return null;
+    const at = inTree();
+    if (at === line.length || (at % 2 === 0) !== (o.side === "white")) return null;
+    const ids = o.tree.nodes[nodeAt(at)!].children;
+    return ids.length ? { at, ids } : null;
+  };
+
+  async function replace(button: HTMLButtonElement): Promise<void> {
+    const found = replaceable();
+    if (!found) return;
+    const tree = o.tree!;
+    const size = (id: number): number => 1 + tree.nodes[id].children.reduce((n, child) => n + size(child), 0);
+    const after = found.ids.reduce((n, id) => n + size(id) - 1, 0);
+    const number = `${Math.floor(found.at / 2) + 1}.${found.at % 2 ? ".." : ""}`;
+    const old = found.ids.map((id) => tree.nodes[id].san).join(", ");
+    const what = `${number} ${old}${after ? ` and the ${after} move${after === 1 ? "" : "s"} after it` : ""}`;
+    if (!window.confirm(`Are you sure? This replaces ${what} with this line.${o.replaceNote ? ` ${o.replaceNote}` : ""}`)) return;
+    button.disabled = true;
+    button.textContent = "Saving…";
+    try {
+      o.tree = await replacePrep(o.studyId!, line);
+      o.onReplaced?.();
+      show();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = "Replace prep";
+      const note = prepEl.querySelector(".analysis__note");
+      if (note) note.textContent = err instanceof Error ? err.message : "The study couldn't be saved.";
+    }
+  }
+
   const board: Api = createBoard(el("an-board"), onMove, o.orientation);
   board.set({ drawable: { brushes: { ...board.state.drawable.brushes, ...QUALITY_BRUSHES } } });
 
@@ -184,7 +225,9 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     const node = nodeAt();
     if (node === null) {
       prepEl.innerHTML = `<p class="analysis__note">Out of prep</p>
-        <button class="prep__move" type="button" data-back>Back to prep</button>`;
+        <div class="prep__replies"><button class="prep__move" type="button" data-back>Back to prep</button>${
+          replaceable() ? '<button class="prep__move" type="button" data-replace>Replace prep</button>' : ""
+        }</div>`;
       return;
     }
     const comment = tree.nodes[node].comment?.trim();
@@ -340,6 +383,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     const button = (e.target as Element).closest<HTMLElement>("button");
     if (!button) return;
     if (button.dataset.san) play(button.dataset.san);
+    else if (button.hasAttribute("data-replace")) void replace(button as HTMLButtonElement);
     else if (button.hasAttribute("data-back")) {
       ply = inTree();
       show();
