@@ -225,7 +225,7 @@ function renderCard<T extends LeaderboardRow>(board: Leaderboard<T>, opening: T,
       ${studyCardBodyHtml({
         titleHtml: `<span class="study-card__rank">${opening.rank ?? "–"}</span> <a class="study-card__title-link" href="/opening.html?id=${opening.id}">${escapeHtml(splitStudyName(opening.name).opening)}</a>`,
         titleText: opening.name,
-        headerEnd: studyBadgeHtml(opening.badge, opening.side, opening.mine ? opening.id : undefined),
+        headerEnd: `<span class="study-card__header-end">${studyBadgeHtml(opening.badge, opening.side, opening.mine ? opening.id : undefined)}</span>`,
         stats: opening.badge,
         ranked: board.ranked,
         afterResult: `${opening.badge.scoreFreshnessReason ? `<p class="study-card__meta">Expected score: ${escapeHtml(opening.badge.scoreFreshnessReason)}</p>` : ""}
