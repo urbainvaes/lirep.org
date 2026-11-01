@@ -66,6 +66,9 @@ The app works offline, from what it last loaded:
   answers again, each with the time it happened (`answeredAt`,
   `finishedAt`), which the server believes if it's in the last 7 days. A
   note above the bottom bar says "Offline" and how many wait.
+- A practice queue kept from before leaves out the positions answered
+  since (`src/api.ts`, from the answer's time and the copy's `Date`), as
+  the server would: they're neither due nor new any more.
 - The Explorer's data and Stockfish's evaluations are the browser's caches,
   as on the website.
 

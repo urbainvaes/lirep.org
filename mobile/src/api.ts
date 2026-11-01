@@ -146,16 +146,66 @@ export async function replacePrep(id: number, line: string[]): Promise<StudyTree
 
 export const practiceSummary = () => keptGet<Record<string, PracticeSummary>>("/api/practice/summary");
 
+// The positions answered here, by study, with when (this phone's clock):
+// the queue the service worker kept offline doesn't know of the answers
+// made since, and would ask them again.
+const ANSWERED_KEY = "lirep-m-answered";
+// Older answers are forgotten: a queue made since knows of them.
+const ANSWERED_KEEP_MS = 24 * 3600_000;
+// The phone's clock and the server's may differ by this much.
+const CLOCK_SKEW_MS = 60_000;
+
+type Answered = Record<string, Record<string, number>>;
+
+function readAnswered(): Answered {
+  try {
+    const answered = JSON.parse(localStorage.getItem(ANSWERED_KEY) ?? "{}");
+    return answered && typeof answered === "object" ? answered : {};
+  } catch {
+    return {};
+  }
+}
+
+function noteAnswered(id: number, nodeId: number): void {
+  const now = Date.now();
+  const answered = readAnswered();
+  for (const study of Object.values(answered)) {
+    for (const [node, at] of Object.entries(study)) if (now - at > ANSWERED_KEEP_MS) delete study[node];
+  }
+  (answered[String(id)] ??= {})[String(nodeId)] = now;
+  try {
+    localStorage.setItem(ANSWERED_KEY, JSON.stringify(answered));
+  } catch {
+    // Storage blocked: an offline queue may ask them again.
+  }
+}
+
 /** The positions to drill in the next round (see doc/practice.md); optional
- * when nothing is due or new, only review. */
+ * when nothing is due or new, only review. A position answered after the
+ * queue was made (a copy kept offline) is neither due nor new any more, as
+ * the server would say: it's left out, and when that leaves nothing, the
+ * queue becomes optional review, of what it had. */
 export async function practiceQueue(id: number): Promise<{ nodeIds: number[]; optional: boolean }> {
-  const queue = await get<{ nodeIds: number[]; optional?: boolean }>(`/api/studies/${id}/practice/queue`);
-  return { nodeIds: queue.nodeIds, optional: Boolean(queue.optional) };
+  const url = `/api/studies/${id}/practice/queue`;
+  const res = await fetch(url, { credentials: "same-origin" });
+  if (res.status === 401) {
+    kept.clear();
+    throw new SignedOut();
+  }
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  const queue = (await res.json()) as { nodeIds: number[]; optional?: boolean };
+  if (queue.optional) return { nodeIds: queue.nodeIds, optional: true };
+  const madeAt = Date.parse(res.headers.get("Date") ?? "") || 0;
+  const answered = readAnswered()[String(id)] ?? {};
+  const nodeIds = queue.nodeIds.filter((nodeId) => !(answered[String(nodeId)] > madeAt - CLOCK_SKEW_MS));
+  if (!nodeIds.length && queue.nodeIds.length) return { nodeIds: queue.nodeIds, optional: true };
+  return { nodeIds, optional: false };
 }
 
 /** Records a first answer: the server's result, "later" if it waits in
  * the outbox (offline), or null if the server refused it. */
 export async function recordAttempt(id: number, nodeId: number, correct: boolean): Promise<Attempt | "later" | null> {
+  noteAnswered(id, nodeId);
   const result = await send(`/api/studies/${id}/practice/attempt`, {
     nodeId,
     correct,
