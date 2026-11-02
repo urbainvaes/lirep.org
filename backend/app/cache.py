@@ -4,9 +4,15 @@ storage (SERVER_CACHE_USERS), it also reads what it lacks from here and
 saves what it computes or fetches here, so the data follows them across
 devices and survives clearing the browser. The cache is shared: a position's
 Explorer answer, or its evaluation at a depth, is the same whoever asks.
-Only those users can read or write it, so nobody else can put data in it."""
+Only those users can write it, so nobody else can put data in it; any
+signed-in player can read its Explorer answers (Lichess's public figures).
+
+data/explorer-seed.json, the Explorer answers for the Browse page's
+openings (written by tools/browse_stats.mjs), goes into the cache at
+startup, where it is newer than what is there."""
 
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -21,6 +27,16 @@ MAX_ANSWER = 100_000  # an Explorer answer, as JSON
 MAX_BATCH = 500
 MAX_DEPTH = 60
 MATE_CP = 100_000  # evalCache.ts's MATE_SCORE_CP
+
+
+EXPLORER_SEED = Path(__file__).parent / "data" / "explorer-seed.json"
+
+
+def _require_signed_in(request: Request) -> str:
+    username = request.session.get("username")
+    if not username or not request.session.get("access_token"):
+        raise HTTPException(status_code=401, detail="not authenticated")
+    return username
 
 
 def _require_server_cache(request: Request) -> str:
@@ -38,7 +54,7 @@ class ExplorerLookupIn(BaseModel):
 
 @router.post("/api/cache/explorer/lookup")
 def explorer_lookup(payload: ExplorerLookupIn, request: Request) -> dict:
-    _require_server_cache(request)
+    _require_signed_in(request)
     keys = [key for key in payload.keys if len(key) <= MAX_KEY]
     return {"entries": store.explorer_cache_get(keys) if keys else {}}
 
@@ -115,3 +131,16 @@ def set_server_cache(payload: ServerCacheIn, request: Request) -> dict:
         raise HTTPException(status_code=403, detail="server storage isn't available for this account")
     store.set_server_cache(username, payload.enabled)
     return {"enabled": payload.enabled}
+
+
+def load_explorer_seed(path: Path = EXPLORER_SEED) -> int:
+    """Puts the seed's Explorer answers ({"entries": [{key, data, fetchedAt}]})
+    into the cache, where they are newer than what is there; how many."""
+    if not path.exists():
+        return 0
+    entries = [
+        (e["key"], json.dumps(e["data"], separators=(",", ":")), e["fetchedAt"])
+        for e in json.loads(path.read_text())["entries"]
+    ]
+    store.explorer_cache_put(entries)
+    return len(entries)

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import router as auth_router
+from .cache import load_explorer_seed
 from .cache import router as cache_router
 from .community import router as community_router
 from .config import SESSION_HTTPS_ONLY, SESSION_SECRET
@@ -24,6 +25,7 @@ app.include_router(practice_router)
 app.include_router(forum_router)
 
 init_db()
+load_explorer_seed()
 
 
 @app.get("/api/health")

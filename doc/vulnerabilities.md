@@ -76,8 +76,9 @@ or Web Locks), and tune the gap if 429s show up in practice.
 
 ## No shared Explorer cache
 
-Explorer responses are cached per browser profile, not shared between
-users: a cache fed by browsers would let anyone upload invented move
+Explorer responses are cached per browser profile, and on the server by
+the accounts with server storage only, which anyone signed in can read: a
+cache fed by every browser would let anyone upload invented move
 statistics and skew other people's results. As a consequence, each user's
 first calculation of a study fetches every position from Lichess, paced. A
 tree with 200 positions not yet cached in that browser takes about

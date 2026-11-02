@@ -10,7 +10,7 @@
 // in IndexedDB (see doc/explorer-cache.md).
 
 import { lirepExplorerUrl, type ExplorerData, type ExplorerSettings } from "./explorer";
-import { serverCacheEnabled, serverExplorerGet, serverExplorerSet } from "./serverCache";
+import { serverCacheEnabled, serverExplorerGet, serverExplorerReadable, serverExplorerSet } from "./serverCache";
 
 /** Minimum pause between two requests to Lichess's Opening Explorer. */
 export const EXPLORER_REQUEST_GAP_MS = 500;
@@ -18,8 +18,9 @@ export const EXPLORER_REQUEST_GAP_MS = 500;
 export const RATE_LIMIT_PAUSE_MS = 60_000;
 /** How long to keep reading the player database's streamed answer. */
 const PLAYER_STREAM_MS = 25_000;
-/** Cache lifetimes: move statistics change slowly, one player's games daily. */
-const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Cache lifetimes: move statistics over millions of games barely move in a
+ * year; one player's games change daily. */
+const CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const PLAYER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const LICHESS_EXPLORER = "https://explorer.lichess.org";
@@ -189,8 +190,8 @@ function openCache(): Promise<IDBDatabase | null> {
   return dbPromise;
 }
 
-// With server storage (serverCache.ts), what this browser lacks is asked
-// from the server, and kept here; what it fetches goes to both.
+// What this browser lacks is asked from the server (serverCache.ts), signed
+// in, and kept here; with server storage, what it fetches goes to both.
 async function cacheGet(key: string, ttl: number): Promise<ExplorerData | undefined> {
   const db = await openCache();
   const entry = db
@@ -201,7 +202,7 @@ async function cacheGet(key: string, ttl: number): Promise<ExplorerData | undefi
       })
     : undefined;
   if (entry && Date.now() - entry.fetchedAt <= ttl) return entry.data;
-  if (!(await serverCacheEnabled())) return undefined;
+  if (!(await serverExplorerReadable())) return undefined;
   const server = await serverExplorerGet(key);
   if (!server || Date.now() - server.fetchedAt > ttl) return undefined;
   await localSet(key, server);

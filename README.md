@@ -156,7 +156,7 @@ without it.
 Lichess's Explorer is queried from each user's browser, with their own
 token, so every user stays within their own rate limit: one request at a
 time, at least 500 ms apart, pausing a minute after a 429. Its responses are
-cached in the browser (30 days, 24 hours for an individual player's games);
+cached in the browser (a year, 24 hours for an individual player's games);
 local Lirep responses are fetched fresh through the backend. Stockfish evaluations are cached separately in the local
 browser. More detail is in [explorer-cache.md](doc/explorer-cache.md).
 

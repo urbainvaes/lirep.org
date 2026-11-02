@@ -6,11 +6,11 @@ data lives:
 
 | Data | Storage and scope | Lifetime |
 | --- | --- | --- |
-| Lichess Explorer responses | Browser IndexedDB `lirep-explorer`, per browser profile | 30 days; 24 hours for the player database |
+| Lichess Explorer responses | Browser IndexedDB `lirep-explorer`, per browser profile | A year; 24 hours for the player database |
 | Lirep Explorer (2016 sample) responses | Not cached: the local Explorer is unlimited and never changes | — |
 | Resolved default rating bucket (for a new study's picker) | Backend `rating_cache`, per username | 1-hour TTL; stale fallback on refresh failure |
 | Stockfish position evals | Browser IndexedDB `lirep-position-evals`, keyed by `[username, fen, depth]` | Until browser data is cleared |
-| Both, for accounts with server storage | Also backend `server_explorer_cache` and `server_eval_cache`, shared by those accounts | Explorer answers by the same TTLs (checked by the browser); evals kept |
+| Both, for accounts with server storage | Also backend `server_explorer_cache` and `server_eval_cache`, shared by those accounts (Explorer answers readable by anyone signed in) | Explorer answers by the same TTLs (checked by the browser); evals kept |
 
 Older databases may still contain the legacy `cloud_eval_cache` table, but
 nothing reads or writes it. There is **no Lichess Cloud Eval fallback**.
@@ -64,7 +64,8 @@ Simultaneous requests for the same position and settings share one fetch.
 
 Explorer move frequencies change slowly, so `explorerClient.ts` keeps each
 Lichess response in IndexedDB (`lirep-explorer`, store `responses`) for
-30 days; responses from the player database, whose games change whenever
+a year (move statistics over millions of games barely move in that time);
+responses from the player database, whose games change whenever
 the player plays, are kept for 24 hours. The key holds the database, the
 query (the actual rating buckets and speeds, or the player and side) and
 the FEN, for example
@@ -99,8 +100,13 @@ a miss.
 The server's cache is shared: an Explorer answer (under the browser's own
 cache key, so its settings are part of it) or an evaluation (FEN and depth,
 in centipawns from White's view) is the same whoever asks. Only accounts
-with server storage on can read or write it, so nobody else can put data in
-it. Each account can turn it off in its profile (`users.server_cache`: NULL
+with server storage on can write it, so nobody else can put data in it; its
+Explorer answers can be read by anyone signed in, whose browser asks the
+server for what it lacks before Lichess (they are Lichess's public figures).
+At startup, the backend puts `backend/app/data/explorer-seed.json` in it,
+where newer than what is there: the Browse page's openings' Explorer
+answers, written by `tools/browse_stats.mjs`, so their previews and imports
+need no Lichess requests. Each account can turn it off in its profile (`users.server_cache`: NULL
 until chosen, meaning on); others see the option greyed out, with the
 address to ask for it. The profile also shows the cache's total size. The
 cache isn't deleted with an account, as it isn't any one account's.

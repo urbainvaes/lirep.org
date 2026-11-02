@@ -59,7 +59,7 @@ the website's page (`frontend/src/bullet.ts`, opened by
 - **Store the reply weights on the server**, per study: for each position
   where the opponent moves, the game counts of the study's replies, keyed by
   FEN and saved with the Explorer settings they came from. Runs would then
-  work on any device, and beyond the browser cache's 30 days. The editor's
+  work on any device, and beyond the browser cache's year. The editor's
   live calculation and the Stats page's calculation already read every one
   of these positions and could upload them.
 - **A floor for rare replies:** a reply the Explorer doesn't list is never

@@ -1,6 +1,7 @@
 // Server storage for Stockfish and Explorer data (backend/app/cache.py), for
 // the users allowed it: behind the browser's own caches (explorerClient.ts,
 // evalCache.ts), it is asked for what they lack and given what they gain.
+// Its Explorer answers can be read by anyone signed in.
 // Requests are batched: what is asked or saved within a moment goes in one.
 
 import type { ExplorerData } from "./explorer";
@@ -8,15 +9,24 @@ import type { ExplorerData } from "./explorer";
 const BATCH_MS = 20;
 const MAX_BATCH = 500; // cache.py's MAX_BATCH
 
-let enabledPromise: Promise<boolean> | null = null;
+let mePromise: Promise<{ authenticated?: boolean; serverCache?: boolean }> | null = null;
+
+function me(): Promise<{ authenticated?: boolean; serverCache?: boolean }> {
+  mePromise ??= fetch("/api/me", { credentials: "same-origin" })
+    .then((res) => (res.ok ? res.json() : {}))
+    .catch(() => ({}));
+  return mePromise;
+}
 
 /** Whether this account keeps its data on the server (asked once per page). */
-export function serverCacheEnabled(): Promise<boolean> {
-  enabledPromise ??= fetch("/api/me", { credentials: "same-origin" })
-    .then((res) => (res.ok ? res.json() : {}))
-    .then((me: { serverCache?: boolean }) => Boolean(me.serverCache))
-    .catch(() => false);
-  return enabledPromise;
+export async function serverCacheEnabled(): Promise<boolean> {
+  return Boolean((await me()).serverCache);
+}
+
+/** Whether the server's Explorer answers may be read: by anyone signed in
+ * (only the accounts with server storage add to them). */
+export async function serverExplorerReadable(): Promise<boolean> {
+  return Boolean((await me()).authenticated);
 }
 
 /** Items added within BATCH_MS of each other, sent together; `send`
