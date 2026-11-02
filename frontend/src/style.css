@@ -435,16 +435,59 @@ body {
   cursor: pointer;
 }
 
-/* Every tier, then every piece, as the choices make them look. */
-.profile-pref-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* Every badge, as the choices make them look: tiers by pieces. */
+.badge-matrix {
+  margin-top: 18px;
+  overflow-x: auto;
 }
 
-.profile-pref-preview > div {
-  display: flex;
-  gap: 12px;
+.badge-matrix table {
+  border-collapse: collapse;
+}
+
+.badge-matrix th,
+.badge-matrix td {
+  padding: 8px 12px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.badge-matrix thead th {
+  color: var(--text-strong);
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.badge-matrix tbody th {
+  color: var(--text-strong);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.badge-matrix__corner {
+  text-align: left !important;
+  font-weight: 400 !important;
+  color: var(--text-dim) !important;
+}
+
+.badge-matrix__corner-sep {
+  margin: 0 2px;
+}
+
+.badge-matrix__range {
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.badge-matrix__corner .badge-matrix__range {
+  display: inline;
 }
 
 .profile-empty {

@@ -1,36 +1,25 @@
 /* The badges' look, as chosen on the account page (badgePrefs.ts). Shared
    by the website and the mobile app, over their own .piece-badge styles. */
 
-.piece-badge--legendary { --badge-flat: #b57bff; }
-.piece-badge--brilliant { --badge-flat: #4fb3d1; }
-.piece-badge--gold { --badge-flat: #e9b22a; }
-.piece-badge--silver { --badge-flat: #a3adb8; }
-.piece-badge--bronze { --badge-flat: #cc7d44; }
-.piece-badge--none { --badge-flat: #a8a8ac; }
+/* Subtle: the badges' own styles (style.css), the top tiers shimmering. */
 
-/* Subtle: still, without the halo and the sparkles. */
-:root[data-badge-shine="subtle"] .piece-badge,
+/* Flat: the same metals, still, without the halo and the sparkles. */
 :root[data-badge-shine="flat"] .piece-badge {
   animation: none !important;
 }
 
-:root[data-badge-shine="subtle"] .piece-badge::before,
-:root[data-badge-shine="subtle"] .piece-badge::after,
-:root[data-badge-shine="flat"] .piece-badge::before,
-:root[data-badge-shine="flat"] .piece-badge::after {
+:root[data-badge-shine="flat"] .piece-badge::before {
   display: none !important;
 }
 
-/* Flat: one colour. */
-:root[data-badge-shine="flat"] .piece-badge {
-  background-image: linear-gradient(var(--badge-flat), var(--badge-flat)) !important;
-  filter: none !important;
+:root[data-badge-shine="flat"] .piece-badge::after {
+  animation: none !important;
 }
 
-/* The Lichess pieces: the piece's shape, filled with the badge's colours,
+/* The pieces (always a Lichess set): the piece's shape, filled with the badge's colours,
    and the piece itself over them, multiplied: its white takes the colours,
    its lines stay dark. (No sparkles: the shape would cut them.) */
-:root[data-badge-icons="lichess"] .piece-badge {
+:root[data-badge-icons] .piece-badge {
   position: relative;
   width: 1.05em;
   height: 1.05em;
@@ -43,7 +32,7 @@
   mask: var(--badge-mask) center / contain no-repeat;
 }
 
-:root[data-badge-icons="lichess"] .piece-badge::after {
+:root[data-badge-icons] .piece-badge::after {
   display: block !important;
   position: absolute;
   inset: 0;
@@ -54,6 +43,182 @@
   animation: none;
 }
 
-:root[data-badge-icons="lichess"] .piece-badge::before {
+:root[data-badge-icons] .piece-badge::before {
   display: none !important;
+}
+
+/* Around each badge, its effects (scoreTiers.ts, pieceBadgeHtml): outside
+   the piece, whose shape would cut them. Only with the Vivid shine. */
+.piece-badge-fx {
+  display: inline-block;
+  position: relative;
+  line-height: 1;
+}
+
+/* Vivid: every metal shimmers, faster and brighter; each glows in its own
+   colour, pulsing from Gold up; and sparkles twinkle around Gold, Brilliant
+   (two) and Legendary (three). Still for those who ask for less motion,
+   with the glow kept. */
+.piece-badge-fx--legendary { --fx-glow: rgba(181, 123, 255, 0.95); --fx-glow-2: rgba(63, 199, 221, 0.95); --fx-spark: #fff6c9; }
+.piece-badge-fx--brilliant { --fx-glow: rgba(150, 225, 255, 0.95); --fx-glow-2: rgba(255, 255, 255, 0.95); --fx-spark: #ffffff; }
+.piece-badge-fx--gold { --fx-glow: rgba(255, 200, 40, 0.9); --fx-glow-2: rgba(255, 240, 170, 0.95); --fx-spark: #fff3b0; }
+.piece-badge-fx--silver { --fx-glow: rgba(220, 230, 245, 0.85); --fx-glow-2: rgba(255, 255, 255, 0.9); }
+.piece-badge-fx--bronze { --fx-glow: rgba(240, 150, 80, 0.8); --fx-glow-2: rgba(255, 205, 160, 0.9); }
+
+:root[data-badge-shine="vivid"] .piece-badge-fx:not(.piece-badge-fx--none) {
+  filter: drop-shadow(0 0 3px var(--fx-glow)) drop-shadow(0 0 1px var(--fx-glow-2));
+}
+
+:root[data-badge-shine="vivid"] .piece-badge:not(.piece-badge--none) {
+  filter: saturate(1.3) brightness(1.08) !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Silver and bronze shimmer too; the rest faster. */
+  :root[data-badge-shine="vivid"] .piece-badge.piece-badge--silver,
+  :root[data-badge-shine="vivid"] .piece-badge.piece-badge--bronze,
+  :root[data-badge-shine="vivid"] .piece-badge.piece-badge--gold {
+    background-image: linear-gradient(
+      120deg,
+      var(--metal-edge) 0%,
+      var(--metal-body) 30%,
+      #ffffff 50%,
+      var(--metal-body) 70%,
+      var(--metal-edge) 100%
+    );
+    background-size: 300% auto;
+    animation: badge-fx-flow 2.6s linear infinite;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge.piece-badge--silver {
+    animation-duration: 3.4s;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge.piece-badge--bronze {
+    animation-duration: 4s;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge.piece-badge--brilliant {
+    animation-duration: 1.2s;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge.piece-badge--legendary {
+    animation-duration: 2.2s, 1.6s;
+  }
+
+  /* The glow pulses, from Gold up; Legendary's turns through its colours. */
+  :root[data-badge-shine="vivid"] .piece-badge-fx--gold,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--brilliant {
+    animation: badge-fx-pulse 1.8s ease-in-out infinite;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge-fx--legendary {
+    animation: badge-fx-legendary 3s linear infinite;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge-fx--gold::before,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--brilliant::before,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--brilliant::after,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--legendary::before,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--legendary::after {
+    position: absolute;
+    z-index: 1;
+    color: var(--fx-spark);
+    font-size: 1rem;
+    line-height: 1;
+    text-shadow: 0 0 3px var(--fx-glow), 0 0 1px rgba(0, 0, 0, 0.5);
+    content: "✦";
+    opacity: 0;
+    pointer-events: none;
+    animation: badge-fx-sparkle 2.2s ease-in-out infinite;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge-fx--gold::before,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--brilliant::before,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--legendary::before {
+    top: -0.2em;
+    right: -0.35em;
+  }
+
+  :root[data-badge-shine="vivid"] .piece-badge-fx--brilliant::after,
+  :root[data-badge-shine="vivid"] .piece-badge-fx--legendary::after {
+    bottom: -0.1em;
+    left: -0.45em;
+    font-size: 0.75rem;
+    animation-delay: 1.1s;
+  }
+
+  /* Legendary's third: a glint at its right foot, the sparkle's own shadow. */
+  :root[data-badge-shine="vivid"] .piece-badge-fx--legendary::before {
+    font-size: 1.1rem;
+    text-shadow:
+      0 0 5px var(--fx-glow),
+      0 0 2px #fff,
+      -0.1em 1.5em 0 var(--fx-spark);
+    animation-duration: 1.8s;
+  }
+}
+
+/* As style.css's, here for the mobile app too. */
+@keyframes badge-fx-flow {
+  from {
+    background-position: 0% center;
+  }
+  to {
+    background-position: 150% center;
+  }
+}
+
+@keyframes badge-fx-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0deg);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(0.5) rotate(90deg);
+  }
+}
+
+@keyframes badge-fx-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px var(--fx-glow)) drop-shadow(0 0 1px var(--fx-glow-2));
+  }
+  50% {
+    filter: drop-shadow(0 0 7px var(--fx-glow)) drop-shadow(0 0 3px var(--fx-glow-2));
+  }
+}
+
+@keyframes badge-fx-legendary {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(181, 123, 255, 0.95)) drop-shadow(0 0 1px #fff);
+  }
+  33% {
+    filter: drop-shadow(0 0 8px rgba(63, 199, 221, 1)) drop-shadow(0 0 2px #fff);
+  }
+  66% {
+    filter: drop-shadow(0 0 8px rgba(255, 138, 216, 1)) drop-shadow(0 0 2px rgba(255, 215, 106, 1));
+  }
+}
+
+/* An archived study's badge: grey, without effects. */
+.study-card--archived .piece-badge-fx {
+  filter: none !important;
+  animation: none !important;
+}
+
+.study-card--archived .piece-badge-fx::before,
+.study-card--archived .piece-badge-fx::after {
+  display: none !important;
+}
+
+.study-card--archived .piece-badge {
+  filter: none !important;
 }

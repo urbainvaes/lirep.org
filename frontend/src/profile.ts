@@ -1,6 +1,6 @@
 import { badgeIcons, badgeShine, ICONS, setBadgePrefs, SHINES, type BadgeIcons, type BadgeShine } from "./badgePrefs";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
-import { PIECES, pieceBadgeHtml, TIER_LABELS, TIERS } from "./scoreTiers";
+import { PIECES, pieceBadgeHtml, TIER_LABELS, TIERS, tierThreshold } from "./scoreTiers";
 
 interface RatingInfo {
   rating: number;
@@ -78,7 +78,7 @@ function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
     <section class="profile-section">
       <div class="profile-section__heading">
         <div>
-          <h2>Preferences</h2>
+          <h2>Appearance</h2>
           <p class="profile-subtitle">How the studies' badges look, here and in the mobile app, on all your devices:
             their shine is the expected score's tier, their piece the expected evaluation's.</p>
         </div>
@@ -92,11 +92,8 @@ function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
           <legend>Icons</legend>
           ${ICONS.map((i) => `<label title="${escapeHtml(i.title)}"><input type="radio" name="badge-icons" value="${i.value}" ${i.value === badgeIcons() ? "checked" : ""} /> ${i.label}</label>`).join("")}
         </fieldset>
-        <div class="profile-pref-preview" aria-label="Preview">
-          <div>${[...TIERS.map((t) => t.tier), "none" as const].map((tier) => `<span title="${TIER_LABELS[tier]}">${pieceBadgeHtml(tier)}</span>`).join("")}</div>
-          <div>${PIECES.map((p) => `<span title="${p.label}">${pieceBadgeHtml("gold", "", p.piece)}</span>`).join("")}</div>
-        </div>
       </div>
+      ${badgeMatrix()}
       <span id="profile-prefs-status" class="profile-subtitle" role="status"></span>
     </section>
 
@@ -222,6 +219,35 @@ async function showCacheSize(): Promise<void> {
   } catch {
     // The size is only informative.
   }
+}
+
+// Every badge, as the choices make them look: a row per tier of the expected
+// score (White's and Black's thresholds), a column per piece of the expected
+// evaluation (for the studied side). Built from scoreTiers.ts.
+function badgeMatrix(): string {
+  const pct = (white: number, side: "white" | "black") => `${tierThreshold(white, side)}%`;
+  const lowest = TIERS[TIERS.length - 1].white;
+  const tierRange = (i: number) =>
+    i < TIERS.length ? `${pct(TIERS[i].white, "white")} / ${pct(TIERS[i].white, "black")} or more` : `under ${pct(lowest, "white")} / ${pct(lowest, "black")}`;
+  const pieceRange = (i: number) =>
+    i < PIECES.length - 1 ? `+${PIECES[i].from.toFixed(2)} or more` : `under +${PIECES[i - 1].from.toFixed(2)}`;
+  const tiers = [...TIERS.map((t) => t.tier), "none" as const];
+  const head = PIECES.map((p, i) => `<th scope="col">${p.label}<span class="badge-matrix__range">${pieceRange(i)}</span></th>`).join("");
+  const rows = tiers
+    .map(
+      (tier, i) => `<tr>
+        <th scope="row">${TIER_LABELS[tier]}<span class="badge-matrix__range">${tierRange(i)}</span></th>
+        ${PIECES.map((p) => `<td title="${TIER_LABELS[tier]} ${p.label}">${pieceBadgeHtml(tier, "", p.piece)}</td>`).join("")}
+      </tr>`,
+    )
+    .join("");
+  return `<div class="badge-matrix" aria-label="Preview of every badge">
+    <table>
+      <thead><tr><th scope="col" class="badge-matrix__corner">Expected score <span class="badge-matrix__range">White / Black</span>
+        <span class="badge-matrix__corner-sep">×</span> evaluation <span class="badge-matrix__range">for your side</span></th>${head}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
 }
 
 // The badges' look: applied at once, the preview included.

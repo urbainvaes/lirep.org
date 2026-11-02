@@ -346,7 +346,7 @@ class PreferencesIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     badgeShine: Literal["vivid", "subtle", "flat"] | None = None
-    badgeIcons: Literal["symbols", "lichess"] | None = None
+    badgeIcons: Literal["lichess", "staunty", "pixel"] | None = None
 
 
 @router.put("/api/profile/preferences")

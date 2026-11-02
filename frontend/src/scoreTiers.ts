@@ -68,6 +68,8 @@ export function pieceBadgeHtml(tier: ScoreTier, size: "" | "sm" = "", piece: Eva
   // gradient.
   // The piece's own class: the Lichess pieces option (badgePrefs.ts) draws
   // its shape instead of the glyph.
+  // Around it, its effects (the Vivid shine's glow and sparkles, in
+  // badgePrefs.css): outside the piece, which its shape would cut.
   const glyph = PIECES.find((p) => p.piece === piece)!.glyph;
-  return `<span class="piece-badge piece-badge--${tier} piece-badge--p-${piece}${sizeClass}">${glyph}\uFE0E</span>`;
+  return `<span class="piece-badge-fx piece-badge-fx--${tier}"><span class="piece-badge piece-badge--${tier} piece-badge--p-${piece}${sizeClass}">${glyph}\uFE0E</span></span>`;
 }

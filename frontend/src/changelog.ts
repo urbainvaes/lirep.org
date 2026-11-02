@@ -198,10 +198,11 @@ const DAYS: Day[] = [
       },
       {
         area: "Account",
-        summary: "Badge preferences, saved with your account",
-        details: `<p>The Account page's Preferences set how badges look, on the website and in the mobile app: their shine (Vivid, Subtle,
-          or Flat in one colour) and their icons (the chess symbols, or the board's piece set), with a preview. They're saved with your
-          account, so every device uses them.</p>`,
+        summary: "Badge appearance, saved with your account",
+        details: `<p>The Account page's Appearance sets how badges look, on the website and in the mobile app: their shine (Vivid,
+          glowing and sparkling; Subtle, the top tiers shimmering, the default; or Flat, still) and their pieces (your Lichess board's
+          piece set by default, or Staunty or Pixel), with every badge shown in a table of tiers by pieces, each with its expected score
+          and evaluation. They're saved with your account, so every device uses them.</p>`,
       },
       {
         area: "Stats",
