@@ -114,6 +114,129 @@ function focusFigure(): string {
 
 const DAYS: Day[] = [
   {
+    date: "2026-11-03",
+    changes: [
+      {
+        area: "Community",
+        summary: "Everyone sees a shared study's games",
+        details: `<p>The games attached to a shared study now open read-only for everyone, from the game count on its card, whatever name
+          the author shares under. For an author who is anonymous or uses a pen name, the games they played themselves are left out,
+          since a game's players would give the name away; the card counts only the games you can see.</p>`,
+      },
+      {
+        area: "Mobile app",
+        summary: "Practice offline goes on as it would online",
+        details: `<p>Offline, practice no longer asks the same positions again after a round: the app keeps your positions' progress and
+          builds the next rounds itself, by the same rules as the server, through what's due and new, then optional review. Your answers
+          are sent when the connection is back, as before.</p>
+          <p>The dots above the board show each position's streak, offline too: orange, then yellow, then green once it's known. The
+          study's knowledge, in the session and on the Practice list, counts the answers made offline.</p>
+          <p>When nothing is due, Done and Practise more appear in a popup over the board, instead of in the bar at the bottom.</p>`,
+      },
+    ],
+  },
+  {
+    date: "2026-10-29",
+    changes: [
+      {
+        area: "Editor",
+        summary: "Your moves in red where a transposition disagrees",
+        details: `<p>When two lines reach the same position with you to move but prepare different moves there, those moves show in red,
+          with a wavy underline, and their tooltip says what the other lines play. In the editor and the read-only view.</p>`,
+      },
+      {
+        area: "Mobile app",
+        summary: "Replace prep from the app",
+        details: `<p>In the app's analysis, a line that leaves the prep with a move of yours other than the study's can replace it, as on
+          the website, after a confirmation. From a practice session or a Bullet run, the session starts again once the analysis closes;
+          Bullet's analysis now shows the prep too.</p>`,
+      },
+    ],
+  },
+  {
+    date: "2026-10-28",
+    changes: [
+      {
+        area: "Editor",
+        summary: "Out of prep, and Replace prep",
+        details: `<p>Playing a move of yours other than the one the study has there no longer gets refused: the line goes on out of prep,
+          in place of the move list and in the warning colour, and nothing of it goes into the study. An “Out of prep” bar offers Back
+          to prep (${kbd("Esc")}) and Replace prep, which, after asking, puts the new line in place of your old move and everything
+          after it.</p>`,
+      },
+    ],
+  },
+  {
+    date: "2026-10-27",
+    changes: [
+      {
+        area: "Browse",
+        summary: "Standard openings to preview and import",
+        details: `<p>A new Browse page, in every page's menu, lists standard openings for White and for Black, grouped by White's first
+          move: each with a short description and a board playing its main line. Preview opens it in the read-only viewer; Import makes
+          it one of your studies, from the opening's starting point.</p>`,
+      },
+      {
+        area: "Games",
+        summary: "Comments on positions, and the viewer's own tools",
+        details: `<p>A game's comments now go on its positions, as in the editor, and are saved in its PGN; a comment written before on the
+          whole game shows on its starting position. The game viewer's Explorer and Stockfish start from the study's settings, changed
+          for the page only by their own gear; the section and Delete are in a “⋯” menu. A shared opening's games can be opened
+          read-only from its game count on the leaderboards.</p>`,
+      },
+      {
+        area: "Account",
+        summary: "Badge preferences, saved with your account",
+        details: `<p>The Account page's Preferences set how badges look, on the website and in the mobile app: their shine (Vivid, Subtle,
+          or Flat in one colour) and their icons (the chess symbols, or the board's piece set), with a preview. They're saved with your
+          account, so every device uses them.</p>`,
+      },
+      {
+        area: "Stats",
+        summary: "Save keeps the calculation settings",
+        details: `<p>The settings panel's Done only closed it, and settings changed there were lost on reload. Save now makes them the
+          study's settings; results calculated with others are then marked out of date.</p>`,
+      },
+      {
+        area: "Everywhere",
+        summary: "A study's variation on a line of its own, and the king in check highlighted",
+        details: `<p>A name with a colon, “Caro-Kann Defense: Advance Variation”, shows the opening as the card's title and the variation
+          under it, small and in italics, on the home page, Practice and Community.</p>
+          <p>Boards highlight the king in check, and a check now plays the move's own sound, as on Lichess. A study whose stored moves
+          are damaged now shows on its owner's home page with the reason, instead of disappearing.</p>`,
+      },
+    ],
+  },
+  {
+    date: "2026-10-26",
+    changes: [
+      {
+        area: "Practice",
+        summary: "A clear end to what's due, and knowledge as a ring",
+        details: `<p>When nothing is due or new, a session stops with a summary, Done and Practice more, instead of starting another
+          round; optional rounds are labelled. Show answer is offered before any move and counts as a miss, and a right move after a miss
+          says so rather than Correct.</p>
+          <p>Each study's knowledge is a ring at the top right of its card, filling up in green, and the studies are listed in the home
+          page's order.</p>`,
+      },
+      {
+        area: "Stats",
+        summary: "Expected evaluation from White's point of view, ranked only when current",
+        details: `<p>The expected evaluation is shown from White's point of view, as on Lichess: negative when Black is better, for Black's
+          studies too. The leaderboards rank only results calculated for a study's current moves and starting point; the others say why
+          on their card.</p>
+          <p>Links to Lichess's analysis board keep the same side at the bottom as here.</p>`,
+      },
+      {
+        area: "Mobile app",
+        summary: "Studies along their prep, and Practice first",
+        details: `<p>A study's row in the app opens it read-only along its prep: your prepared move as a button and an arrow, or the
+          opponent's prepared replies with how often each is played. Moves off the prep are greyed, with Back to prep. The app now opens
+          on Practice, with the studies in their own tab.</p>`,
+      },
+    ],
+  },
+  {
     date: "2026-10-25",
     changes: [
       {
