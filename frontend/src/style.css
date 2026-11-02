@@ -2004,18 +2004,6 @@ body {
   white-space: nowrap;
 }
 
-.study-start-badge {
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  background: var(--panel-bg);
-  border: 1px solid var(--info);
-  border-radius: 6px;
-  color: var(--info);
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-
 .study-grid {
   display: grid;
   grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
@@ -2212,14 +2200,6 @@ body {
 
 .study-head__title .study-color-select {
   height: 32px;
-}
-
-.study-head__title .study-start-badge {
-  flex: none;
-  height: 26px;
-  font: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
 }
 
 .study-head__title .study-save-status {
@@ -3035,10 +3015,6 @@ button.study-head__link:disabled:hover {
 
 .study-editor--edit .study-head__title .study-color-select {
   height: 26px;
-}
-
-.study-editor--edit .study-head__title .study-start-badge {
-  height: 22px;
 }
 
 .study-editor--edit .study-head__links {

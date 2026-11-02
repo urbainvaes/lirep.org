@@ -105,7 +105,6 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
         <div class="study-head__title">
           <span class="side-pawn side-pawn--${side} study-head__side" title="${sideLabel}" aria-label="${sideLabel}">${side === "white" ? "♙" : "♟"}</span>
           <h1 class="study-title opening-title">${escapeHtml(view.title)}</h1>
-          ${startPoint ? `<button id="study-start-badge" class="study-start-badge" type="button" title="Go to the starting point">${escapeHtml(startPoint)}</button>` : ""}
           <span class="study-save-status">${view.bylineHtml}</span>
         </div>
         <div class="study-head__links" id="viewer-links"></div>
@@ -139,6 +138,12 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
               <div id="tree-view" class="tree-view"></div>
               <p id="opening-comment" class="opening-comment" hidden></p>
               ${view.belowMovesHtml ?? ""}
+              <div class="study-moves-footer">
+                <span class="study-moves-footer__info">
+                  <span>${sideLabel}</span>
+                  ${startPoint ? `<button id="study-start-badge" class="study-moves-footer__start" type="button" title="Go to the starting point">${escapeHtml(startPoint)}</button>` : ""}
+                </span>
+              </div>
             </div>
 
             <div class="study-card study-card--tools">
