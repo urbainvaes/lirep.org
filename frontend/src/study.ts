@@ -1936,10 +1936,16 @@ function renderEditor(
     scheduleAutoSave(500);
   });
 
+  // Enter finishes the comment (Shift+Enter for a new line); with nothing
+  // written, the box closes.
   commentInputEl.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
     event.preventDefault();
     commentInputEl.blur();
+    if (!commentInputEl.value.trim()) {
+      commentRequested = false;
+      updateCommentEditor();
+    }
   });
   commentInputEl.addEventListener("blur", () => scheduleAutoSave(0));
 
