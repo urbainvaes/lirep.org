@@ -27,6 +27,8 @@
   --good: #3fbf60;
   --bad: #e05252;
   --warn: #e0a53f;
+  --orange: #e8833a;
+  --yellow: #e6cf3a;
   --safe-top: env(safe-area-inset-top, 0px);
   /* Half the phone's bottom inset (the home indicator, the gesture bar):
      enough to keep clear of it, without a band of empty space under the
@@ -47,6 +49,8 @@
   --good: #1d8a3a;
   --bad: #c93a3a;
   --warn: #a5680f;
+  --orange: #d9681c;
+  --yellow: #d4b106;
   color-scheme: light;
 }
 
@@ -599,13 +603,13 @@ a {
 }
 
 /* Right answers by the position's streak: 1 and 2 of the 3 that make it
-   known, paler. */
+   known, orange then yellow; green at 3. */
 .dots__dot--streak1 {
-  background: color-mix(in srgb, var(--good) 45%, var(--page-bg));
+  background: var(--orange);
 }
 
 .dots__dot--streak2 {
-  background: color-mix(in srgb, var(--good) 72%, var(--page-bg));
+  background: var(--yellow);
 }
 
 .dots__dot--bad {

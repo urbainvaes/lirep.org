@@ -28,7 +28,7 @@ and the website always compute and record the same things.
   order as Studies, and the total due at the top.
 - **A practice session**, from Practice or a study's stats: the board across the screen, the
   same queue and rules as on the website (`doc/practice.md`), your answers
-  recorded the same way; a dot per answer (green, red), the board's flip, and
+  recorded the same way; a dot per answer (red when wrong; orange, yellow, green as the streak grows), the board's flip, and
   a brief "100%" the first time the study is fully known.
 - **Bullet**, from the bullet at the end of each Practice row: the website's game
   (`frontend/src/bulletRun.ts`), with the clock and Start under the board and

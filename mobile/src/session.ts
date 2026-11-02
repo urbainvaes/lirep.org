@@ -107,10 +107,10 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     }
   }
 
-  // A dot per first answer: red wrong; green right, paler while the
-  // position's streak is short of the 3 that make it known (offline too,
-  // as the server will have it). On one row, the oldest dropped when it's
-  // full.
+  // A dot per first answer: red wrong; right, by the position's streak,
+  // orange at 1, yellow at 2, green at the 3 that make it known (offline
+  // too, as the server will have it). On one row, the oldest dropped when
+  // it's full.
   function dot(correct: boolean, streak?: number): void {
     const dots = el("dots");
     const d = document.createElement("span");
