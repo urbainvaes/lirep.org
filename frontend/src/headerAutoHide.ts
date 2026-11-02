@@ -1,7 +1,7 @@
-// The site's header (and the study editor's bar, in its place) stays at the
-// top of the window, as on Lichess: scrolling down slides it away, scrolling
-// up brings it back. Not while the menu is open, nor near the top of the
-// page, where it's in its place anyway.
+// The site's header stays at the top of the window, as on Lichess:
+// scrolling down slides it away, scrolling up brings it back. Not while the
+// menu is open, nor near the top of the page, where it's in its place
+// anyway.
 
 // A scroll smaller than this doesn't count (a trackpad's jitter).
 const THRESHOLD_PX = 6;
@@ -11,7 +11,7 @@ function install(): void {
   let scheduled = false;
 
   function bars(): HTMLElement[] {
-    return [...document.querySelectorAll<HTMLElement>(".site-header, .study-bar")];
+    return [...document.querySelectorAll<HTMLElement>(".site-header")];
   }
 
   function update(): void {

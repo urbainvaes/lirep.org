@@ -119,16 +119,14 @@ const DAYS: Day[] = [
       {
         area: "Everywhere",
         summary: "The header steps aside while you scroll down",
-        details: `<p>As on Lichess, the site's header, and the study editor's bar, slide away when you scroll down a page and come back as
-          soon as you scroll up.</p>`,
+        details: `<p>As on Lichess, the site's header slides away when you scroll down a page and comes back as soon as you scroll
+          up.</p>`,
       },
       {
         area: "Editor",
-        summary: "One bar at the top",
-        details: `<p>The editor no longer shows the site's header above the study's own line: one bar takes their place, laid out like
-          the site's header, with its logo where it always is (back to the home page), the study's name with its side and starting point
-          under it in small italics, and Stats, Practice and Games as the header's links. “Saved” is now at the bottom right of the
-          moves. Focus mode is unchanged.</p>`,
+        summary: "The side, starting point and “Saved” under the moves",
+        details: `<p>The study's line at the top is shorter: its side, starting point and save status are now in small print at the bottom
+          of the moves, the side and starting point on the left (click the starting point to go there), “Saved” on the right.</p>`,
       },
       {
         area: "Community",

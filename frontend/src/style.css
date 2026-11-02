@@ -154,11 +154,9 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-/* The header, and the study editor's bar in its place, stay at the top of
-   the window; scrolling down slides them away, scrolling up brings them
-   back (headerAutoHide.ts). */
-.site-header,
-.study-bar {
+/* The header stays at the top of the window; scrolling down slides it
+   away, scrolling up brings it back (headerAutoHide.ts). */
+.site-header {
   position: sticky;
   top: 0;
   z-index: 20;
@@ -170,8 +168,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .site-header,
-  .study-bar {
+  .site-header {
     transition: none;
   }
 }
@@ -2960,77 +2957,104 @@ button.study-head__link:disabled:hover {
   padding-top: 8px;
 }
 
-/* The editor's bar, in place of the site's header (which hides while it
-   shows, as in the mobile app), and laid out like it, in the same centred
-   container: the site's logo, home, where it always is; the study (its
-   name; its side and starting point under it, small); its pages as the
-   header's links; its menu at the end. */
-.has-study-bar .site-header {
-  display: none;
+/* The study's line in the editor: a compact bar of its own, centred a
+   little under the site's header, in a smaller font. */
+.study-editor--edit .study-head {
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 10px;
+  padding: 3px 6px 3px 14px;
+  gap: 4px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
 }
 
-.has-study-bar .site-main--board {
-  padding-top: 16px;
-}
-
-.study-bar {
-  display: block;
-  margin: 0;
-  background: var(--header-bg);
-  border-bottom: 1px solid var(--border);
-}
-
-.study-bar__inner {
-  flex-wrap: wrap;
-  row-gap: 4px;
-  height: auto;
-  min-height: 52px;
-}
-
-.study-bar [hidden] {
-  display: none !important;
-}
-
-.study-bar .study-head__title {
+.study-editor--edit .study-head__title {
   flex: 0 1 auto;
-  gap: 24px;
+  gap: 7px;
 }
 
-.study-bar__home {
-  flex: none;
+.study-editor--edit .study-head__side {
+  font-size: 1.1rem;
 }
 
-.study-bar__name {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+.study-editor--edit .study-title {
+  font-size: 0.98rem;
+  font-weight: 600;
 }
 
-.study-bar__name-row {
-  display: flex;
-  align-items: center;
+.study-editor--edit .study-head__title .study-name-input {
+  padding: 2px 8px;
+  font-size: 0.95rem;
+}
+
+.study-editor--edit .study-head__title .study-color-select {
+  height: 26px;
+}
+
+.study-editor--edit .study-head__title .study-start-badge {
+  height: 22px;
+}
+
+.study-editor--edit .study-head__links {
   gap: 6px;
-  min-width: 0;
 }
 
-.study-bar__sub {
+.study-editor--edit .study-head__link {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.study-editor--edit .study-head__link svg {
+  width: 14px;
+  height: 14px;
+}
+
+.study-editor--edit .study-menu > summary.btn {
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+/* On a narrow screen it wraps: a rounded box rather than a pill. */
+@media (max-width: 980px) {
+  .study-editor--edit .study-head {
+    width: auto;
+    border-radius: 12px;
+  }
+}
+
+/* The bottom of the moves' card, in small print: the study's side and
+   starting point (which goes there) on the left, the save status on the
+   right (in focus mode, it's in the card's toolbar instead). */
+.study-moves-footer {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: -4px 0 -4px;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.study-moves-footer__info {
   display: flex;
   gap: 0 6px;
-  color: var(--text-dim);
-  font-size: 0.78rem;
+  min-width: 0;
   font-style: italic;
-  line-height: 1.3;
   white-space: nowrap;
 }
 
-.study-bar__sub > :not([hidden]) ~ :not([hidden])::before {
+.study-moves-footer__info > :not([hidden]) ~ :not([hidden])::before {
   content: "·";
   margin-right: 6px;
   font-style: normal;
 }
 
-/* The starting point: goes there. */
-.study-bar__start {
+.study-moves-footer__start {
   padding: 0;
   border: none;
   background: none;
@@ -3039,75 +3063,20 @@ button.study-head__link:disabled:hover {
   cursor: pointer;
 }
 
-.study-bar__start:hover {
+.study-moves-footer__start:hover {
   color: var(--primary);
   text-decoration: underline;
 }
 
-/* The save status, small, at the bottom right of the moves' card (in
-   focus mode, it's in the card's toolbar instead). */
-.study-card--moves .study-save-status--corner {
-  flex: none;
-  align-self: flex-end;
-  margin: -8px 0 -6px;
-  font-size: 0.75rem;
+.study-moves-footer .study-save-status {
+  flex: 0 1 auto;
+  font-size: inherit;
   text-align: right;
 }
 
-.focus-mode .study-save-status--corner {
+.focus-mode .study-moves-footer .study-save-status {
   display: none;
 }
-
-/* Without the room, the logo goes without its name. */
-@media (max-width: 900px) {
-  .study-bar__home .site-name {
-    display: none;
-  }
-}
-
-.study-bar .study-title {
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.study-bar .study-head__title .study-name-input {
-  padding: 2px 8px;
-  font-size: 0.95rem;
-}
-
-.study-bar .study-head__title .study-color-select {
-  height: 26px;
-}
-
-/* The study's pages, as the header's links; the menu at the end. */
-.study-bar .study-head__links {
-  flex: 1 1 auto;
-  gap: 18px;
-}
-
-.study-bar .study-head__link,
-.study-bar .study-head__link:hover {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text);
-  font-size: 0.95rem;
-  font-weight: 400;
-}
-
-.study-bar .study-head__link:hover {
-  color: var(--text-strong);
-}
-
-.study-bar .study-menu {
-  margin-left: auto;
-}
-
-.study-bar .study-menu > summary.btn {
-  padding: 1px 8px;
-  border-radius: 999px;
-}
-
 
 /* Focus mode (focusMode.ts): only the board and what goes with it, without
    the site's header or the page's heading. In the editor and the viewer,

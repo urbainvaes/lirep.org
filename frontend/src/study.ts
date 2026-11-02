@@ -102,12 +102,12 @@ interface Study {
 
 const sideLabel = (side: "white" | "black") => (side === "white" ? "Playing White" : "Playing Black");
 
-/** The side, under the study's name, once it has one. */
-function setSideLabel(side: "white" | "black"): void {
-  const label = document.getElementById("study-side-label");
-  if (!label) return;
-  label.textContent = sideLabel(side);
-  label.hidden = false;
+function sidePawn(side: "white" | "black"): HTMLElement {
+  const pawn = document.createElement("span");
+  pawn.className = `side-pawn side-pawn--${side} study-head__side`;
+  pawn.title = pawn.ariaLabel = sideLabel(side);
+  pawn.textContent = side === "white" ? "♙" : "♟";
+  return pawn;
 }
 
 function getStudyId(): number | null {
@@ -189,23 +189,16 @@ function renderEditor(
   main.classList.add("site-main--board");
   main.innerHTML = `
     <div class="study-editor study-editor--edit">
-      <header class="study-head study-bar">
-        <div class="site-header__inner study-bar__inner">
+      <header class="study-head">
         <div class="study-head__title">
-          <a class="site-title study-bar__home" href="/" title="Home">
-            <span class="site-icon" role="img" aria-label="lirep.org logo"></span>
-            <span class="site-name">lirep<span class="tld">.org</span></span>
-          </a>
           ${
             existing
-              ? ""
+              ? `<span class="side-pawn side-pawn--${existing.side} study-head__side" title="${existing.side === "white" ? "Playing White" : "Playing Black"}" aria-label="${existing.side === "white" ? "Playing White" : "Playing Black"}">${existing.side === "white" ? "♙" : "♟"}</span>`
               : `<select id="study-color" class="study-color-select" aria-label="Side" title="Which side is this repertoire for? This can't be changed after saving.">
                     <option value="white" ${newStudySide === "white" ? "selected" : ""}>Playing White</option>
                     <option value="black" ${newStudySide === "black" ? "selected" : ""}>Playing Black</option>
                   </select>`
           }
-          <div class="study-bar__name">
-          <div class="study-bar__name-row">
           <h1 id="study-title" class="study-title" title="Rename" ${existing ? "" : "hidden"}>${existing ? escapeHtml(existing.name) : ""}</h1>
           <button id="rename-btn" class="study-rename-btn" type="button" aria-label="Rename study" title="Rename" ${existing ? "" : "hidden"}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -219,17 +212,11 @@ function renderEditor(
             value="${existing ? escapeHtml(existing.name) : ""}"
             ${existing ? "hidden" : ""}
           />
-          </div>
-          <div class="study-bar__sub">
-            <span id="study-side-label" ${existing ? "" : "hidden"}>${existing ? sideLabel(existing.side) : ""}</span>
-            <button id="study-start-badge" class="study-bar__start" type="button" title="Go to the starting point" hidden></button>
-          </div>
-          </div>
         </div>
         <div class="study-head__links" id="study-links" ${existing ? "" : "hidden"}>
-          <a class="study-head__link" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}">Stats</a>
-          <a class="study-head__link" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}">Practice</a>
-          <a class="study-head__link" id="study-games-link" href="/games.html?id=${existing?.id ?? ""}">Games</a>
+          <a class="study-head__link" id="study-stats-link" href="/stat.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>Stats</a>
+          <a class="study-head__link" id="study-practice-link" href="/practice-session.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>Practice</a>
+          <a class="study-head__link" id="study-games-link" href="/games.html?id=${existing?.id ?? ""}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>Games</a>
           <details class="study-menu" id="study-menu">
             <summary class="btn btn-secondary" aria-label="More study options">⋯</summary>
             <div class="study-menu__panel">
@@ -242,7 +229,6 @@ function renderEditor(
               <button id="delete-study-btn" class="btn btn-danger" type="button">Delete study</button>
             </div>
           </details>
-        </div>
         </div>
       </header>
 
@@ -286,7 +272,13 @@ function renderEditor(
               <div class="study-comment-editor" id="comment-editor" hidden>
                 <textarea id="study-comment" rows="2" placeholder="Comment on this position" aria-label="Comment on selected position"></textarea>
               </div>
-              <span id="study-save-status" class="study-save-status study-save-status--corner" role="status" aria-live="polite">${existing ? "Saved" : "Name this study to start auto-saving."}</span>
+              <div class="study-moves-footer">
+                <span class="study-moves-footer__info">
+                  <span id="study-side-label" ${existing ? "" : "hidden"}>${existing ? sideLabel(existing.side) : ""}</span>
+                  <button id="study-start-badge" class="study-moves-footer__start" type="button" title="Go to the starting point" hidden></button>
+                </span>
+                <span id="study-save-status" class="study-save-status" role="status" aria-live="polite">${existing ? "Saved" : "Name this study to start auto-saving."}</span>
+              </div>
             </div>
 
             <div class="study-card study-card--tools">
@@ -371,12 +363,7 @@ function renderEditor(
     </div>
   `;
 
-  // The study's bar takes the place of the site's header, hidden while the
-  // editor shows, and is laid out like it: the site's logo (home) where it
-  // always is, then the study, its pages as the header's links, its menu.
   const studyHeadEl = main.querySelector(".study-head") as HTMLElement;
-  main.before(studyHeadEl);
-  document.body.classList.add("has-study-bar");
   const boardEl = document.getElementById("board") as HTMLElement;
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
   const liveScoreEl = document.getElementById("live-score") as HTMLElement;
@@ -608,8 +595,10 @@ function renderEditor(
             board.set({ orientation: boardOrientation });
             syncOrientation();
           }
-          colorSelect.remove();
-          setSideLabel(saved.side);
+          colorSelect.replaceWith(sidePawn(saved.side));
+          const sideLabelEl = document.getElementById("study-side-label") as HTMLElement;
+          sideLabelEl.textContent = sideLabel(saved.side);
+          sideLabelEl.hidden = false;
         }
         studyLinksEl.hidden = false;
         titleEl.textContent = saved.name;
