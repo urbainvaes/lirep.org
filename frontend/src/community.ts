@@ -25,8 +25,6 @@ interface Opening {
   owner: string | null;
   anonymous: boolean;
   mine: boolean;
-  // Whether others may see its games (not under a hidden name).
-  gamesPublic: boolean;
   winProbability: number | null;
   reason: string | null;
   source: "lichess" | "lirep" | null;
@@ -62,7 +60,6 @@ interface EvalOpening {
   owner: string | null;
   anonymous: boolean;
   mine: boolean;
-  gamesPublic: boolean;
   evalCp: number;
   depth: number;
   source: "lichess" | "lirep";
@@ -164,7 +161,7 @@ interface Leaderboard<T> {
 
 type LeaderboardRow = Pick<
   Opening,
-  "id" | "mine" | "name" | "side" | "moves" | "lines" | "games" | "startLine" | "mainLine" | "badge" | "owner" | "anonymous" | "gamesPublic"
+  "id" | "mine" | "name" | "side" | "moves" | "lines" | "games" | "startLine" | "mainLine" | "badge" | "owner" | "anonymous"
 > & {
   rank: number | null;
 };
@@ -209,9 +206,10 @@ function ownerHtml(opening: LeaderboardRow): string {
   return opening.anonymous ? `${link} <span class="community-anonymous">(anonymous)</span>` : link;
 }
 
-function gamesHref(opening: LeaderboardRow): string | undefined {
-  if (opening.mine) return `/games.html?id=${opening.id}`;
-  return opening.gamesPublic ? `/games.html?id=${opening.id}&shared=1` : undefined;
+// Others see the games the server lets them (under a hidden name, not
+// those the author played).
+function gamesHref(opening: LeaderboardRow): string {
+  return opening.mine ? `/games.html?id=${opening.id}` : `/games.html?id=${opening.id}&shared=1`;
 }
 
 // A card as on the home page, with the rank before the name (which opens

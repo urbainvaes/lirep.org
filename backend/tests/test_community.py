@@ -84,28 +84,48 @@ if __name__ == "__main__":
 
 
 class SharedGamesTests(unittest.TestCase):
-    """A shared opening's games give its author's name away (in their PGN),
-    so they are only shown to others under the author's own name."""
+    """A shared opening's games are shown to everyone; under a hidden name
+    (anonymous, or a pen name), not those the author played, whose PGN
+    would give the name away."""
 
     names = community._Names(frozenset({"hidden"}), {"penned": "Pen"})
 
-    def test_games_public_only_under_own_name(self):
-        fields = lambda owner, me=None: community._owner_fields(owner, me, self.names)
-        self.assertTrue(fields("alice")["gamesPublic"])
-        self.assertFalse(fields("hidden")["gamesPublic"])
-        self.assertFalse(fields("penned")["gamesPublic"])
-        self.assertTrue(fields("hidden", "Hidden")["gamesPublic"])
+    @staticmethod
+    def game(id, white, black, section=""):
+        pgn = f'[Event "?"]\n[White "{white}"]\n[Black "{black}"]\n[Result "*"]\n\n1. e4 *'
+        return {"id": id, "section": section, "pgn": pgn, "comment": ""}
 
-    def test_endpoint_hides_games_of_hidden_names(self):
-        request = Request({"type": "http", "session": {}})
-        games = {"sections": [], "games": []}
+    def games(self, owner):
+        return {
+            "sections": ["Mine", "Masters"],
+            "games": [
+                self.game(1, "Carlsen, M.", "Grischuk, A.", "Masters"),
+                self.game(2, owner.upper(), "someone", "Mine"),
+                self.game(3, "someone", owner, "Mine"),
+            ],
+        }
+
+    def shown(self, owner, me=None):
+        request = Request({"type": "http", "session": {"username": me} if me else {}})
         with patch.object(community, "_names", return_value=self.names), \
-                patch.object(community.store, "get_study_games", return_value=games):
-            for owner, visible in (("alice", True), ("hidden", False), ("penned", False)):
-                with self.subTest(owner=owner), \
-                        patch.object(community.store, "get_shared_study", return_value=(owner, {})):
-                    if visible:
-                        self.assertEqual(community.shared_study_games(1, request), games)
-                    else:
-                        with self.assertRaises(community.HTTPException):
-                            community.shared_study_games(1, request)
+                patch.object(community.store, "get_study_games", return_value=self.games(owner)), \
+                patch.object(community.store, "get_shared_study", return_value=(owner, {})):
+            return community.shared_study_games(1, request)
+
+    def test_games_shown_to_others_under_own_name(self):
+        self.assertEqual(self.shown("alice"), self.games("alice"))
+
+    def test_hidden_names_games_shown_without_the_authors_own(self):
+        for owner in ("hidden", "penned"):
+            with self.subTest(owner=owner):
+                self.assertEqual(self.shown(owner), {"sections": ["Masters"], "games": [self.games(owner)["games"][0]]})
+
+    def test_hidden_author_sees_all_their_games(self):
+        self.assertEqual(self.shown("hidden", "Hidden"), self.games("hidden"))
+
+    def test_card_counts_the_games_shown(self):
+        tree = {"rootId": 0, "nodes": {"0": {"id": 0, "san": None, "parentId": None, "children": []}}}
+        study = {"id": 1, "tree": tree, "startNodeId": None, "gameCount": 3, "side": "white"}
+        with patch.object(community.store, "get_study_games", return_value=self.games("hidden")):
+            self.assertEqual(community._card_fields(study, "hidden", None, self.names)["games"], 1)
+            self.assertEqual(community._card_fields(study, "alice", None, self.names)["games"], 3)

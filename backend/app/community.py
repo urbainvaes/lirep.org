@@ -2,6 +2,7 @@
 chose to share, plus importing one into your own account."""
 
 import asyncio
+import re
 import time
 from typing import Literal, NamedTuple
 
@@ -80,17 +81,20 @@ def _freshness_reason(study: dict, metric: Literal["winProbability", "eval"]) ->
     return None
 
 
-def _card_fields(study: dict) -> dict:
+def _card_fields(study: dict, owner: str, me: str | None, names: "_Names") -> dict:
     """What a leaderboard card shows besides its metric: the opening line and
     the main line after it (its board), the size of the tree and its number
-    of games, and the badge's expected score and evaluation (as calculated,
-    ranked or not)."""
+    of games (those the viewer may see), and the badge's expected score and
+    evaluation (as calculated, ranked or not)."""
     stats = study.get("stats") or {}
     moves, lines = _count_moves_and_lines(study["tree"])
+    games = study.get("gameCount", 0)
+    if games and not _name_shown(owner, me, names):
+        games = len(_shown_games(store.get_study_games(study["id"])["games"], owner, me, names))
     return {
         "moves": moves,
         "lines": lines,
-        "games": study.get("gameCount", 0),
+        "games": games,
         "startLine": _start_line(study),
         "mainLine": _main_line(study),
         # With the evaluation's Stockfish depth, for a card whose score wasn't
@@ -130,17 +134,36 @@ def _names() -> _Names:
 
 def _owner_fields(owner: str, me: str | None, names: _Names) -> dict:
     """Who a shared study belongs to: an anonymous player's name is only
-    shown to themselves; a pen name is shown to everyone, its owner too.
-    The study's games are only shown to others under the player's own name,
-    since their PGN would give a hidden one away."""
+    shown to themselves; a pen name is shown to everyone, its owner too."""
     mine = _is_mine(owner, me)
     public = names.public(owner)
     return {
         "owner": owner if mine and public is None else public,
         "anonymous": owner.lower() in names.anonymous,
         "mine": mine,
-        "gamesPublic": mine or public == owner,
     }
+
+
+def _name_shown(owner: str, me: str | None, names: _Names) -> bool:
+    """Whether the viewer may see the owner's Lichess username."""
+    return _is_mine(owner, me) or names.public(owner) == owner
+
+
+_PLAYER_HEADER = re.compile(r'^\[(?:White|Black)\s+"([^"]*)"\]', re.MULTILINE)
+
+
+def _shown_games(games: list[dict], owner: str, me: str | None, names: _Names) -> list[dict]:
+    """A shared study's games as the viewer may see them: all of them, but
+    for an author whose name is hidden from the viewer (anonymous, or a pen
+    name), not those the author played, whose PGN would name them."""
+    if _name_shown(owner, me, names):
+        return games
+    username = owner.lower()
+    return [
+        game
+        for game in games
+        if all(name.strip().lower() != username for name in _PLAYER_HEADER.findall(game["pgn"]))
+    ]
 
 
 def _public_settings(settings: dict, owner: str, me: str | None, names: _Names) -> dict:
@@ -207,7 +230,7 @@ def _entry(
         "leafValue": leaf,
         "depth": depth if leaf != "explorer" else None,
         "calculatedAt": stats.get("winProbabilityCalculatedAt"),
-        **_card_fields(study),
+        **_card_fields(study, owner, me, names),
         "rank": None,
     }
 
@@ -367,15 +390,19 @@ def shared_study(study_id: int, request: Request) -> dict:
 @router.get("/api/community/studies/{study_id}/games")
 def shared_study_games(study_id: int, request: Request) -> dict:
     """A shared opening's games, for the read-only games page: its sections
-    and games, with the author's comments. Not for an author whose name is
-    hidden (see _owner_fields)."""
+    and games, with the author's comments; under a hidden name, without the
+    games the author played (see _shown_games)."""
     found = store.get_shared_study(study_id)
     if found is None:
         raise HTTPException(status_code=404, detail="not found")
     owner, _ = found
-    if not _owner_fields(owner, request.session.get("username"), _names())["gamesPublic"]:
-        raise HTTPException(status_code=404, detail="not found")
-    return store.get_study_games(study_id)
+    data = store.get_study_games(study_id)
+    games = _shown_games(data["games"], owner, request.session.get("username"), _names())
+    if len(games) == len(data["games"]):
+        return data
+    # A section left without a game isn't shown.
+    sections = [name for name in data["sections"] if any(game["section"] == name for game in games)]
+    return {"sections": sections, "games": games}
 
 
 @router.get("/api/community/openings")
@@ -435,7 +462,7 @@ def _eval_entry(
         "minRating": settings["minRating"],
         "speeds": settings["speeds"] or [],
         "calculatedAt": stats.get("evalCalculatedAt"),
-        **_card_fields(study),
+        **_card_fields(study, owner, me, names),
         "rank": None,
     }
 
