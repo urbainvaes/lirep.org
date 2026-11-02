@@ -703,6 +703,46 @@ a {
   color: var(--primary);
 }
 
+/* A session's end: a popup over the board, with Done and Practise more;
+   under the 100% celebration. */
+.end {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--page-bg) 60%, transparent);
+  animation: done-in 0.2s ease-out;
+}
+
+.end__card {
+  width: 100%;
+  max-width: 340px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel-bg);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 30%);
+}
+
+.end__text {
+  margin: 0 0 16px;
+  color: var(--text-strong);
+  font-weight: 600;
+  text-align: center;
+}
+
+.end__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.end__actions .button {
+  flex: 1 1 0;
+}
+
 /* A run that reached the end: a tick over everything, briefly. */
 .done {
   position: fixed;

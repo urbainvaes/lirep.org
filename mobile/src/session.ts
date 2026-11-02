@@ -3,7 +3,8 @@
 // walk (practiceSteps.ts) plays the rest. A first answer is recorded (seeing
 // the answer first counts as a miss); after a wrong one you may try again or
 // see the answer. When a round is done, the next one loads while positions
-// are due or new; after that, more is optional: offered, not started.
+// are due or new; after that, more is optional: offered, not started, in a
+// popup over the board (the bar at the bottom stays as it is).
 
 import type { Api } from "@lichess-org/chessground/api";
 import type { Key } from "@lichess-org/chessground/types";
@@ -51,8 +52,15 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
         <button class="icon-button" type="button" id="analysis" aria-label="Analysis" title="Analysis">${ANALYSIS_ICON}</button>
         <button class="icon-button" type="button" id="previous" aria-label="The previous question, in the analysis" title="Previous question" disabled>${PREVIOUS_ICON}</button>
         <button class="button" type="button" id="answer" title="Counts as a miss if you haven't answered" hidden>Show answer</button>
-        <a class="button" href="#/" id="done" hidden>Done</a>
-        <button class="button" type="button" id="more" hidden>Practise more</button>
+      </div>
+      <div class="end" id="end" hidden>
+        <div class="end__card" role="dialog" aria-modal="true" aria-labelledby="end-text">
+          <p class="end__text" id="end-text"></p>
+          <div class="end__actions">
+            <a class="button" href="#/" id="done">Done</a>
+            <button class="button button--primary" type="button" id="more">Practise more</button>
+          </div>
+        </div>
       </div>
       <div class="done" id="full" hidden>
         <div class="done__mark">100%</div>
@@ -84,6 +92,16 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   function prompt(text: string, tone: "" | "good" | "bad" = ""): void {
     promptEl.textContent = text;
     promptEl.className = `session__prompt${tone ? ` session__prompt--${tone}` : ""}`;
+  }
+
+  // The end of what's to practise: a popup with Done, and Practise more
+  // when there's optional review to offer.
+  function end(text: string, more: boolean): void {
+    prompt(text, "good");
+    el("end-text").textContent = text;
+    el("more").hidden = !more;
+    el("done").classList.toggle("button--primary", !more);
+    el("end").hidden = false;
   }
 
   // The study's knowledge, top right; reaching 100% for the first time in
@@ -172,12 +190,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     stepIndex = 0;
     asked = 0;
     total = steps.filter((step) => step.quiz).length;
-    if (!total || optional) {
-      prompt(`${total ? "Nothing due" : "Nothing left to practise"}${tally}`, "good");
-      el("done").hidden = false;
-      el("more").hidden = !total;
-      return;
-    }
+    if (!total || optional) return end(`${total ? "Nothing due" : "Nothing left to practise"}${tally}`, total > 0);
     later(() => void advance(), ROUND_PAUSE_MS);
   }
 
@@ -282,16 +295,14 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     finish(nodeId, tree.nodes[nodeId].san as string, "bad", ANSWER_PAUSE_MS);
   });
   el("more").addEventListener("click", () => {
-    el("done").hidden = true;
-    el("more").hidden = true;
+    el("end").hidden = true;
     void advance();
   });
 
   void showKnowledge();
   if (!total) {
     setPosition(start, false);
-    prompt("Nothing to practise", "good");
-    el("done").hidden = false;
+    end("Nothing to practise", false);
   } else {
     void advance();
   }
