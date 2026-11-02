@@ -117,6 +117,12 @@ const DAYS: Day[] = [
     date: "2026-11-03",
     changes: [
       {
+        area: "Everywhere",
+        summary: "The header steps aside while you scroll down",
+        details: `<p>As on Lichess, the site's header, and the study editor's bar, slide away when you scroll down a page and come back as
+          soon as you scroll up.</p>`,
+      },
+      {
         area: "Editor",
         summary: "One bar at the top",
         details: `<p>The editor no longer shows the site's header above the study's own line: one bar takes their place, laid out like

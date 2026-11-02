@@ -154,6 +154,28 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* The header, and the study editor's bar in its place, stay at the top of
+   the window; scrolling down slides them away, scrolling up brings them
+   back (headerAutoHide.ts). */
+.site-header,
+.study-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  transition: transform 0.2s ease;
+}
+
+.bar--hidden {
+  transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-header,
+  .study-bar {
+    transition: none;
+  }
+}
+
 .site-header__inner {
   max-width: 1100px;
   margin: 0 auto;
