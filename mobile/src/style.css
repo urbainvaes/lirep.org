@@ -30,10 +30,10 @@
   --orange: #e8833a;
   --yellow: #e6cf3a;
   --safe-top: env(safe-area-inset-top, 0px);
-  /* Half the phone's bottom inset (the home indicator, the gesture bar):
-     enough to keep clear of it, without a band of empty space under the
-     bars. */
-  --safe-bottom: calc(env(safe-area-inset-bottom, 0px) / 2);
+  /* A third of the phone's bottom inset (the home indicator, the gesture
+     bar): enough to keep clear of it, without a band of empty space under
+     the bars. */
+  --safe-bottom: calc(env(safe-area-inset-bottom, 0px) / 3);
   color-scheme: dark;
 }
 
@@ -533,7 +533,7 @@ a {
   flex-wrap: wrap;
   gap: 8px;
   min-height: 60px;
-  padding: 8px 16px max(8px, var(--safe-bottom));
+  padding: 8px 16px max(6px, var(--safe-bottom));
   background: var(--panel-bg);
   border-top: 1px solid var(--border);
 }
@@ -784,8 +784,8 @@ body.has-layer {
 /* A thinner bar, for the board and its lists: the title and the
    evaluation on one short line. */
 .analysis .bar {
-  padding-top: calc(1px + var(--safe-top));
-  padding-bottom: 1px;
+  padding-top: calc(3px + var(--safe-top));
+  padding-bottom: 3px;
 }
 
 .analysis .bar__title {
@@ -793,8 +793,8 @@ body.has-layer {
 }
 
 .analysis .bar__back {
-  height: 26px;
-  font-size: 1.5rem;
+  height: 28px;
+  font-size: 1.6rem;
 }
 
 /* Nor do a session's bars. */
