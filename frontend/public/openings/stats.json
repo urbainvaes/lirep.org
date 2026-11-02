@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "settings": {
+    "enabled": true,
+    "source": "lichess",
+    "database": "lichess",
+    "player": null,
+    "minRating": 1600,
+    "speeds": [
+      "blitz"
+    ],
+    "leafValue": "explorer",
+    "depth": 16
+  },
+  "openings": {
+    "scotch": {
+      "file": "b3832255fb0de600cea7bfc630ff96ed4bc261b66b0aa3f8ea94de0d0c7bf51c",
+      "winProbability": 0.5426981995347105,
+      "evalCp": 53.35499824872864,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-03T18:23:31.579691+00:00",
+      "evalCalculatedAt": "2026-11-03T18:27:21.424624+00:00"
+    },
+    "italian": {
+      "file": "428c49c3384afbea482bfbbdabeca03565dc46b00b71761923cbf1c7d15f3bcc",
+      "winProbability": 0.5323741090681471,
+      "evalCp": 64.12554164426071,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-03T18:28:48.401883+00:00",
+      "evalCalculatedAt": "2026-11-03T18:35:25.189493+00:00"
+    }
+  }
+}

@@ -3,14 +3,26 @@ import { resolve, dirname } from "node:path";
 import { defineConfig } from "vite";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// The backend the dev server passes /api and /auth to (another one for
+// tools/browse_stats.mjs, which runs its own).
+const backend = process.env.LIREP_BACKEND ?? "http://127.0.0.1:8000";
 
 export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8000",
-      "/auth": "http://127.0.0.1:8000",
+      "/api": backend,
+      "/auth": backend,
+    },
+  },
+  // `vite preview` (a build, served as is: what tools/browse_stats.mjs uses,
+  // so that edits made meanwhile don't reload its pages).
+  preview: {
+    host: "127.0.0.1",
+    proxy: {
+      "/api": backend,
+      "/auth": backend,
     },
   },
   build: {

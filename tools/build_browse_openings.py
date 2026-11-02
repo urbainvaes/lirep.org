@@ -19,11 +19,16 @@ becomes a Lirep study file, frontend/public/openings/<slug>.lirep.json
 (what Import reads), and frontend/public/openings/index.json lists them, in
 the order of OPENINGS_ORDER, for the page.
 
+Their stats, frontend/public/openings/stats.json, come from
+tools/browse_stats.mjs, each with its study file's SHA-256: an opening whose
+file changes here loses its stats, until that script is run again.
+
   tools/build_browse_openings.py
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -157,6 +162,25 @@ def main() -> None:
         sys.exit(str(err))
     (OUT / "index.json").write_text(json.dumps({"version": 1, "openings": entries}, indent=2, ensure_ascii=False) + "\n")
     print(f"Wrote {len(entries)} openings to {OUT.relative_to(ROOT)}/")
+    prune_stats({entry["slug"]: OUT / entry["file"] for entry in entries})
+
+
+def prune_stats(files: dict[str, Path]) -> None:
+    """Drops the stats of openings gone, or whose study file changed."""
+    path = OUT / "stats.json"
+    if not path.exists():
+        return
+    stats = json.loads(path.read_text())
+    kept = {
+        slug: entry
+        for slug, entry in stats["openings"].items()
+        if slug in files and hashlib.sha256(files[slug].read_bytes()).hexdigest() == entry.get("file")
+    }
+    dropped = sorted(set(stats["openings"]) - set(kept))
+    if dropped:
+        stats["openings"] = kept
+        path.write_text(json.dumps(stats, indent=2) + "\n")
+        print(f"Stats out of date, dropped (run tools/browse_stats.mjs): {', '.join(dropped)}")
 
 
 if __name__ == "__main__":

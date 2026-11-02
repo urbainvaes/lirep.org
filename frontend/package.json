@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@types/sortablejs": "^1.15.9",
+    "playwright-core": "^1.48.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   },

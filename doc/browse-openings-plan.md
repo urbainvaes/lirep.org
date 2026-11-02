@@ -30,6 +30,13 @@ optimisation.
   list the page reads (name, side, ECO, group, start, main line, size,
   description), in the order of its `OPENINGS_ORDER`. Run it after changing
   a PGN file; its output is committed.
+- `tools/browse_stats.mjs` calculates each opening's expected score
+  (Lichess's explorer, blitz games rated 1600+, lines' ends valued with the
+  explorer's results) and expected evaluation (Stockfish, depth 16) with the
+  site's own Stats page, in headless Chromium, signed in with a Lichess
+  token, and writes `frontend/public/openings/stats.json`, each with its
+  study file's SHA-256: the build drops an opening's stats when its file
+  changes. The cards show the badge and the expected result.
 
 ### The website
 

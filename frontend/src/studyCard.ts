@@ -128,7 +128,7 @@ const EXPECTED_EVAL_TITLE =
 
 /** "Expected result: 57.4% / +0.31", a dash for what isn't calculated yet;
  * on a leaderboard, the value it ranks by in bold. */
-function expectedResultHtml(
+export function expectedResultHtml(
   stats: { winProbability?: number | null; evalCp?: number | null },
   side: "white" | "black",
   ranked?: "score" | "eval",

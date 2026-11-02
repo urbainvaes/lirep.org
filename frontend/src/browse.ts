@@ -2,7 +2,15 @@ import { applyBoardTheme } from "./board";
 import { DEFAULT_EXPLORER_SETTINGS } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { observeMiniBoards } from "./miniBoard";
-import { bindTitleScroll, cardBoardSpec, splitStudyName, studySizeHtml, variationHtml } from "./studyCard";
+import {
+  bindTitleScroll,
+  cardBoardSpec,
+  expectedResultHtml,
+  splitStudyName,
+  studyBadgeHtml,
+  studySizeHtml,
+  variationHtml,
+} from "./studyCard";
 import { studyFromFile, type ImportedStudy } from "./studyFile";
 import { renderTreeViewer } from "./treeViewer";
 
@@ -26,7 +34,30 @@ interface BrowseOpening {
   description: string;
 }
 
+// Their stats (stats.json, calculated by tools/browse_stats.mjs with the
+// Stats page itself), by slug; an opening without any shows none.
+interface BrowseStats {
+  settings: { minRating: number | null; speeds: string[]; depth: number };
+  openings: Record<string, { winProbability: number; evalCp: number }>;
+}
+
 const OPENINGS_URL = "/openings/";
+
+async function loadStats(): Promise<BrowseStats | null> {
+  try {
+    const res = await fetch(`${OPENINGS_URL}stats.json`);
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Expected score: Lichess, blitz games, 1600+; expected evaluation:
+ * Stockfish, depth 16". */
+function statsSettingsText(stats: BrowseStats): string {
+  const { minRating, speeds, depth } = stats.settings;
+  return `Expected results: Lichess's ${speeds.join(", ")} games${minRating ? ` rated ${minRating}+` : ""} for the replies and the score, Stockfish at depth ${depth} for the evaluation.`;
+}
 
 async function loadIndex(): Promise<BrowseOpening[]> {
   const res = await fetch(`${OPENINGS_URL}index.json`);
@@ -81,14 +112,17 @@ function bindImports(root: HTMLElement, openings: BrowseOpening[], message: HTML
   });
 }
 
-function cardHtml(opening: BrowseOpening, signedIn: boolean): string {
+function cardHtml(opening: BrowseOpening, signedIn: boolean, stats: BrowseStats | null): string {
+  const result = stats?.openings[opening.slug];
   const caption = opening.start.map((san, i) => (i % 2 === 0 ? `${i / 2 + 1}. ${san}` : san)).join(" ");
   const href = `/browse.html?o=${encodeURIComponent(opening.slug)}`;
   return `
     <article class="study-card study-card--summary">
       <div class="study-card__header">
         <h3 title="${escapeHtml(opening.name)}"><span class="study-card__title-text"><a class="study-card__title-link" href="${href}">${escapeHtml(splitStudyName(opening.name).opening)}</a></span>${variationHtml(opening.name)}</h3>
+        ${result ? `<span class="study-card__header-end">${studyBadgeHtml(result, opening.side)}</span>` : ""}
       </div>
+      ${result ? expectedResultHtml(result, opening.side) : ""}
       <p class="study-card__meta browse-description">${escapeHtml(opening.description)}</p>
       <div class="study-card__line study-card__line--board">
         <div class="study-card__board" data-mini-board data-side="${opening.side}" data-start="${escapeHtml(opening.start.join(" "))}" data-main="${escapeHtml(opening.mainLine.join(" "))}"></div>
@@ -103,7 +137,7 @@ function cardHtml(opening: BrowseOpening, signedIn: boolean): string {
   `;
 }
 
-function sideHtml(openings: BrowseOpening[], side: "white" | "black", signedIn: boolean): string {
+function sideHtml(openings: BrowseOpening[], side: "white" | "black", signedIn: boolean, stats: BrowseStats | null): string {
   const mine = openings.filter((o) => o.side === side);
   const groups = [...new Set(mine.map((o) => o.group))];
   return `
@@ -115,7 +149,7 @@ function sideHtml(openings: BrowseOpening[], side: "white" | "black", signedIn: 
             (group) => `
           <section class="opening-group">
             <h4>${side === "white" ? escapeHtml(group) : `Against ${escapeHtml(group)}`}</h4>
-            <div class="studies-grid">${mine.filter((o) => o.group === group).map((o) => cardHtml(o, signedIn)).join("")}</div>
+            <div class="studies-grid">${mine.filter((o) => o.group === group).map((o) => cardHtml(o, signedIn, stats)).join("")}</div>
           </section>`,
           )
           .join("")}
@@ -124,16 +158,17 @@ function sideHtml(openings: BrowseOpening[], side: "white" | "black", signedIn: 
   `;
 }
 
-function renderList(main: HTMLElement, openings: BrowseOpening[], signedIn: boolean): void {
+function renderList(main: HTMLElement, openings: BrowseOpening[], signedIn: boolean, stats: BrowseStats | null): void {
   main.innerHTML = `
     <p class="doc-intro">
       Standard openings, with their main line and usual variations, ready to import as a study and practise.
       Each starts at the opening's own position; import one, then add your own moves, or let the editor
       suggest more.
     </p>
+    ${stats ? `<p class="doc-intro browse-stats-note">${escapeHtml(statsSettingsText(stats))}</p>` : ""}
     <div id="browse-message" class="community-message" role="status" aria-live="polite" hidden></div>
-    ${sideHtml(openings, "white", signedIn)}
-    ${sideHtml(openings, "black", signedIn)}
+    ${sideHtml(openings, "white", signedIn, stats)}
+    ${sideHtml(openings, "black", signedIn, stats)}
   `;
   bindImports(main, openings, main.querySelector<HTMLElement>("#browse-message")!);
   bindTitleScroll(main);
@@ -180,9 +215,9 @@ async function init(): Promise<void> {
   const main = document.getElementById("browse-main");
   if (!main) return;
   try {
-    const [openings] = await Promise.all([loadIndex(), applyBoardTheme()]);
+    const [openings, stats] = await Promise.all([loadIndex(), loadStats(), applyBoardTheme()]);
     const slug = new URLSearchParams(location.search).get("o");
-    if (slug === null) return renderList(main, openings, me.authenticated);
+    if (slug === null) return renderList(main, openings, me.authenticated, stats);
     const opening = openings.find((o) => o.slug === slug);
     if (!opening) {
       main.innerHTML = `<div class="empty-state"><p>There is no such opening.</p><a class="btn btn-secondary" href="/browse.html">All openings</a></div>`;

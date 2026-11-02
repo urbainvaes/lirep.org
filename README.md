@@ -193,7 +193,7 @@ explorer/          Optional local Lichess Explorer and archive instructions
 deploy/            Guix packages and local/remote deployment scripts
 doc/               Design and implementation notes (Markdown)
 openings/          The Browse page's standard openings, as PGN (see doc/browse-openings-plan.md)
-tools/             Command-line tools (optimal_repertoire.py, build_browse_openings.py)
+tools/             Command-line tools (optimal_repertoire.py, build_browse_openings.py, browse_stats.mjs)
 ```
 
 Useful implementation notes: [stats.md](doc/stats.md), [practice.md](doc/practice.md),
