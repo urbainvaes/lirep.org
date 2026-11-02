@@ -15,10 +15,13 @@
 // opening as the Browse page's Import does, sets the settings, presses the
 // Stats page's Recalculate and waits for both results. A run takes a while:
 // the explorer is asked for every position, Stockfish evaluates every line's
-// end. stats.json is written after each opening.
+// end. stats.json is written after each opening, and so are the explorer's
+// answers with these settings, to backend/app/data/explorer-seed.json, which
+// the backend puts in its shared cache at startup (backend/app/cache.py).
 //
 //   node tools/browse_stats.mjs                 every opening
 //   node tools/browse_stats.mjs italian french  only these (by slug)
+//   node tools/browse_stats.mjs --export        only the explorer's answers
 //
 // Needs Chromium (CHROMIUM, default /usr/bin/chromium), the backend's
 // virtualenv (backend/.venv) and the frontend's packages (npm install).
@@ -37,6 +40,7 @@ const FRONTEND = join(ROOT, "frontend");
 const BACKEND = join(ROOT, "backend");
 const OPENINGS = join(FRONTEND, "public", "openings");
 const STATS_FILE = join(OPENINGS, "stats.json");
+const SEED_FILE = join(BACKEND, "app", "data", "explorer-seed.json");
 const { chromium } = createRequire(join(FRONTEND, "package.json"))("playwright-core");
 
 /** The settings every opening is calculated with. */
@@ -105,6 +109,32 @@ function readStats() {
   return JSON.parse(readFileSync(STATS_FILE, "utf8"));
 }
 
+/** The explorer's answers with SETTINGS kept by this script's backend, to
+ * SEED_FILE: sorted, one a line. */
+function exportExplorerAnswers() {
+  const python = join(BACKEND, ".venv", "bin", "python");
+  const result = spawnSync(python, ["-c", `
+import json, sqlite3, sys
+db, prefix, out = sys.argv[1:]
+rows = sqlite3.connect(db).execute(
+    "SELECT key, data, fetched_at FROM server_explorer_cache WHERE key LIKE ? ORDER BY key", (prefix + "%",)
+).fetchall()
+lines = [json.dumps({"key": k, "data": json.loads(d), "fetchedAt": f}, separators=(",", ":")) for k, d, f in rows]
+with open(out, "w") as f:
+    f.write('{"entries": [' + chr(10) + ("," + chr(10)).join(lines) + chr(10) + "]}" + chr(10))
+print(len(rows))
+`, join(DATA, "lirep.db"), explorerKeyPrefix(), SEED_FILE], { encoding: "utf8" });
+  if (result.status !== 0) throw new Error(result.stderr);
+  log(`Explorer answers: ${result.stdout.trim()} in ${SEED_FILE.slice(ROOT.length + 1)}`);
+}
+
+/** The browser cache's key for SETTINGS, without the FEN
+ * (explorerClient.ts's cacheKey): the rating buckets from minRating up. */
+function explorerKeyPrefix() {
+  const buckets = [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500].filter((b) => b >= SETTINGS.minRating);
+  return `${SETTINGS.database}|${buckets.join(",")}|${SETTINGS.speeds.join(",")}|`;
+}
+
 const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
 /** Whether nothing listens on `port` yet (a server left from an earlier run
@@ -118,6 +148,7 @@ function portFree(port) {
 }
 
 async function main() {
+  if (process.argv[2] === "--export") return exportExplorerAnswers();
   const only = process.argv.slice(2);
   const index = JSON.parse(readFileSync(join(OPENINGS, "index.json"), "utf8")).openings;
   const unknown = only.filter((slug) => !index.some((o) => o.slug === slug));
@@ -249,6 +280,7 @@ async function main() {
         evalCalculatedAt: result.evalCalculatedAt,
       };
       writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2) + "\n");
+      exportExplorerAnswers();
       log(`${opening.name}: expected score ${(result.winProbability * 100).toFixed(1)}%, `
         + `expected evaluation ${(result.evalCp / 100).toFixed(2)} (for ${opening.side})`);
     }

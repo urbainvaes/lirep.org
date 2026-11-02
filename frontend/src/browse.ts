@@ -1,5 +1,5 @@
 import { applyBoardTheme } from "./board";
-import { DEFAULT_EXPLORER_SETTINGS } from "./explorer";
+import { DEFAULT_EXPLORER_SETTINGS, type ExplorerSettings } from "./explorer";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { observeMiniBoards } from "./miniBoard";
 import {
@@ -37,7 +37,7 @@ interface BrowseOpening {
 // Their stats (stats.json, calculated by tools/browse_stats.mjs with the
 // Stats page itself), by slug; an opening without any shows none.
 interface BrowseStats {
-  settings: { minRating: number | null; speeds: string[]; depth: number };
+  settings: Pick<ExplorerSettings, "source" | "database" | "minRating" | "speeds" | "leafValue" | "depth">;
   openings: Record<string, { winProbability: number; evalCp: number }>;
 }
 
@@ -175,7 +175,7 @@ function renderList(main: HTMLElement, openings: BrowseOpening[], signedIn: bool
   observeMiniBoards(main, cardBoardSpec);
 }
 
-async function renderPreview(main: HTMLElement, opening: BrowseOpening, signedIn: boolean): Promise<void> {
+async function renderPreview(main: HTMLElement, opening: BrowseOpening, signedIn: boolean, stats: BrowseStats | null): Promise<void> {
   const study = await loadStudy(opening);
   const footer = renderTreeViewer(
     main,
@@ -183,7 +183,8 @@ async function renderPreview(main: HTMLElement, opening: BrowseOpening, signedIn
       tree: study.tree,
       side: study.side,
       startNodeId: study.startNodeId,
-      explorerSettings: { ...DEFAULT_EXPLORER_SETTINGS, ...study.explorerSettings },
+      // The Explorer as the stats were calculated with, if they were.
+      explorerSettings: { ...DEFAULT_EXPLORER_SETTINGS, ...study.explorerSettings, ...(stats?.settings ?? {}) },
       title: opening.name,
       bylineHtml: `${escapeHtml(opening.eco)} · <a class="community-owner" href="/browse.html">All openings</a>`,
       intro: "Click a move to jump there. This opening is read-only: import it to change it.",
@@ -224,7 +225,7 @@ async function init(): Promise<void> {
       return;
     }
     document.title = `${opening.name} · lirep.org`;
-    await renderPreview(main, opening, me.authenticated);
+    await renderPreview(main, opening, me.authenticated, stats);
   } catch {
     main.innerHTML = `<div class="empty-state"><p>Could not load the openings. Please try again in a moment.</p></div>`;
   }

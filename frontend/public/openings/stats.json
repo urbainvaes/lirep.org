@@ -28,6 +28,14 @@
       "evalDepth": 16,
       "scoreCalculatedAt": "2026-11-03T18:28:48.401883+00:00",
       "evalCalculatedAt": "2026-11-03T18:35:25.189493+00:00"
+    },
+    "ruy-lopez": {
+      "file": "9f142daa9cbe0c94790a345641b4467bbb0fb9bc1b2ee38507b8c895e1674514",
+      "winProbability": 0.5540637686737666,
+      "evalCp": 68.37413711351459,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-03T18:37:59.355694+00:00",
+      "evalCalculatedAt": "2026-11-03T18:48:04.929833+00:00"
     }
   }
 }
