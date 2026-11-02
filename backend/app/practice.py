@@ -186,7 +186,10 @@ def practice_queue(study_id: int, request: Request) -> dict:
     and prompts only at the nodes in this list, auto-playing the rest — so
     this list isn't just *which* nodes to ask about, it's also what decides
     *where the session starts feeling like it's actually testing you*.
-    `optional` says the queue is that voluntary review: nothing is due or new."""
+    `optional` says the queue is that voluntary review: nothing is due or new.
+    `items` (every drill item, in tree order) and `states` (theirs, by node
+    id) let the mobile app build the next rounds itself while offline, the
+    same way (mobile/src/practiceQueue.ts)."""
     owner = _require_owner(request)
     study = store.get_study(owner, study_id)
     if not study:
@@ -228,7 +231,20 @@ def practice_queue(study_id: int, request: Request) -> dict:
         pool = not_full if not_full else items
         queue = sorted(pool, key=lambda node_id: states[node_id]["last_seen_at"])
 
-    return {"nodeIds": queue[:SESSION_SIZE], "optional": optional}
+    return {
+        "nodeIds": queue[:SESSION_SIZE],
+        "optional": optional,
+        "items": items,
+        "states": {
+            str(node_id): {
+                "streak": states[node_id]["streak"],
+                "tauDays": states[node_id]["tau_days"],
+                "lastSeenAt": states[node_id]["last_seen_at"],
+            }
+            for node_id in items
+            if node_id in states
+        },
+    }
 
 
 # An answer or run sent late (the mobile app keeps them while offline) may

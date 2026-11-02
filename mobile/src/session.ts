@@ -15,7 +15,7 @@ import { lastMoveAt, positionAt, sanPathTo } from "@web/tree";
 
 import { openAnalysis } from "./analysis";
 import { ANALYSIS_ICON, FLIP_ICON, PREVIOUS_ICON } from "./icons";
-import { practiceQueue, practiceSummary, recordAttempt, study as loadStudy } from "./api";
+import { practiceKnowledge, practiceQueue, recordAttempt, study as loadStudy } from "./api";
 
 const CORRECT_PAUSE_MS = 700;
 const CELEBRATION_MS = 1800;
@@ -92,7 +92,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   async function showKnowledge(): Promise<void> {
     let k: number | null | undefined;
     try {
-      k = (await practiceSummary())[String(id)]?.aggregateKnowledge;
+      k = await practiceKnowledge(id);
     } catch {
       return; // Just not shown.
     }
@@ -108,9 +108,9 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
   }
 
   // A dot per first answer: red wrong; green right, paler while the
-  // position's streak is short of the 3 that make it known (offline, the
-  // streak isn't known yet: plain green). On one row, the oldest dropped
-  // when it's full.
+  // position's streak is short of the 3 that make it known (offline too,
+  // as the server will have it). On one row, the oldest dropped when it's
+  // full.
   function dot(correct: boolean, streak?: number): void {
     const dots = el("dots");
     const d = document.createElement("span");
@@ -204,7 +204,7 @@ export async function renderSession(app: HTMLElement, id: number): Promise<() =>
     if (left) return;
     // Offline, it waits to be sent: no warning, only the bar's count.
     el("warning").hidden = result !== null;
-    dot(correct, typeof result === "object" && result ? result.streak : undefined);
+    dot(correct, result?.streak);
     answered++;
     if (correct) right++;
     void showKnowledge();

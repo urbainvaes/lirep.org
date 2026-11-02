@@ -210,6 +210,10 @@ streak from a branch that, structurally, doesn't exist anymore.
    not at the beginning of the line. The queue says so (`optional: true`):
    a session started there says it's optional review, and a session that
    reaches it after a round stops and offers it (§6) rather than starting it.
+5. The queue also sends every drill item (`items`, tree order) and their
+   states (`states`): the mobile app builds the next rounds from them
+   offline, by the same rules (`mobile/src/practiceQueue.ts`), with the
+   answers it made since.
 
 **Walking the tree during a session:**
 - At a **studied-side node** (a queue item): show the position, wait for you

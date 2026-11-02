@@ -66,9 +66,14 @@ The app works offline, from what it last loaded:
   answers again, each with the time it happened (`answeredAt`,
   `finishedAt`), which the server believes if it's in the last 7 days. A
   note above the bottom bar says "Offline" and how many wait.
-- A practice queue kept from before leaves out the positions answered
-  since (`src/api.ts`, from the answer's time and the copy's `Date`), as
-  the server would: they're neither due nor new any more.
+- Practice goes on offline as it would online: the queue comes with the
+  study's positions and their states (streak, stability, last seen), and
+  the app keeps the states its own answers lead to until a copy from the
+  server has them (`src/api.ts`). When answers are missing from the copy
+  it has, it builds the next round itself, by the server's rules
+  (`src/practiceQueue.ts`, which must stay in step with
+  `backend/app/practice.py`); the dots' colours and the study's
+  knowledge come from the same states.
 - The Explorer's data and Stockfish's evaluations are the browser's caches,
   as on the website.
 

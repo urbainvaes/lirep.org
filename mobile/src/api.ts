@@ -6,6 +6,7 @@ import type { ExplorerSettings } from "@web/explorer";
 import { addMove, deleteSubtree, type StudyTree } from "@web/tree";
 
 import { send } from "./outbox";
+import { applyAnswer, buildQueue, type PracticeState, seenAt, studyKnowledge } from "./practiceQueue";
 
 export interface CalculationSettings {
   source?: "lichess" | "lirep";
@@ -55,8 +56,10 @@ export interface PracticeSummary {
 }
 
 export interface Attempt {
-  streak: number;
-  knowledge: number;
+  streak?: number;
+  knowledge?: number;
+  /** It waits in the outbox (offline). */
+  later?: boolean;
 }
 
 /** Thrown when the session has ended: the app then asks to sign in. */
@@ -146,74 +149,105 @@ export async function replacePrep(id: number, line: string[]): Promise<StudyTree
 
 export const practiceSummary = () => keptGet<Record<string, PracticeSummary>>("/api/practice/summary");
 
-// The positions answered here, by study, with when (this phone's clock):
-// the queue the service worker kept offline doesn't know of the answers
-// made since, and would ask them again.
-const ANSWERED_KEY = "lirep-m-answered";
-// Older answers are forgotten: a queue made since knows of them.
-const ANSWERED_KEEP_MS = 24 * 3600_000;
-// The phone's clock and the server's may differ by this much.
+// The practice states the server last sent, by study: its copy may be one
+// the service worker kept from before, offline.
+const served = new Map<number, { items: number[]; states: Record<string, PracticeState> }>();
+
+// The states after the answers made here that a copy from the server may
+// not know of yet (sent or waiting in the outbox), by study, as the server
+// will have them: the next rounds are built from them while offline, and
+// the dots know the streak. Dropped once a copy from the server has them.
+const LOCAL_KEY = "lirep-m-practice";
+// Older ones are dropped anyway: the server takes late answers only from
+// the last 7 days (backend/app/practice.py's LATE_ANSWER_MAX).
+const LOCAL_KEEP_MS = 7 * 24 * 3600_000;
+// The server stores an answer's time as the phone said, unless that's
+// ahead of its own clock, by at most a minute.
 const CLOCK_SKEW_MS = 60_000;
 
-type Answered = Record<string, Record<string, number>>;
+type Local = Record<string, Record<string, PracticeState>>;
 
-function readAnswered(): Answered {
+function readLocal(): Local {
   try {
-    const answered = JSON.parse(localStorage.getItem(ANSWERED_KEY) ?? "{}");
-    return answered && typeof answered === "object" ? answered : {};
+    localStorage.removeItem("lirep-m-answered"); // what came before these
+    const local = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? "{}");
+    return local && typeof local === "object" ? local : {};
   } catch {
     return {};
   }
 }
 
-function noteAnswered(id: number, nodeId: number): void {
-  const now = Date.now();
-  const answered = readAnswered();
-  for (const study of Object.values(answered)) {
-    for (const [node, at] of Object.entries(study)) if (now - at > ANSWERED_KEEP_MS) delete study[node];
-  }
-  (answered[String(id)] ??= {})[String(nodeId)] = now;
+function writeLocal(local: Local): void {
   try {
-    localStorage.setItem(ANSWERED_KEY, JSON.stringify(answered));
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(local));
   } catch {
-    // Storage blocked: an offline queue may ask them again.
+    // Storage blocked: offline, the next rounds may ask these again.
   }
+}
+
+/** Study `id`'s states, the answers made here included. */
+function currentStates(id: number): Record<string, PracticeState> {
+  return { ...served.get(id)?.states, ...readLocal()[String(id)] };
 }
 
 /** The positions to drill in the next round (see doc/practice.md); optional
- * when nothing is due or new, only review. A position answered after the
- * queue was made (a copy kept offline) is neither due nor new any more, as
- * the server would say: it's left out, and when that leaves nothing, the
- * queue becomes optional review, of what it had. */
+ * when nothing is due or new, only review. The server's queue, unless
+ * answers made here are missing from its copy (one kept offline): then
+ * built here, the same way, with them. */
 export async function practiceQueue(id: number): Promise<{ nodeIds: number[]; optional: boolean }> {
   const url = `/api/studies/${id}/practice/queue`;
-  const res = await fetch(url, { credentials: "same-origin" });
-  if (res.status === 401) {
-    kept.clear();
-    throw new SignedOut();
+  const queue = await get<{
+    nodeIds: number[];
+    optional?: boolean;
+    items?: number[];
+    states?: Record<string, PracticeState>;
+  }>(url);
+  const fromServer = { nodeIds: queue.nodeIds, optional: Boolean(queue.optional) };
+  if (!queue.items || !queue.states) return fromServer; // a copy from before they were sent
+  served.set(id, { items: queue.items, states: queue.states });
+  const local = readLocal();
+  const mine = local[String(id)] ?? {};
+  for (const [nodeId, state] of Object.entries(mine)) {
+    const server = queue.states[nodeId];
+    const known = server && seenAt(server) >= seenAt(state) - CLOCK_SKEW_MS;
+    if (known || Date.now() - seenAt(state) > LOCAL_KEEP_MS) delete mine[nodeId];
   }
-  if (!res.ok) throw new Error(`${url}: ${res.status}`);
-  const queue = (await res.json()) as { nodeIds: number[]; optional?: boolean };
-  if (queue.optional) return { nodeIds: queue.nodeIds, optional: true };
-  const madeAt = Date.parse(res.headers.get("Date") ?? "") || 0;
-  const answered = readAnswered()[String(id)] ?? {};
-  const nodeIds = queue.nodeIds.filter((nodeId) => !(answered[String(nodeId)] > madeAt - CLOCK_SKEW_MS));
-  if (!nodeIds.length && queue.nodeIds.length) return { nodeIds: queue.nodeIds, optional: true };
-  return { nodeIds, optional: false };
+  if (Object.keys(mine).length) local[String(id)] = mine;
+  else delete local[String(id)];
+  writeLocal(local);
+  if (!Object.keys(mine).length) return fromServer;
+  return buildQueue(queue.items, currentStates(id), Date.now());
 }
 
-/** Records a first answer: the server's result, "later" if it waits in
- * the outbox (offline), or null if the server refused it. */
-export async function recordAttempt(id: number, nodeId: number, correct: boolean): Promise<Attempt | "later" | null> {
-  noteAnswered(id, nodeId);
-  const result = await send(`/api/studies/${id}/practice/attempt`, {
-    nodeId,
-    correct,
-    answeredAt: new Date().toISOString(),
-  });
+/** Study `id`'s knowledge, 0..1 (null: nothing to know), with the answers
+ * made here; from the summary before the session's queue is in. */
+export async function practiceKnowledge(id: number): Promise<number | null | undefined> {
+  const study = served.get(id);
+  if (study) return studyKnowledge(study.items, currentStates(id), Date.now());
+  return (await practiceSummary())[String(id)]?.aggregateKnowledge;
+}
+
+/** Records a first answer: the position's streak after it (the server's,
+ * or, offline, as the server will have it; unknown without the states),
+ * `later` if it waits in the outbox, or null if the server refused it. */
+export async function recordAttempt(id: number, nodeId: number, correct: boolean): Promise<Attempt | null> {
+  const at = new Date().toISOString();
+  let streak: number | undefined;
+  if (served.has(id)) {
+    const after = { ...applyAnswer(currentStates(id)[nodeId], correct), lastSeenAt: at };
+    streak = after.streak;
+    const local = readLocal();
+    (local[String(id)] ??= {})[String(nodeId)] = after;
+    writeLocal(local);
+  }
+  const result = await send(`/api/studies/${id}/practice/attempt`, { nodeId, correct, answeredAt: at });
   kept.delete("/api/practice/summary");
-  if (result.status === "offline") return "later";
-  return result.status === "sent" ? (result.data as Attempt) : null;
+  if (result.status === "offline") return { streak, later: true };
+  if (result.status === "sent") return result.data as Attempt;
+  const local = readLocal();
+  delete local[String(id)]?.[String(nodeId)];
+  writeLocal(local);
+  return null;
 }
 
 /** Records a Bullet run (see bulletRun.ts): the updated stats, or null

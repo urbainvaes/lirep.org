@@ -41,10 +41,18 @@ class PracticeAttemptTests(unittest.TestCase):
     def test_queue_says_when_it_is_only_optional_review(self):
         request = Request({"type": "http", "session": {"username": "alice"}})
         queue = practice.practice_queue(self.study["id"], request)
-        self.assertEqual(queue, {"nodeIds": [1], "optional": False})
+        self.assertEqual(queue, {"nodeIds": [1], "optional": False, "items": [1], "states": {}})
         self.record()
         queue = practice.practice_queue(self.study["id"], request)
-        self.assertEqual(queue, {"nodeIds": [1], "optional": True})
+        self.assertEqual(
+            queue,
+            {
+                "nodeIds": [1],
+                "optional": True,
+                "items": [1],
+                "states": {"1": {"streak": 1, "tauDays": 1.0, "lastSeenAt": self.at}},
+            },
+        )
 
     def test_concurrent_answers_grade_latest_committed_state(self):
         self.record()
