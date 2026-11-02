@@ -134,3 +134,27 @@ test("offline, a round after the kept queue: the positions left, the streaks kno
   assert.deepEqual([...served.nodeIds], [9]);
   assert.equal(ctx.localStorage.getItem("lirep-m-practice"), "{}");
 });
+
+test("offline, the summary kept from before counts the answers made since", async () => {
+  const now = Date.now();
+  const ctx = api();
+  ctx.online = false;
+  const before = new Date(now - 3600_000).toUTCString();
+  const summary = { 7: { totalItems: 2, dueCount: 0, newCount: 2, aggregateKnowledge: 0, bullet: { runs: 3 } } };
+  ctx.fetch = async (url) =>
+    url.endsWith("/summary")
+      ? Response.json(summary, { headers: { Date: before } })
+      : Response.json({ nodeIds: [1, 2], optional: false, items: [1, 2], states: {} }, { headers: { Date: before } });
+  await ctx.exports.practiceQueue(7);
+  await ctx.exports.recordAttempt(7, 1, true);
+  const study = (await ctx.exports.practiceSummary())["7"];
+  assert.equal(study.newCount, 1);
+  assert.equal(study.dueCount, 0);
+  assert.ok(Math.abs(study.aggregateKnowledge - 1 / 6) < 1e-6);
+  assert.equal(study.bullet.runs, 3);
+
+  // A summary made after the answers has them: the server's, as it is.
+  ctx.fetch = async () => Response.json(summary, { headers: { Date: new Date(now + 120_000).toUTCString() } });
+  await ctx.exports.recordAttempt(7, 2, true); // drops the summary kept in memory
+  assert.equal((await ctx.exports.practiceSummary())["7"].newCount, 2);
+});

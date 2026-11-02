@@ -72,8 +72,10 @@ The app works offline, from what it last loaded:
   server has them (`src/api.ts`). When answers are missing from the copy
   it has, it builds the next round itself, by the server's rules
   (`src/practiceQueue.ts`, which must stay in step with
-  `backend/app/practice.py`); the dots' colours and the study's
-  knowledge come from the same states.
+  `backend/app/practice.py`); the dots' colours, the study's knowledge
+  in the session, and Practice's list (knowledge, due, new) for a study
+  answered since its summary come from the same states, kept in the
+  browser.
 - The Explorer's data and Stockfish's evaluations are the browser's caches,
   as on the website.
 

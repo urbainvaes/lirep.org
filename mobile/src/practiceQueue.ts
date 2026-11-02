@@ -32,7 +32,7 @@ export function knowledge(state: PracticeState | undefined, now: number): number
   return state ? (state.streak / 3) * retention(state, now) : null;
 }
 
-function isDue(state: PracticeState | undefined, now: number): boolean {
+export function isDue(state: PracticeState | undefined, now: number): boolean {
   return state !== undefined && retention(state, now) < RETENTION_FLOOR;
 }
 
@@ -47,6 +47,17 @@ export function applyAnswer(prev: PracticeState | undefined, correct: boolean): 
 export function studyKnowledge(items: number[], states: Record<string, PracticeState>, now: number): number | null {
   if (!items.length) return null;
   return items.reduce((sum, nodeId) => sum + (knowledge(states[nodeId], now) ?? 0), 0) / items.length;
+}
+
+/** The study's summary, as /api/practice/summary has it (its Bullet
+ * aside). */
+export function summarize(items: number[], states: Record<string, PracticeState>, now: number) {
+  return {
+    totalItems: items.length,
+    dueCount: items.filter((nodeId) => isDue(states[nodeId], now)).length,
+    newCount: items.filter((nodeId) => !states[nodeId]).length,
+    aggregateKnowledge: studyKnowledge(items, states, now),
+  };
 }
 
 /** The next round: due positions (longest unseen first), then new ones,

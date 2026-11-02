@@ -6,7 +6,7 @@ import type { ExplorerSettings } from "@web/explorer";
 import { addMove, deleteSubtree, type StudyTree } from "@web/tree";
 
 import { send } from "./outbox";
-import { applyAnswer, buildQueue, type PracticeState, seenAt, studyKnowledge } from "./practiceQueue";
+import { applyAnswer, buildQueue, type PracticeState, seenAt, studyKnowledge, summarize } from "./practiceQueue";
 
 export interface CalculationSettings {
   source?: "lichess" | "lirep";
@@ -65,14 +65,18 @@ export interface Attempt {
 /** Thrown when the session has ended: the app then asks to sign in. */
 export class SignedOut extends Error {}
 
-async function get<T>(url: string): Promise<T> {
+async function fetchOk(url: string): Promise<Response> {
   const res = await fetch(url, { credentials: "same-origin" });
   if (res.status === 401) {
     kept.clear();
     throw new SignedOut();
   }
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
-  return res.json() as Promise<T>;
+  return res;
+}
+
+async function get<T>(url: string): Promise<T> {
+  return (await fetchOk(url)).json() as Promise<T>;
 }
 
 // The lists' answers are kept a minute in memory, so that going back to a
@@ -81,10 +85,10 @@ async function get<T>(url: string): Promise<T> {
 const KEEP_MS = 60_000;
 const kept = new Map<string, { at: number; data: Promise<unknown> }>();
 
-function keptGet<T>(url: string): Promise<T> {
+function keptGet<T>(url: string, load: (url: string) => Promise<T> = get): Promise<T> {
   const copy = kept.get(url);
   if (copy && Date.now() - copy.at < KEEP_MS) return copy.data as Promise<T>;
-  const data = get<T>(url);
+  const data = load(url);
   kept.set(url, { at: Date.now(), data });
   data.catch(() => kept.get(url)?.data === data && kept.delete(url));
   return data;
@@ -147,11 +151,54 @@ export async function replacePrep(id: number, line: string[]): Promise<StudyTree
   return tree;
 }
 
-export const practiceSummary = () => keptGet<Record<string, PracticeSummary>>("/api/practice/summary");
+/** Each study's practice summary, by id. A study with answers made here
+ * since the summary was (a copy kept offline) has it worked out here, from
+ * the states, as the server will have it. */
+export async function practiceSummary(): Promise<Record<string, PracticeSummary>> {
+  const { summaries, madeAt } = await keptGet("/api/practice/summary", async (url) => {
+    const res = await fetchOk(url);
+    const summaries = (await res.json()) as Record<string, PracticeSummary>;
+    return { summaries, madeAt: Date.parse(res.headers.get("Date") ?? "") || 0 };
+  });
+  const now = Date.now();
+  const result = { ...summaries };
+  for (const [id, mine] of Object.entries(readLocal())) {
+    const study = readServed()[id];
+    if (!study || !result[id]) continue;
+    if (!Object.values(mine).some((state) => seenAt(state) > madeAt - CLOCK_SKEW_MS)) continue;
+    result[id] = { ...result[id], ...summarize(study.items, { ...study.states, ...mine }, now) };
+  }
+  return result;
+}
 
-// The practice states the server last sent, by study: its copy may be one
-// the service worker kept from before, offline.
-const served = new Map<number, { items: number[]; states: Record<string, PracticeState> }>();
+// The practice states the server last sent with each study's queue (its
+// copy may be one the service worker kept, offline), kept here for the
+// summary too.
+const SERVED_KEY = "lirep-m-served";
+type Served = Record<string, { items: number[]; states: Record<string, PracticeState> }>;
+let served: Served | null = null;
+
+function readServed(): Served {
+  if (!served) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(SERVED_KEY) ?? "{}");
+      served = stored && typeof stored === "object" ? stored : {};
+    } catch {
+      served = {};
+    }
+  }
+  return served as Served;
+}
+
+function keepServed(id: number, items: number[], states: Record<string, PracticeState>): void {
+  const all = readServed();
+  all[String(id)] = { items, states };
+  try {
+    localStorage.setItem(SERVED_KEY, JSON.stringify(all));
+  } catch {
+    // Storage blocked or full: kept for this visit only.
+  }
+}
 
 // The states after the answers made here that a copy from the server may
 // not know of yet (sent or waiting in the outbox), by study, as the server
@@ -187,7 +234,7 @@ function writeLocal(local: Local): void {
 
 /** Study `id`'s states, the answers made here included. */
 function currentStates(id: number): Record<string, PracticeState> {
-  return { ...served.get(id)?.states, ...readLocal()[String(id)] };
+  return { ...readServed()[String(id)]?.states, ...readLocal()[String(id)] };
 }
 
 /** The positions to drill in the next round (see doc/practice.md); optional
@@ -204,7 +251,7 @@ export async function practiceQueue(id: number): Promise<{ nodeIds: number[]; op
   }>(url);
   const fromServer = { nodeIds: queue.nodeIds, optional: Boolean(queue.optional) };
   if (!queue.items || !queue.states) return fromServer; // a copy from before they were sent
-  served.set(id, { items: queue.items, states: queue.states });
+  keepServed(id, queue.items, queue.states);
   const local = readLocal();
   const mine = local[String(id)] ?? {};
   for (const [nodeId, state] of Object.entries(mine)) {
@@ -220,9 +267,9 @@ export async function practiceQueue(id: number): Promise<{ nodeIds: number[]; op
 }
 
 /** Study `id`'s knowledge, 0..1 (null: nothing to know), with the answers
- * made here; from the summary before the session's queue is in. */
+ * made here; from the summary while its states aren't known. */
 export async function practiceKnowledge(id: number): Promise<number | null | undefined> {
-  const study = served.get(id);
+  const study = readServed()[String(id)];
   if (study) return studyKnowledge(study.items, currentStates(id), Date.now());
   return (await practiceSummary())[String(id)]?.aggregateKnowledge;
 }
@@ -233,7 +280,7 @@ export async function practiceKnowledge(id: number): Promise<number | null | und
 export async function recordAttempt(id: number, nodeId: number, correct: boolean): Promise<Attempt | null> {
   const at = new Date().toISOString();
   let streak: number | undefined;
-  if (served.has(id)) {
+  if (readServed()[String(id)]) {
     const after = { ...applyAnswer(currentStates(id)[nodeId], correct), lastSeenAt: at };
     streak = after.streak;
     const local = readLocal();
