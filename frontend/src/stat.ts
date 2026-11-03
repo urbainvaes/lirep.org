@@ -548,7 +548,6 @@ function renderPage(
   const formChoices = {
     lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
     ratingBuckets: explorerDefaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500],
-    defaultMinRating: explorerDefaults?.defaultMinRating ?? 1400,
     speeds: explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]),
   };
   const tier = scoreTier(stats?.winProbability, study.side);

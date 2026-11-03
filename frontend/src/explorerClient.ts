@@ -9,7 +9,7 @@
 // RATE_LIMIT_PAUSE_MS, as Lichess's API guidelines ask. Responses are cached
 // in IndexedDB (see doc/explorer-cache.md).
 
-import { lirepExplorerUrl, type ExplorerData, type ExplorerSettings } from "./explorer";
+import { LEGACY_MIN_RATING, lirepExplorerUrl, type ExplorerData, type ExplorerSettings } from "./explorer";
 import { serverCacheEnabled, serverExplorerGet, serverExplorerReadable, serverExplorerSet } from "./serverCache";
 
 /** Minimum pause between two requests to Lichess's Opening Explorer. */
@@ -27,8 +27,6 @@ const LICHESS_EXPLORER = "https://explorer.lichess.org";
 // The Explorer's rating buckets (backend/app/explorer.py's RATING_BUCKETS):
 // a minimum rating selects its bucket and every one above it.
 const RATING_BUCKETS = [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
-// What a study saved before minRating was always set falls back to.
-const DEFAULT_MIN_RATING = 1400;
 
 /** "interactive" (the panel next to the board) goes ahead of "background"
  * (a calculation walking a whole tree), and fails fast instead of waiting
@@ -272,7 +270,7 @@ function shape(raw: RawExplorerResponse, settings: ExplorerSettings, minRating: 
 const inflight = new Map<string, Promise<ExplorerData>>();
 
 function cacheKey(fen: string, settings: ExplorerSettings, side: "white" | "black"): { key: string; ttl: number } {
-  const minRating = settings.minRating ?? DEFAULT_MIN_RATING;
+  const minRating = settings.minRating ?? LEGACY_MIN_RATING;
   const speeds = settings.speeds.join(",");
   const ratings = RATING_BUCKETS.filter((b) => b >= minRating).join(",");
   const key =
@@ -321,7 +319,7 @@ export async function fetchExplorerData(
     return res.json();
   }
 
-  const minRating = settings.minRating ?? DEFAULT_MIN_RATING;
+  const minRating = settings.minRating ?? LEGACY_MIN_RATING;
   const speeds = settings.speeds.join(",");
   const ratings = RATING_BUCKETS.filter((b) => b >= minRating).join(",");
   const { key, ttl } = cacheKey(fen, settings, side);

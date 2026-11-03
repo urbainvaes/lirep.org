@@ -8,7 +8,6 @@ data lives:
 | --- | --- | --- |
 | Lichess Explorer responses | Browser IndexedDB `lirep-explorer`, per browser profile | A year; 24 hours for the player database |
 | Lirep Explorer (2016 sample) responses | Not cached: the local Explorer is unlimited and never changes | — |
-| Resolved default rating bucket (for a new study's picker) | Backend `rating_cache`, per username | 1-hour TTL; stale fallback on refresh failure |
 | Stockfish position evals | Browser IndexedDB `lirep-position-evals`, keyed by `[username, fen, depth]` | Until browser data is cleared |
 | Both, for accounts with server storage | Also backend `server_explorer_cache` and `server_eval_cache`, shared by those accounts (Explorer answers readable by anyone signed in) | Explorer answers by the same TTLs (checked by the browser); evals kept |
 
@@ -123,15 +122,14 @@ which of your ratings "counted" when several speeds were checked. `/api/explorer
 now just treats a `null` from a study saved before this changed as the same
 static default the picker itself falls back to — no account lookup.)
 
-`_resolve_min_rating` still exists, narrowed to the one place a live
-resolution actually earns its keep: `/api/explorer-defaults`, which
-pre-selects a brand-new (or otherwise-untouched) study's picker at the
-player's own bracket. It still caches that bucket in `rating_cache` by
-username for `RATING_CACHE_TTL_SECONDS` (one hour), surviving backend
-restarts. A study whose saved `minRating` is still `null` from before this
-change uses the static default, 1400. The reference
-rating preference is Rapid, then Blitz, then Classical, with 1500 as the
-unrated default. The chosen bucket and all higher buckets form the Players
+A new study starts at 1600+ with blitz games (`/api/explorer-defaults`,
+`DEFAULT_MIN_RATING` and `DEFAULT_SPEEDS` in `explorer.py`), the settings the
+Browse page's openings are calculated with, so that a study's results and
+theirs compare. (It used to start at the player's own bracket, resolved
+from their Lichess account; the `rating_cache` table that kept it is no
+longer used.) A study whose saved `minRating` is still `null` from before
+it was always set uses 1400 (`LEGACY_MIN_RATING`), in its queries and its
+picker alike. The chosen bucket and all higher buckets form the Players
 rating filter.
 
 ## Local evaluation frontier

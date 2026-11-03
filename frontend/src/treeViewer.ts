@@ -622,7 +622,6 @@ export function renderTreeViewer(main: HTMLElement, view: TreeView, signedIn: bo
       formEl.innerHTML = explorerSettingsFormHtml(explorerSettings, {
         lirepAvailable: Boolean(defaults?.lirepAvailable),
         ratingBuckets: defaults?.ratingBuckets ?? [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500],
-        defaultMinRating: defaults?.defaultMinRating ?? 1400,
         speeds: defaults?.speeds ?? ["bullet", "blitz", "rapid", "classical"],
       });
       bindExplorerSettingsForm(formEl, explorerSettings, Boolean(defaults?.lirepAvailable), () => {

@@ -27,13 +27,6 @@ DEFAULT_EXPLORER_SETTINGS: dict[str, Any] = {
 }
 DEFAULT_SIDE = "white"
 
-# How long a resolved "my current rating" bucket is trusted before
-# re-checking Lichess. Persisted (not in-memory) specifically so a backend
-# restart can't silently erase a still-fresh resolution and force a live
-# account call it didn't actually need — see doc/explorer-cache.md.
-RATING_CACHE_TTL_SECONDS = 60 * 60
-
-
 @contextmanager
 def _connect() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(DB_PATH)
@@ -867,41 +860,6 @@ def merge_study_stats(
         row = conn.execute(f"SELECT {_COLUMNS} FROM studies WHERE id = ?", (study_id,)).fetchone()
     assert row is not None
     return _row_to_study(row)
-
-
-def get_rating_cache(username: str, *, allow_stale: bool = False) -> int | None:
-    """The signed-in player's cached rating bucket, or None on a miss.
-
-    `allow_stale=True` returns whatever's stored regardless of
-    RATING_CACHE_TTL_SECONDS — used only as a fallback when a live refresh
-    attempt itself fails (e.g. rate limited), where a somewhat-stale bucket
-    is strictly better than failing a request that might otherwise be a
-    cache hit. The normal (`allow_stale=False`) path is what makes this
-    persistent rather than in-memory actually matter: an in-memory cache is
-    wiped by every backend restart, which would otherwise force a live
-    account call — and risk hitting a live rate limit — for a bucket that
-    was, from the user's perspective, resolved minutes ago and still fresh.
-    """
-    with _connect() as conn:
-        row = conn.execute("SELECT bucket, fetched_at FROM rating_cache WHERE username = ?", (username,)).fetchone()
-    if row is None:
-        return None
-    if not allow_stale:
-        fetched_at = datetime.fromisoformat(row["fetched_at"])
-        if (datetime.now(UTC) - fetched_at).total_seconds() > RATING_CACHE_TTL_SECONDS:
-            return None
-    return row["bucket"]
-
-
-def set_rating_cache(username: str, bucket: int, fetched_at: str) -> None:
-    with _connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO rating_cache (username, bucket, fetched_at) VALUES (?, ?, ?)
-            ON CONFLICT(username) DO UPDATE SET bucket = excluded.bucket, fetched_at = excluded.fetched_at
-            """,
-            (username, bucket, fetched_at),
-        )
 
 
 def get_practice_states(owner: str, study_id: int) -> dict[int, dict[str, Any]]:

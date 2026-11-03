@@ -205,9 +205,9 @@ only its own fields rather than clearing the other.
   models user mistakes or alternative choices on that turn.
 - Only Explorer-listed moves are weighted; the move list is capped (roughly
   the top dozen), so rare omitted replies do not contribute individually.
-- `minRating` is a fixed threshold pinned to the study, chosen once from the
-  player's own bracket when the study is created (see explorer-cache.md) —
-  it doesn't track the player's rating afterward.
+- `minRating` is a fixed threshold pinned to the study: 1600 for a new
+  study (with blitz games, as the Browse page's openings are calculated
+  with; see explorer-cache.md), changed only by hand.
 - The engine searches to a fixed local depth, not the depth of a cloud engine
   farm. A missing local score contributes 0 to expected evaluation and is
   counted in `evalMisses`, not looked up elsewhere.

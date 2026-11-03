@@ -126,8 +126,8 @@
         </ul>
         <h3>Rating and speed</h3>
         <ul>
-          <li>For Players, select a fixed rating threshold; that bucket and every higher bucket are included. A new study's picker starts pre-selected at the signed-in player's own bracket (Reference rating order Rapid, Blitz, Classical; default 1500 if unrated), but it's a one-time default like any other saved setting, not a mode that keeps tracking the player's rating.</li>
-          <li>Bullet, Blitz, Rapid, and Classical checkboxes; default to Blitz, Rapid, Classical, and always require at least one speed.</li>
+          <li>For Players, select a fixed rating threshold; that bucket and every higher bucket are included. A new study starts at 1600+, as the Browse page's openings are calculated with; it's a one-time default like any other saved setting. A study saved before the threshold was always stored counts as 1400+.</li>
+          <li>Bullet, Blitz, Rapid, and Classical checkboxes; default to Blitz (as the Browse page's openings are calculated with), and always require at least one speed.</li>
         </ul>
         <h3>When settings take effect</h3>
         <p>Changing the controls on the Stats page alone does not trigger calculation. The next expected-score or expected-evaluation calculation sends the selected settings and saves them as the study's new settings (not a temporary preview), so subsequent views and calculations use them.</p>

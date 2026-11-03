@@ -174,13 +174,12 @@ function renderEditor(
   // would silently persist on the first autosave and then make every future
   // Explorer query for this study use explorer.py's own generic 1500-based
   // default forever, regardless of what this fallback actually resolves to.
-  const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1400;
+  const defaultMinRating = explorerDefaults?.defaultMinRating ?? 1600;
   const settings: ExplorerSettings = existing?.explorerSettings ?? {
     ...DEFAULT_EXPLORER_SETTINGS,
     source: explorerDefaults?.defaultSource ?? DEFAULT_EXPLORER_SETTINGS.source,
-    // A brand-new study starts pinned to the signed-in player's own rating
-    // bracket, resolved once here rather than tracked as a standing "auto"
-    // mode — see ratingOptionsHtml.
+    // A brand-new study starts at the default bucket (1600: blitz 1600+, as
+    // the Browse page's openings are calculated with), saved with it.
     minRating: defaultMinRating,
   };
   const allSpeeds = explorerDefaults?.speeds ?? (["bullet", "blitz", "rapid", "classical"] as ExplorerSpeed[]);
@@ -293,7 +292,6 @@ function renderEditor(
                   <div id="explorer-settings-form">${explorerSettingsFormHtml(settings, {
                     lirepAvailable: Boolean(explorerDefaults?.lirepAvailable),
                     ratingBuckets,
-                    defaultMinRating,
                     speeds: allSpeeds,
                   })}</div>
                 </div>

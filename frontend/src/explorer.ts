@@ -13,11 +13,10 @@ export interface ExplorerSettings {
   database: "lichess" | "masters" | "player";
   /** Only for database "player": whose games to show (as the study's side). */
   player?: string | null;
-  /** A fixed rating bucket, chosen once (defaulting to the signed-in
-   * player's own bracket, from ExplorerDefaults.defaultMinRating) rather
-   * than re-resolved on every request. Only ever null for a study saved
-   * before this existed — see ratingOptionsHtml, which treats that the
-   * same as the default bucket. */
+  /** A fixed rating bucket, chosen once (a new study's: 1600, from
+   * ExplorerDefaults.defaultMinRating) rather than re-resolved on every
+   * request. Only ever null for a study saved before this existed, which
+   * means LEGACY_MIN_RATING. */
   minRating: number | null;
   speeds: ExplorerSpeed[];
   /** How the expected score values a line where the preparation ends, on
@@ -36,7 +35,9 @@ export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
   database: "lichess",
   player: null,
   minRating: null,
-  speeds: ["blitz", "rapid", "classical"],
+  // Blitz, from 1600 (the rating: /api/explorer-defaults), as the Browse
+  // page's openings are calculated with.
+  speeds: ["blitz"],
 };
 
 /** How the expected score values a line where the preparation ends: with
@@ -105,8 +106,12 @@ export interface ExplorerData {
  * rating" was a standing auto-resolved mode rather than a one-time default —
  * treated here as "whatever the current default bucket is" so the picker
  * still shows a sensible selection instead of nothing. */
-export function ratingOptionsHtml(buckets: number[], selected: number | null, defaultBucket: number): string {
-  const effectiveSelected = selected ?? defaultBucket;
+/** What a study's minRating of null (saved before it was always set)
+ * means, in the Explorer's queries and in the picker. */
+export const LEGACY_MIN_RATING = 1400;
+
+export function ratingOptionsHtml(buckets: number[], selected: number | null): string {
+  const effectiveSelected = selected ?? LEGACY_MIN_RATING;
   return buckets
     .map((bucket) => {
       const label = bucket === 0 ? "Any rating" : `${bucket}+`;
@@ -140,7 +145,6 @@ export function speedCheckboxesHtml(allSpeeds: ExplorerSpeed[], selected: Explor
 export interface ExplorerFormChoices {
   lirepAvailable: boolean;
   ratingBuckets: number[];
-  defaultMinRating: number;
   speeds: ExplorerSpeed[];
 }
 
@@ -162,7 +166,7 @@ export function explorerSettingsFormHtml(settings: ExplorerSettings, choices: Ex
           <option value="player"${selected(settings.database === "player")}>Player</option>
         </select>
         <select data-setting="min-rating" aria-label="Minimum rating">
-          ${ratingOptionsHtml(choices.ratingBuckets, settings.minRating, choices.defaultMinRating)}
+          ${ratingOptionsHtml(choices.ratingBuckets, settings.minRating)}
         </select>
         <input data-setting="player" class="explorer-player" type="text" placeholder="Lichess username"
           aria-label="Player whose games to use" value="${escapeHtml(settings.player ?? "")}" />

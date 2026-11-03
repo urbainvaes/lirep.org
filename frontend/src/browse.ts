@@ -71,14 +71,16 @@ async function loadStudy(opening: BrowseOpening): Promise<ImportedStudy> {
   return studyFromFile(await res.text());
 }
 
-/** Creates the study in your studies; returns its id. */
-async function importOpening(opening: BrowseOpening): Promise<number> {
+/** Creates the study in your studies, with the Explorer settings its stats
+ * were calculated with, if there are stats; returns its id. */
+async function importOpening(opening: BrowseOpening, stats: BrowseStats | null): Promise<number> {
   const { games: _games, ...study } = await loadStudy(opening);
+  const explorerSettings = { ...study.explorerSettings, ...(stats?.settings ?? {}) };
   const res = await fetch("/api/studies", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(study),
+    body: JSON.stringify({ ...study, explorerSettings }),
   });
   if (!res.ok) throw new Error(String(res.status));
   return (await res.json()).id;
@@ -93,13 +95,13 @@ function importHtml(opening: BrowseOpening, signedIn: boolean): string {
     : `<a class="btn btn-secondary" href="${signInHref()}">Sign in to import</a>`;
 }
 
-function bindImports(root: HTMLElement, openings: BrowseOpening[], message: HTMLElement): void {
+function bindImports(root: HTMLElement, openings: BrowseOpening[], message: HTMLElement, stats: BrowseStats | null): void {
   root.querySelectorAll<HTMLButtonElement>("[data-import]").forEach((button) => {
     const opening = openings.find((o) => o.slug === button.dataset.import)!;
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
-        const id = await importOpening(opening);
+        const id = await importOpening(opening, stats);
         button.textContent = "Imported";
         message.hidden = false;
         message.innerHTML = `Imported “${escapeHtml(opening.name)}” into your studies. <a href="/study.html?id=${id}">Open it</a>`;
@@ -170,7 +172,7 @@ function renderList(main: HTMLElement, openings: BrowseOpening[], signedIn: bool
     ${sideHtml(openings, "white", signedIn, stats)}
     ${sideHtml(openings, "black", signedIn, stats)}
   `;
-  bindImports(main, openings, main.querySelector<HTMLElement>("#browse-message")!);
+  bindImports(main, openings, main.querySelector<HTMLElement>("#browse-message")!, stats);
   bindTitleScroll(main);
   observeMiniBoards(main, cardBoardSpec);
 }
@@ -200,7 +202,7 @@ async function renderPreview(main: HTMLElement, opening: BrowseOpening, signedIn
   button?.addEventListener("click", async () => {
     button.disabled = true;
     try {
-      const id = await importOpening(opening);
+      const id = await importOpening(opening, stats);
       button.textContent = "Imported";
       message!.innerHTML = `Added to your studies. <a href="/study.html?id=${id}">Open it</a>`;
     } catch {
