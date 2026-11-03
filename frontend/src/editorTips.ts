@@ -1,8 +1,9 @@
 // The study editor's tips (tips.ts): its buttons, each with its own icon,
 // copied from the page so that the tips stay in step with it, and what it
-// does. A panel at the top of the moves' card, while tips are on.
+// does. A panel above the board, while tips are on and until "Hide this tip
+// now": the editor under it is greyed out, and the page scrolls past it.
 
-import { setTips } from "./tips";
+import { bindTip, tipFooterHtml } from "./tips";
 
 interface EditorTip {
   /** The controls explained, by id: their icons head the tip. */
@@ -13,7 +14,15 @@ interface EditorTip {
 const EDITOR_TIPS: EditorTip[] = [
   {
     ids: [],
-    html: "<strong>Play moves on the board</strong> to add them: yours and the replies you expect. A different move from any point starts a variation; click a move in the list to go back there.",
+    html: "<strong>Play moves on the board</strong> to add them: yours and the replies you expect. Click a move in the list to go back there.",
+  },
+  {
+    ids: [],
+    html: "<strong>One move of yours after each opponent's move</strong>: the opponent's replies can branch into as many variations as you like, but where you are to move the study keeps a single answer. Playing another one there leaves the prep: <em>Back to prep</em> returns, <em>Replace prep</em> puts it in place of your move (and what follows).",
+  },
+  {
+    ids: [],
+    html: "<strong>The expected score</strong>, next to the first move (<span class=\"tree-move-stat\">Expected score: 53.2%</span>): your average result, a win counting 1 and a draw ½ (the win % plus half the draw %), in the Explorer's games, if you always play your prepared moves and the opponents reply as often as in those games. Where your prep ends, a line counts with the Explorer's results there (or Stockfish's evaluation, as the settings choose). The higher, the better your prep scores.",
   },
   {
     ids: [],
@@ -32,8 +41,8 @@ const EDITOR_TIPS: EditorTip[] = [
   { ids: ["delete-btn"], html: "<strong>Deletes</strong> the selected move and everything after it (Delete)." },
   { ids: ["keyboard-help-btn"], html: "The <strong>keyboard shortcuts</strong>." },
   {
-    ids: ["nav-start", "nav-back", "nav-forward", "nav-end"],
-    html: "<strong>Step through the moves</strong>: the start, the previous move, the next one, the end of the line (also the arrow keys).",
+    ids: ["nav-prev-line", "nav-back", "nav-forward", "nav-next-line"],
+    html: "<strong>Step through the moves</strong>: the previous line, the previous move, the next one, the next line (also ↑ ← → ↓; Shift+↑ and Shift+↓ go to the start and to the end of the line).",
   },
   { ids: ["flip-board-btn"], html: "<strong>Flips</strong> the board." },
   { ids: ["focus-btn"], html: "<strong>Focus mode</strong>: only the board, the moves and the tools fill the window (Space or Z)." },
@@ -71,11 +80,17 @@ function iconHtml(id: string): string {
   if (svg) return `<span class="tips-icon">${svg.outerHTML}</span>`;
   const glyph = target.getAttribute("data-icon");
   if (glyph) return `<span class="tips-icon" data-icon="${glyph}"></span>`;
-  const text = target.textContent?.trim() ?? "";
+  // The button as it usually looks: not the start-point button's ✕, shown
+  // only when the selected move is the starting point (to clear it).
+  const text = [...target.childNodes]
+    .filter((node) => !(node instanceof HTMLElement) || !node.matches(".study-start-btn__cross"))
+    .map((node) => node.textContent ?? "")
+    .join("")
+    .trim();
   return text ? `<span class="tips-icon tips-icon--text">${text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)}</span>` : "";
 }
 
-/** Fills the editor's tips panel (#editor-tips), and binds its "Hide tips". */
+/** Fills the editor's tips panel (#editor-tips), and binds its buttons. */
 export function renderEditorTips(): void {
   const panel = document.getElementById("editor-tips");
   if (!panel) return;
@@ -84,11 +99,9 @@ export function renderEditorTips(): void {
     return `<li class="editor-tips__row">${icons ? `<span class="editor-tips__icons">${icons}</span>` : ""}<span>${html}</span></li>`;
   }).join("");
   panel.innerHTML = `
-    <div class="editor-tips__head">
-      <p class="editor-tips__title">Tips</p>
-      <button class="editor-tips__hide" type="button" title="Hide tips (the ? at the top shows them again)">Hide tips</button>
-    </div>
+    <p class="editor-tips__title">Tips</p>
     <ul class="editor-tips__list">${rows}</ul>
+    ${tipFooterHtml()}
   `;
-  panel.querySelector(".editor-tips__hide")?.addEventListener("click", () => setTips(false));
+  bindTip(panel, "editor");
 }

@@ -232,8 +232,10 @@ function renderEditor(
         </div>
       </header>
 
+      <section id="editor-tips" class="tips editor-tips" aria-label="Tips"></section>
+
       <div class="study-grid">
-        ${boardColumnHtml({ focus: true })}
+        ${boardColumnHtml({ focus: true, lines: true })}
 
         <div class="study-side-col">
           <div class="study-side-col__inner">
@@ -267,7 +269,6 @@ function renderEditor(
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
               </div>
-              <section id="editor-tips" class="tips editor-tips" aria-label="Tips"></section>
               <p id="live-score" class="live-score" aria-live="polite" hidden></p>
               <div id="tree-view" class="tree-view"></div>
               <div class="study-comment-editor" id="comment-editor" hidden>
@@ -378,6 +379,9 @@ function renderEditor(
     button: document.getElementById("focus-btn") as HTMLButtonElement,
     grid: main.querySelector(".study-grid") as HTMLElement,
     above: [studyHeadEl],
+    // The tips push the editor down: the page scrolls rather than the
+    // board shrinking.
+    aside: [document.getElementById("editor-tips")],
   });
 
   // Experimental: the moves at each branching in folds (see renderFolds in
@@ -435,14 +439,14 @@ function renderEditor(
   const actionsEl = movesCardEl.querySelector(".study-actions") as HTMLElement;
   const offPrepBarEl = document.getElementById("off-prep-bar") as HTMLElement;
   const lichessAnalysisLink = document.getElementById("open-lichess-analysis") as HTMLAnchorElement;
-  const navStartBtn = document.getElementById("nav-start") as HTMLButtonElement;
+  const navPrevLineBtn = document.getElementById("nav-prev-line") as HTMLButtonElement;
   const gaugeEl = document.getElementById("eval-gauge") as HTMLElement;
   const materialTopEl = document.getElementById("material-top") as HTMLElement;
   const materialBottomEl = document.getElementById("material-bottom") as HTMLElement;
   const gaugeBlackEl = document.getElementById("eval-gauge-black") as HTMLElement;
   const navBackBtn = document.getElementById("nav-back") as HTMLButtonElement;
   const navForwardBtn = document.getElementById("nav-forward") as HTMLButtonElement;
-  const navEndBtn = document.getElementById("nav-end") as HTMLButtonElement;
+  const navNextLineBtn = document.getElementById("nav-next-line") as HTMLButtonElement;
   const studyLinksEl = document.getElementById("study-links") as HTMLElement;
   const studyMenuEl = document.getElementById("study-menu") as HTMLDetailsElement;
   const commentBtn = document.getElementById("comment-btn") as HTMLButtonElement;
@@ -1228,8 +1232,10 @@ function renderEditor(
     renderMaterial();
     applyOffPrepUI();
     renderTreeView();
-    navBackBtn.disabled = navStartBtn.disabled = false;
-    navForwardBtn.disabled = navEndBtn.disabled = ply === line.length;
+    navBackBtn.disabled = false;
+    navForwardBtn.disabled = ply === line.length;
+    // Out of prep, ↑ and ↓ don't change lines either.
+    navPrevLineBtn.disabled = navNextLineBtn.disabled = true;
     void updateExplorer(chess.fen());
     void updateEngine(chess);
   }
@@ -1316,8 +1322,10 @@ function renderEditor(
     if (autoFold && nodeId !== previousId) openFolds.clear();
     renderTreeView();
     deleteBtn.disabled = currentId === tree.rootId;
-    navBackBtn.disabled = navStartBtn.disabled = currentId === tree.rootId;
-    navForwardBtn.disabled = navEndBtn.disabled = tree.nodes[currentId].children.length === 0;
+    navBackBtn.disabled = currentId === tree.rootId;
+    navForwardBtn.disabled = tree.nodes[currentId].children.length === 0;
+    navPrevLineBtn.disabled = siblingVariation(tree, currentId, -1) === undefined;
+    navNextLineBtn.disabled = siblingVariation(tree, currentId, 1) === undefined;
     updateStartPointUI();
     void updateExplorer(chess.fen());
     void updateEngine(chess);
@@ -1761,10 +1769,10 @@ function renderEditor(
 
   flipBoardBtn.addEventListener("click", flipBoard);
 
-  navStartBtn.addEventListener("click", goToStart);
+  navPrevLineBtn.addEventListener("click", () => switchVariation(-1));
   navBackBtn.addEventListener("click", stepBack);
   navForwardBtn.addEventListener("click", stepForward);
-  navEndBtn.addEventListener("click", goToLineEnd);
+  navNextLineBtn.addEventListener("click", () => switchVariation(1));
 
   commentBtn.addEventListener("click", () => {
     const open = commentEditorEl.hidden;

@@ -184,7 +184,15 @@ export function engineMovesView(
 /** The board with the material above and below it, the evaluation gauge and
  * the navigation buttons beneath; `focus` adds the focus mode's button
  * (see the editor). */
-export function boardColumnHtml(options: { focus?: boolean } = {}): string {
+// The study editor's first and last buttons under the board: the previous
+// and the next line (as ↑ and ↓), in place of the start and the line's end
+// (which Shift+↑ and Shift+↓ still go to).
+const PREVIOUS_LINE_BUTTON = `<button id="nav-prev-line" class="board-nav__btn" type="button" title="Previous line (↑)" aria-label="Previous line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 6l7 12H5z"/></svg></button>`;
+const NEXT_LINE_BUTTON = `<button id="nav-next-line" class="board-nav__btn" type="button" title="Next line (↓)" aria-label="Next line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 18L5 6h14z"/></svg></button>`;
+
+/** The board's column. `lines`: the previous and next line's buttons in
+ * place of the start's and the end's. */
+export function boardColumnHtml(options: { focus?: boolean; lines?: boolean } = {}): string {
   return `
     <div class="study-board-col">
       <div class="study-card study-card--board">
@@ -196,10 +204,10 @@ export function boardColumnHtml(options: { focus?: boolean } = {}): string {
         </div>
       </div>
       <div class="board-nav" role="group" aria-label="Move navigation">
-        <button id="nav-start" class="board-nav__btn" type="button" title="Go to start (Shift+↑)" aria-label="Go to start"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+        ${options.lines ? PREVIOUS_LINE_BUTTON : `<button id="nav-start" class="board-nav__btn" type="button" title="Go to start (Shift+↑)" aria-label="Go to start"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>`}
         <button id="nav-back" class="board-nav__btn" type="button" title="Previous move (←)" aria-label="Previous move"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M17 5v14L6 12z"/></svg></button>
         <button id="nav-forward" class="board-nav__btn" type="button" title="Next move (→)" aria-label="Next move"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M7 5v14l11-7z"/></svg></button>
-        <button id="nav-end" class="board-nav__btn" type="button" title="End of line (Shift+↓)" aria-label="End of line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+        ${options.lines ? NEXT_LINE_BUTTON : `<button id="nav-end" class="board-nav__btn" type="button" title="End of line (Shift+↓)" aria-label="End of line"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>`}
         <button id="flip-board-btn" class="board-nav__btn board-flip-btn" type="button" data-icon="&#xe07b;" title="Flip board" aria-label="Flip board"></button>
         ${options.focus ? FOCUS_BUTTON_HTML : ""}
       </div>

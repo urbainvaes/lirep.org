@@ -22,17 +22,26 @@ export const FOCUS_SHORTCUT_HTML = `<li><kbd>Space</kbd> or <kbd>Z</kbd> Focus m
 /** `button`: the page's focus button (#focus-btn). `grid`: on board pages
  * sized to the window (.site-main--board), the element whose distance from
  * the top of the page is measured as --editor-top on `main`, with `above`
- * the elements whose height changes it. */
+ * the elements whose height changes it. `aside`: elements above it that
+ * don't count (the page scrolls past them instead: the editor's tips). */
 export function setupFocusMode(options: {
   main: HTMLElement;
   button: HTMLButtonElement | null;
   grid?: HTMLElement;
   above?: (Element | null)[];
+  aside?: (Element | null)[];
 }): FocusMode {
   const { main, button, grid } = options;
 
   function measureEditorTop(): void {
-    if (grid) main.style.setProperty("--editor-top", `${Math.round(grid.getBoundingClientRect().top + window.scrollY)}px`);
+    if (!grid) return;
+    let top = grid.getBoundingClientRect().top + window.scrollY;
+    for (const el of options.aside ?? []) {
+      if (!(el instanceof HTMLElement) || !el.offsetParent) continue; // not shown
+      const style = getComputedStyle(el);
+      top -= el.offsetHeight + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+    }
+    main.style.setProperty("--editor-top", `${Math.round(top)}px`);
   }
 
   let focusMode = false;
@@ -103,7 +112,7 @@ export function setupFocusMode(options: {
   if (grid) {
     // The header and the page's heading can change height (wrapping, renaming).
     const editorTopObserver = new ResizeObserver(measureEditorTop);
-    for (const el of [document.querySelector(".site-header"), ...(options.above ?? [])]) {
+    for (const el of [document.querySelector(".site-header"), ...(options.above ?? []), ...(options.aside ?? [])]) {
       if (el) editorTopObserver.observe(el);
     }
     window.addEventListener("resize", measureEditorTop);

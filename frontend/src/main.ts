@@ -1,6 +1,7 @@
 import { bindZoom, renderLanding } from "./landing";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
 import { studyFromFile } from "./studyFile";
+import { bindTip, tipFooterHtml } from "./tips";
 import {
   bindStudyArchive,
   bindStudyDelete,
@@ -67,7 +68,7 @@ function homeTipsHtml(): string {
         <li><strong>Create a study from scratch.</strong> The <em>New White study</em> and <em>New Black study</em> cards below open an empty board: name the study, then play your moves and the replies you expect. It saves itself as you go.</li>
         <li><strong>Start from a standard opening.</strong> <a href="/browse.html">Browse</a> lists the main openings, with their usual lines and their expected results: preview one, then <em>Import</em> it and make it yours by adding or changing moves.</li>
       </ul>
-      <p class="tips-card__note">Tips like this one appear while the <span class="tips-card__key">?</span> at the top of the page is on; it switches them off.</p>
+      ${tipFooterHtml()}
     </section>
   `;
 }
@@ -162,6 +163,7 @@ async function init(): Promise<void> {
       importStudyHtml() +
       `<p id="archive-note" class="archive-note" role="status" aria-live="polite" hidden></p>`;
     bindStudyImport(grid);
+    bindTip(grid.querySelector<HTMLElement>(".tips-card")!, "home");
     enableReorder();
   };
   enableReorder = bindStudyReorder(grid, studies, render);

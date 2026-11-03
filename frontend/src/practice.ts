@@ -1,5 +1,6 @@
 import { statsLine, type BulletStats } from "./bulletStats";
 import { escapeHtml, fetchMe, renderAuthArea, renderSignedOut } from "./layout";
+import { bindTip, tipFooterHtml } from "./tips";
 import { activityTzOffset, renderPracticeOverview, type PracticeActivity } from "./practiceActivity";
 import { openingMovesHtml, renderStudyGroups, splitStudyName, variationHtml, type StudyCardData } from "./studyCard";
 
@@ -81,6 +82,24 @@ function renderCard(study: StudyCardData, summaries: Record<string, PracticeSumm
     </article>`;
 }
 
+// Shown with tips on (tips.ts): what this page's figures and buttons are.
+function practiceTipsHtml(): string {
+  const practiceIcon = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>`;
+  return `
+    <section class="tips tips-card" aria-label="Practice tips">
+      <h2 class="tips-card__title">Practising your studies</h2>
+      <ul class="tips-card__list">
+        <li><span class="tips-icon">${practiceIcon}</span> <strong>Practice</strong> (the button, or a click on the card): the board shows a position from your study and asks for your move; the opponent's replies play themselves. It asks first the positions that are due, then the new ones, in rounds of twenty.</li>
+        <li><strong>Knowledge score</strong> (the ring, top right): how well you know the study's moves. A position counts fully once you've answered it right three times in a row, and less and less as time passes since you last did; a wrong answer starts it over, and positions never practised count 0.</li>
+        <li><strong>due</strong>: positions you're starting to forget, worth practising again; <strong>new</strong>: positions you haven't practised yet. With nothing due or new, Practice still offers a review.</li>
+        <li><span class="tips-icon" data-icon="&#xe032;"></span> <strong>Bullet</strong>: a timed run through the study against the computer, which by default plays the replies as often as they're played in the Explorer's games. You have a minute, plus two seconds per right move; a run succeeds if you reach the end of your prep in time. The <strong>Bullet score</strong> is your successful runs out of all of them.</li>
+        <li>Above your studies: the moves you've practised each day over the last year, and your studies side by side.</li>
+      </ul>
+      ${tipFooterHtml()}
+    </section>
+  `;
+}
+
 async function init(): Promise<void> {
   const me = await fetchMe();
   renderAuthArea(me);
@@ -124,9 +143,11 @@ async function init(): Promise<void> {
     Object.entries(summaries).map(([id, summary]) => [id, summary.totalItems ? summary.aggregateKnowledge : null]),
   );
   grid.innerHTML =
+    practiceTipsHtml() +
     (activity ? renderPracticeOverview(activity, studies, knowledge) : "") +
     // In the home page's order (the account's, set by dragging there).
     renderStudyGroups(studies, (study) => renderCard(study, summaries), "practice-grid");
+  bindTip(grid.querySelector<HTMLElement>(".tips-card")!, "practice");
   // On a narrow screen the calendar scrolls; start on the recent weeks.
   const scroll = grid.querySelector(".activity__scroll");
   if (scroll) scroll.scrollLeft = scroll.scrollWidth;

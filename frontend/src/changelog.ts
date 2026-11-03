@@ -117,11 +117,19 @@ const DAYS: Day[] = [
     date: "2026-11-04",
     changes: [
       {
+        area: "Editor",
+        summary: "The first and last buttons under the board change lines",
+        details: `<p>In the study editor, ▲ and ▼ under the board now go to the previous and the next line, as ↑ and ↓ do, in place of the
+          start and the end of the line (still Shift+↑ and Shift+↓). Each is greyed out where there is no line that way.</p>`,
+      },
+      {
         area: "Everywhere",
         summary: "Tips, behind a ? in the header",
-        details: `<p>A <strong>?</strong> after the theme toggle shows tips, and turns blue while they show. On the home page,
-          “Getting started”: how to create a study from scratch, or to start from a standard opening found on Browse. In the study editor,
-          a panel at the top of the moves explains each button, with its icon. The ? or the panel's “Hide tips” hides them again.</p>`,
+        details: `<p>A <strong>?</strong> after the theme toggle shows or hides tips; they show until you hide them, and the ? is blue
+          while they do. On the home page, “Getting started”: how to create a study from scratch, or to start from a standard opening
+          found on Browse. On the Practice page, what the knowledge score, due and new, and Bullet are. In the study editor, a panel above the board explains each button, with its icon, what the expected score
+          is, and that you keep one move after each opponent's move; the editor is greyed out under it until it's hidden. Each tip has <em>Hide this tip now</em>, which hides it until you come back to the
+          page, and <em>Hide all tips</em>, which switches the ? off.</p>`,
       },
       {
         area: "Browse",
