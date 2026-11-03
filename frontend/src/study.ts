@@ -232,7 +232,7 @@ function renderEditor(
         </div>
       </header>
 
-      <section id="editor-tips" class="tips editor-tips" aria-label="Tips"></section>
+      <section id="editor-tips" class="tips editor-tips" aria-label="Study editor tips"></section>
 
       <div class="study-grid">
         ${boardColumnHtml({ focus: true, lines: true })}

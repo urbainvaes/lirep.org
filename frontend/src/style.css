@@ -3623,13 +3623,6 @@ details[open] > summary.tree-fold__head::before {
   line-height: 1.45;
 }
 
-.editor-tips__title {
-  margin: 0 0 8px;
-  color: var(--text-strong);
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
 :root.tips-on:not(.focus-mode) .study-editor--edit:has(> .editor-tips:not([hidden])) > .study-grid {
   opacity: 0.4;
   filter: grayscale(1);

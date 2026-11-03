@@ -99,7 +99,7 @@ export function renderEditorTips(): void {
     return `<li class="editor-tips__row">${icons ? `<span class="editor-tips__icons">${icons}</span>` : ""}<span>${html}</span></li>`;
   }).join("");
   panel.innerHTML = `
-    <p class="editor-tips__title">Tips</p>
+    <h2 class="tips-card__title">Study editor</h2>
     <ul class="editor-tips__list">${rows}</ul>
     ${tipFooterHtml()}
   `;
