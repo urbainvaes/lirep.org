@@ -3,6 +3,7 @@ import { syncBadgePrefs } from "./badgePrefs";
 import "./sourceLink";
 import "./menu";
 import "./headerAutoHide";
+import "./tips";
 
 export interface MeResponse {
   authenticated: boolean;

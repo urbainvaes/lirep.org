@@ -117,6 +117,20 @@ const DAYS: Day[] = [
     date: "2026-11-04",
     changes: [
       {
+        area: "Everywhere",
+        summary: "Tips, behind a ? in the header",
+        details: `<p>A <strong>?</strong> after the theme toggle shows tips, and turns blue while they show. On the home page,
+          “Getting started”: how to create a study from scratch, or to start from a standard opening found on Browse. In the study editor,
+          a panel at the top of the moves explains each button, with its icon. The ? or the panel's “Hide tips” hides them again.</p>`,
+      },
+      {
+        area: "Browse",
+        summary: "Every opening's expected score and evaluation, and blitz 1600+ by default",
+        details: `<p>Each opening on Browse now shows its badge and its expected result, calculated with Lichess's blitz games rated
+          1600+ and Stockfish at depth 16. A preview opens the Explorer with those settings, and an imported opening keeps them, so its
+          Stats page compares. A new study starts with them too.</p>`,
+      },
+      {
         area: "Editor",
         summary: "The Explorer keeps to six moves after Suggest moves",
         details: `<p>Coming back from Suggest moves or the settings, the Explorer could show all its moves, a dozen at times, and leave the

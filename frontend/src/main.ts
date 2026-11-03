@@ -58,6 +58,20 @@ function archivedHtml(archived: StudyCardData[], shown: boolean): string {
   `;
 }
 
+/** Shown with tips on (tips.ts): how to make a first study. */
+function homeTipsHtml(): string {
+  return `
+    <section class="tips tips-card" aria-label="Getting started">
+      <h2 class="tips-card__title">Getting started</h2>
+      <ul class="tips-card__list">
+        <li><strong>Create a study from scratch.</strong> The <em>New White study</em> and <em>New Black study</em> cards below open an empty board: name the study, then play your moves and the replies you expect. It saves itself as you go.</li>
+        <li><strong>Start from a standard opening.</strong> <a href="/browse.html">Browse</a> lists the main openings, with their usual lines and their expected results: preview one, then <em>Import</em> it and make it yours by adding or changing moves.</li>
+      </ul>
+      <p class="tips-card__note">Tips like this one appear while the <span class="tips-card__key">?</span> at the top of the page is on; it switches them off.</p>
+    </section>
+  `;
+}
+
 function importStudyHtml(): string {
   return `
     <div class="study-import">
@@ -142,6 +156,7 @@ async function init(): Promise<void> {
     const active = studies.filter((study) => !study.archived);
     const archived = studies.filter((study) => study.archived);
     grid.innerHTML =
+      homeTipsHtml() +
       renderStudyGroups(active, renderStudyCardWithActions, "studies-grid", renderNewStudyCard) +
       archivedHtml(archived, showArchived) +
       importStudyHtml() +

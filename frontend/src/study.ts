@@ -49,6 +49,7 @@ import {
   type EvaluationCache,
 } from "./evalCache";
 import { calculateExpectedScore } from "./expectedScore";
+import { renderEditorTips } from "./editorTips";
 import { MOVE_LEVELS, Suggester, type Suggestion } from "./suggest";
 import { cachedExplorerData, errorMessage, fetchExplorerData, hasExplorerData } from "./explorerClient";
 import { materialBalance, materialHtml } from "./material";
@@ -266,6 +267,7 @@ function renderEditor(
                   <li><kbd>?</kbd> Show / hide these shortcuts</li>
                 </ul>
               </div>
+              <section id="editor-tips" class="tips editor-tips" aria-label="Tips"></section>
               <p id="live-score" class="live-score" aria-live="polite" hidden></p>
               <div id="tree-view" class="tree-view"></div>
               <div class="study-comment-editor" id="comment-editor" hidden>
@@ -362,6 +364,7 @@ function renderEditor(
   `;
 
   const studyHeadEl = main.querySelector(".study-head") as HTMLElement;
+  renderEditorTips();
   const boardEl = document.getElementById("board") as HTMLElement;
   const treeViewEl = document.getElementById("tree-view") as HTMLElement;
   const liveScoreEl = document.getElementById("live-score") as HTMLElement;
