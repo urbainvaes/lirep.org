@@ -263,8 +263,9 @@ def players() -> dict:
 
 
 @router.get("/api/community/players/{username}")
-def player(username: str, request: Request) -> dict:
-    """A public profile: when they joined and the studies they chose to share."""
+async def player(username: str, request: Request) -> dict:
+    """A public profile: when they joined, their Lichess ratings (see
+    _profile_ratings) and the studies they chose to share."""
     me = request.session.get("username")
     names = _names()
     # A pen name leads to the profile; the username behind it doesn't, except
@@ -288,11 +289,15 @@ def player(username: str, request: Request) -> dict:
     # Best win probability first (however it was calculated); studies without a
     # score last, in the order they were created.
     studies.sort(key=lambda e: (e["winProbability"] is None, -(e["winProbability"] or 0), e["id"]))
+    exact = mine or not aliased
+    lichess_user = next((u for u in await _lichess_users() or [] if u["username"].lower() == user["username"].lower()), None)
     return {
         "maxUsers": MAX_USERS,
         **user,
         "username": names.aliases[user["username"].lower()] if aliased else user["username"],
         "aliased": aliased,
+        "title": lichess_user.get("title") if exact and lichess_user else None,
+        "ratings": _profile_ratings(lichess_user, exact),
         "studies": studies,
     }
 
@@ -320,6 +325,47 @@ async def _fetch_lichess_users(usernames: list[str]) -> list[dict]:
     return found
 
 
+async def _lichess_users() -> list[dict] | None:
+    """The registered players' Lichess data, kept an hour; a stale copy when
+    Lichess fails, None when there is none yet. Raw data: privacy is applied
+    by each caller, at every request."""
+    global _top_players, _top_players_at
+    async with _top_players_lock:
+        if _top_players is None or time.monotonic() - _top_players_at > TOP_PLAYERS_TTL_SECONDS:
+            usernames = [u["username"] for u in store.list_users()]
+            try:
+                users = await _fetch_lichess_users(usernames) if usernames else []
+            except (httpx.HTTPError, ValueError):
+                pass  # Stale ratings are fine.
+            else:
+                _top_players, _top_players_at = users, time.monotonic()
+        return _top_players
+
+
+PROFILE_SPEEDS = ("bullet", "blitz", "rapid", "classical")
+
+
+def _profile_ratings(lichess_user: dict | None, exact: bool) -> dict | None:
+    """A public profile's Lichess ratings, per speed with rated games. Under a
+    pen name (`exact` False), rounded down to the hundred and without the
+    number of games, as on the top players' list: an exact rating could
+    identify the player. None for a closed or flagged account, or when
+    Lichess hasn't answered yet."""
+    if lichess_user is None or lichess_user.get("disabled") or lichess_user.get("tosViolation"):
+        return None
+    ratings = {}
+    for speed in PROFILE_SPEEDS:
+        perf = lichess_user.get("perfs", {}).get(speed)
+        if not perf or not perf.get("games"):
+            continue
+        ratings[speed] = (
+            {"rating": perf["rating"], "games": perf["games"], "provisional": bool(perf.get("prov")), "roundedDown": False}
+            if exact
+            else {"rating": perf["rating"] // 100 * 100, "games": None, "provisional": bool(perf.get("prov")), "roundedDown": True}
+        )
+    return ratings
+
+
 @router.get("/api/community/top-players")
 async def top_players() -> dict:
     """Per speed, the registered players with the highest Lichess ratings.
@@ -329,39 +375,31 @@ async def top_players() -> dict:
     doesn't narrow it down. Players with a pen name are listed under it, the
     same way: rounded rating and no title. Provisional ratings, closed accounts and accounts
     Lichess flagged for breaking its terms are left out."""
-    global _top_players, _top_players_at
-    async with _top_players_lock:
-        if _top_players is None or time.monotonic() - _top_players_at > TOP_PLAYERS_TTL_SECONDS:
-            usernames = [u["username"] for u in store.list_users()]
-            try:
-                users = await _fetch_lichess_users(usernames) if usernames else []
-            except (httpx.HTTPError, ValueError):
-                if _top_players is None:
-                    raise HTTPException(status_code=502, detail="Lichess is unavailable") from None
-                # Stale ratings are fine, but still apply today's privacy below.
+    users = await _lichess_users()
+    if users is None:
+        raise HTTPException(status_code=502, detail="Lichess is unavailable")
+    # Today's privacy, even on stale ratings.
+    names = _names()
+    registered = {u["username"].lower() for u in store.list_users()}
+    board: dict[str, list[dict]] = {}
+    for speed in TOP_PLAYERS_SPEEDS:
+        rated = []
+        for u in users:
+            username = u["username"].lower()
+            perf = u.get("perfs", {}).get(speed)
+            if username not in registered or u.get("disabled") or u.get("tosViolation") or not perf or not perf.get("games") or perf.get("prov"):
+                continue
+            if username in names.anonymous:
+                rounded = perf["rating"] // 100 * 100
+                rated.append({"username": None, "title": u.get("title"), "rating": rounded, "roundedDown": True})
+            elif username in names.aliases:
+                rounded = perf["rating"] // 100 * 100
+                rated.append({"username": names.aliases[username], "title": None, "rating": rounded, "roundedDown": True})
             else:
-                _top_players, _top_players_at = users, time.monotonic()
-        names = _names()
-        registered = {u["username"].lower() for u in store.list_users()}
-        board: dict[str, list[dict]] = {}
-        for speed in TOP_PLAYERS_SPEEDS:
-            rated = []
-            for u in _top_players:
-                username = u["username"].lower()
-                perf = u.get("perfs", {}).get(speed)
-                if username not in registered or u.get("disabled") or u.get("tosViolation") or not perf or not perf.get("games") or perf.get("prov"):
-                    continue
-                if username in names.anonymous:
-                    rounded = perf["rating"] // 100 * 100
-                    rated.append({"username": None, "title": u.get("title"), "rating": rounded, "roundedDown": True})
-                elif username in names.aliases:
-                    rounded = perf["rating"] // 100 * 100
-                    rated.append({"username": names.aliases[username], "title": None, "rating": rounded, "roundedDown": True})
-                else:
-                    rated.append({"username": u["username"], "title": u.get("title"), "rating": perf["rating"], "roundedDown": False})
-            # Re-rank after rounding, with named players first on a tie.
-            rated.sort(key=lambda r: (r["rating"], not r["roundedDown"]), reverse=True)
-            board[speed] = rated[:TOP_PLAYERS_SIZE]
+                rated.append({"username": u["username"], "title": u.get("title"), "rating": perf["rating"], "roundedDown": False})
+        # Re-rank after rounding, with named players first on a tie.
+        rated.sort(key=lambda r: (r["rating"], not r["roundedDown"]), reverse=True)
+        board[speed] = rated[:TOP_PLAYERS_SIZE]
     return board
 
 

@@ -1,12 +1,7 @@
 import { badgeIcons, badgeShine, ICONS, setBadgePrefs, SHINES, type BadgeIcons, type BadgeShine } from "./badgePrefs";
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
+import { ratedCount, ratingGridHtml, type Ratings } from "./ratings";
 import { PIECES, pieceBadgeHtml, TIER_LABELS, TIERS, tierThreshold } from "./scoreTiers";
-
-interface RatingInfo {
-  rating: number;
-  games: number;
-  provisional: boolean;
-}
 
 interface ProfileResponse {
   username: string;
@@ -15,17 +10,8 @@ interface ProfileResponse {
   maxUsers: number;
   anonymous: boolean;
   serverCache: { allowed: boolean; enabled: boolean };
-  ratings: Partial<Record<"bullet" | "blitz" | "rapid" | "classical", RatingInfo>>;
+  ratings: Ratings;
 }
-
-// Glyph codes from lichess.org's own icon font (see style.css), read off a
-// live Lichess profile page's data-icon attributes for these perf types.
-const SPEEDS: { key: keyof ProfileResponse["ratings"]; label: string; icon: string }[] = [
-  { key: "bullet", label: "Bullet", icon: "" },
-  { key: "blitz", label: "Blitz", icon: "" },
-  { key: "rapid", label: "Rapid", icon: "" },
-  { key: "classical", label: "Classical", icon: "" },
-];
 
 function renderSignedOut(main: HTMLElement): void {
   main.innerHTML = `
@@ -37,24 +23,6 @@ function renderSignedOut(main: HTMLElement): void {
 }
 
 function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
-  const ratedSpeeds = SPEEDS.flatMap(({ key, label }) => {
-    const info = profile.ratings[key];
-    return info ? [{ label, ...info }] : [];
-  });
-  const ratingCards = SPEEDS.map(({ key, label, icon }) => {
-    const info = profile.ratings[key];
-    const value = info ? info.rating : "Unrated";
-    const detail = info ? `${info.games} games${info.provisional ? " · provisional" : ""}` : "No rated games yet";
-    return `
-      <div class="rating-card">
-        <div class="rating-card__icon" data-icon="${icon}"></div>
-        <div class="rating-card__label">${label}</div>
-        <div class="rating-card__value">${value}</div>
-        <div class="rating-card__detail">${detail}</div>
-      </div>
-    `;
-  }).join("");
-
   const titlePrefix = profile.title ? `${escapeHtml(profile.title)} ` : "";
 
   main.innerHTML = `
@@ -70,9 +38,9 @@ function renderProfile(main: HTMLElement, profile: ProfileResponse): void {
           <h2>Ratings</h2>
           <p class="profile-subtitle">Lichess rated games by time control</p>
         </div>
-        <span class="profile-section__aside">${ratedSpeeds.length} active formats</span>
+        <span class="profile-section__aside">${ratedCount(profile.ratings)} active formats</span>
       </div>
-      <div class="rating-grid">${ratingCards}</div>
+      ${ratingGridHtml(profile.ratings)}
     </section>
 
     <section class="profile-section">

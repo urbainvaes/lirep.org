@@ -1,4 +1,5 @@
 import { escapeHtml, fetchMe, renderAuthArea } from "./layout";
+import { ratedCount, ratingGridHtml, type Ratings } from "./ratings";
 
 interface SharedStudy {
   id: number;
@@ -17,6 +18,9 @@ interface PlayerResponse {
   username: string; // a pen name when `aliased`
   aliased: boolean;
   joined: string;
+  title: string | null;
+  /** null for a closed account, or while Lichess can't be reached. */
+  ratings: Ratings | null;
   studies: SharedStudy[];
 }
 
@@ -43,14 +47,29 @@ function render(main: HTMLElement, data: PlayerResponse): void {
     )
     .join("");
 
+  const ratings = data.ratings === null
+    ? ""
+    : `<section class="profile-section">
+      <div class="profile-section__heading">
+        <div>
+          <h2>Ratings</h2>
+          <p class="profile-subtitle">Lichess rated games by time control${Object.values(data.ratings).some((r) => r?.roundedDown)
+            ? ", rounded down to the hundred under a pen name"
+            : ""}</p>
+        </div>
+        <span class="profile-section__aside">${ratedCount(data.ratings)} active formats</span>
+      </div>
+      ${ratingGridHtml(data.ratings)}
+    </section>`;
   main.innerHTML = `
     <p class="doc-intro"><a class="community-owner" href="/players.html">← Players</a></p>
     <div class="profile-header">
-      <h1>${escapeHtml(data.username)}
+      <h1>${data.title ? `${escapeHtml(data.title)} ` : ""}${escapeHtml(data.username)}
         ${data.aliased ? "" : `<a class="lichess-link" href="https://lichess.org/@/${encodeURIComponent(data.username)}" target="_blank" rel="noopener noreferrer" title="Lichess profile" aria-label="Lichess profile of ${escapeHtml(data.username)}"><span class="lichess-link__icon" aria-hidden="true"></span></a>`}
       </h1>
       <p class="profile-subtitle">Lirep user #${data.number}${limit} · joined ${escapeHtml(formatJoined(data.joined))}</p>
     </div>
+    ${ratings}
     <section class="profile-section">
       <div class="profile-section__heading">
         <div>
