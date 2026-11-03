@@ -100,6 +100,30 @@
       "evalDepth": 16,
       "scoreCalculatedAt": "2026-11-04T14:38:38.105034+00:00",
       "evalCalculatedAt": "2026-11-04T14:44:59.628811+00:00"
+    },
+    "qgd": {
+      "file": "832bd46057106c0449a904096a814ba53168af7943c8e79695f975b8cdea360e",
+      "winProbability": 0.48001098992687286,
+      "evalCp": -3.2487431566891245,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-04T14:45:57.063142+00:00",
+      "evalCalculatedAt": "2026-11-04T14:52:22.555906+00:00"
+    },
+    "kings-indian": {
+      "file": "9f64969e9e3fce0a911afc75bcd8a2f8dc537e9644111377162ea134523a8db5",
+      "winProbability": 0.49099661263532224,
+      "evalCp": -24.20712931572893,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-04T14:53:40.586323+00:00",
+      "evalCalculatedAt": "2026-11-04T15:02:34.941135+00:00"
+    },
+    "nimzo-indian": {
+      "file": "c5efe17319f18390f43f16f1516efa00789e0eb16a616a22e4c399155ae7eec7",
+      "winProbability": 0.5010733109663816,
+      "evalCp": 3.7902360354183515,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-04T15:03:51.984659+00:00",
+      "evalCalculatedAt": "2026-11-04T15:10:55.531837+00:00"
     }
   }
 }
