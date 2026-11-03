@@ -169,7 +169,7 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
     showOptions();
   });
   startBtn.addEventListener("click", () => void startRun());
-  let replaced = false; // Replace prep, from the analysis
+  let replaced = false; // Replace prep or Add to prep, from the analysis
   analysisBtn.addEventListener("click", () => {
     window.clearTimeout(restartTimer); // no auto-restart under the analysis
     doneEl.hidden = true;
@@ -180,8 +180,8 @@ export async function renderBullet(app: HTMLElement, id: number): Promise<() => 
       explorerSettings: study.explorerSettings,
       tree: study.tree,
       studyId: id,
-      replaceNote: "Bullet starts again when you close the analysis.",
-      onReplaced: () => (replaced = true),
+      prepNote: "Bullet starts again when you close the analysis.",
+      onPrepChanged: () => (replaced = true),
       // The study's moves changed under the game: it starts again (the
       // router renders this screen afresh).
       onClose: () => {

@@ -8,7 +8,9 @@
 // With the study's tree, it also shows the prep: your prepared move (a
 // button, and an arrow on the board), or the opponent's prepared replies
 // (a button each, in the study's order); moves off the tree are greyed in
-// the row. The home screen's study view is this, as a screen of its own.
+// the row. A line out of prep can go into the study: in place of your move
+// there (Replace prep), or else added where it leaves it (Add to prep).
+// The home screen's study view is this, as a screen of its own.
 
 import type { Api } from "@lichess-org/chessground/api";
 import type { DrawShape } from "@lichess-org/chessground/draw";
@@ -32,7 +34,7 @@ import { cachedExplorerData, errorMessage, fetchExplorerData } from "@web/explor
 import { escapeHtml } from "@web/layout";
 import type { StudyTree } from "@web/tree";
 
-import { replacePrep } from "./api";
+import { addToPrep, replacePrep } from "./api";
 import { FLIP_ICON } from "./icons";
 
 export interface AnalysisOptions {
@@ -45,12 +47,14 @@ export interface AnalysisOptions {
   explorerSettings?: ExplorerSettings | null;
   /** The study's moves: the prep is shown along them. */
   tree?: StudyTree;
-  /** The study's id, when the line can replace its prep (Replace prep). */
+  /** The study's id, when the line can go into it (Replace prep, Add to
+   * prep). */
   studyId?: number;
-  /** Added to Replace prep's confirmation: what else it does. */
-  replaceNote?: string;
-  /** Called once Replace prep has saved. */
-  onReplaced?(): void;
+  /** What else changing the prep does: added to Replace prep's
+   * confirmation, and shown once either has saved. */
+  prepNote?: string;
+  /** Called once Replace prep or Add to prep has saved. */
+  onPrepChanged?(): void;
   /** The bar's title (else "Analysis"). */
   title?: string;
   /** A screen of its own, in `root`, rather than a layer: the back arrow
@@ -152,6 +156,30 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     return ids.length ? { at, ids } : null;
   };
 
+  // Where the line leaves the prep otherwise (an opponent's reply the study
+  // doesn't answer, or on past its end): the line can be added from there.
+  const addable = (): boolean => o.studyId !== undefined && !!o.tree && inTree() < line.length && !replaceable();
+
+  // Said once the prep has changed, until the next move.
+  let savedNote = "";
+
+  async function save(button: HTMLButtonElement, how: "replace" | "add"): Promise<void> {
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = "Saving…";
+    try {
+      o.tree = await (how === "replace" ? replacePrep : addToPrep)(o.studyId!, line);
+      o.onPrepChanged?.();
+      savedNote = `${how === "replace" ? "Replaced in the study." : "Added to the study."}${o.prepNote ? ` ${o.prepNote}` : ""}`;
+      show();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = label;
+      const note = prepEl.querySelector(".analysis__note");
+      if (note) note.textContent = err instanceof Error ? err.message : "The study couldn't be saved.";
+    }
+  }
+
   async function replace(button: HTMLButtonElement): Promise<void> {
     const found = replaceable();
     if (!found) return;
@@ -161,19 +189,8 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     const number = `${Math.floor(found.at / 2) + 1}.${found.at % 2 ? ".." : ""}`;
     const old = found.ids.map((id) => tree.nodes[id].san).join(", ");
     const what = `${number} ${old}${after ? ` and the ${after} move${after === 1 ? "" : "s"} after it` : ""}`;
-    if (!window.confirm(`Are you sure? This replaces ${what} with this line.${o.replaceNote ? ` ${o.replaceNote}` : ""}`)) return;
-    button.disabled = true;
-    button.textContent = "Saving…";
-    try {
-      o.tree = await replacePrep(o.studyId!, line);
-      o.onReplaced?.();
-      show();
-    } catch (err) {
-      button.disabled = false;
-      button.textContent = "Replace prep";
-      const note = prepEl.querySelector(".analysis__note");
-      if (note) note.textContent = err instanceof Error ? err.message : "The study couldn't be saved.";
-    }
+    if (!window.confirm(`Are you sure? This replaces ${what} with this line.${o.prepNote ? ` ${o.prepNote}` : ""}`)) return;
+    await save(button, "replace");
   }
 
   const board: Api = createBoard(el("an-board"), onMove, o.orientation);
@@ -191,6 +208,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
    * else it replaces the rest of the line. */
   function play(san: string, sound = true): void {
     if (line[ply] !== san) line = [...line.slice(0, ply), san];
+    savedNote = "";
     if (sound) {
       const chess = position();
       const move = chess.move(san);
@@ -226,12 +244,16 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     if (node === null) {
       prepEl.innerHTML = `<p class="analysis__note">Out of prep</p>
         <div class="prep__replies"><button class="prep__move" type="button" data-back>Back to prep</button>${
-          replaceable() ? '<button class="prep__move" type="button" data-replace>Replace prep</button>' : ""
+          replaceable() ? '<button class="prep__move" type="button" data-replace>Replace prep</button>'
+          : addable() ? '<button class="prep__move" type="button" data-add>Add to prep</button>'
+          : ""
         }</div>`;
       return;
     }
     const comment = tree.nodes[node].comment?.trim();
-    const commentHtml = comment ? `<p class="prep__comment">${escapeHtml(comment)}</p>` : "";
+    const commentHtml =
+      (savedNote ? `<p class="analysis__note">${escapeHtml(savedNote)}</p>` : "") +
+      (comment ? `<p class="prep__comment">${escapeHtml(comment)}</p>` : "");
     const sans = prepared();
     if (!sans.length || chess.isGameOver()) {
       prepEl.innerHTML = `${commentHtml}<p class="analysis__note">End of prep</p>`;
@@ -384,6 +406,7 @@ export function openAnalysis(o: AnalysisOptions): () => void {
     if (!button) return;
     if (button.dataset.san) play(button.dataset.san);
     else if (button.hasAttribute("data-replace")) void replace(button as HTMLButtonElement);
+    else if (button.hasAttribute("data-add")) void save(button as HTMLButtonElement, "add");
     else if (button.hasAttribute("data-back")) {
       ply = inTree();
       show();

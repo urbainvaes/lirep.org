@@ -114,7 +114,16 @@ export const study = (id: number) => keptGet<Study>(`/api/studies/${id}`);
  * the move of yours where it leaves the prep, and of everything after that
  * move, as the website's Replace prep does; the study's tree as saved. The
  * study is read afresh first, so what was edited elsewhere meanwhile stays. */
-export async function replacePrep(id: number, line: string[]): Promise<StudyTree> {
+export const replacePrep = (id: number, line: string[]) => changePrep(id, line, "replace");
+
+/** Adds `line` (from the initial position) to study `id` where it leaves
+ * the prep, after the moves already there, when that isn't with a move of
+ * yours in place of the study's (Replace prep): an opponent's reply the
+ * study doesn't answer, or going on past the end of the prep. Nothing is
+ * deleted; the study's tree as saved, read afresh first. */
+export const addToPrep = (id: number, line: string[]) => changePrep(id, line, "add");
+
+async function changePrep(id: number, line: string[], how: "replace" | "add"): Promise<StudyTree> {
   const study = await get<Study>(`/api/studies/${id}`);
   const tree = study.tree;
   let nodeId = tree.rootId;
@@ -126,10 +135,11 @@ export async function replacePrep(id: number, line: string[]): Promise<StudyTree
   }
   const yours = (at % 2 === 0) === (study.side === "white");
   const replaced = tree.nodes[nodeId].children;
-  if (at === line.length || !yours || !replaced.length) {
+  const replaces = yours && replaced.length > 0;
+  if (at === line.length || replaces !== (how === "replace")) {
     throw new Error("The study has changed meanwhile: this line no longer leaves its prep there. Nothing was saved.");
   }
-  for (const child of [...replaced]) deleteSubtree(tree, child);
+  if (how === "replace") for (const child of [...replaced]) deleteSubtree(tree, child);
   for (const san of line.slice(at)) nodeId = addMove(tree, nodeId, san);
   // A starting point in what was deleted goes back to the default.
   const startNodeId = study.startNodeId !== null && study.startNodeId in tree.nodes ? study.startNodeId : null;

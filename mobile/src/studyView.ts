@@ -1,6 +1,6 @@
 // A study (#/study/ID, from the home screen): the analysis as a screen of
 // its own, from the study's starting point, along its prep. Its only edit:
-// a line out of prep can replace the prep (Replace prep).
+// a line out of prep can go into the study (Replace prep, Add to prep).
 
 import { sanPathTo } from "@web/tree";
 

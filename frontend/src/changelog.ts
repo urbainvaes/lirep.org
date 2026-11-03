@@ -114,6 +114,19 @@ function focusFigure(): string {
 
 const DAYS: Day[] = [
   {
+    date: "2026-11-04",
+    changes: [
+      {
+        area: "Mobile app",
+        summary: "Add to prep from the app",
+        details: `<p>In the app's analysis, a line out of prep that doesn't replace a move of yours, after an opponent's reply the study
+          doesn't answer, or past the end of the prep, can now be added to the study with Add to prep. Nothing is deleted: the line goes
+          in after the moves already there. As with Replace prep, a practice session or a Bullet run starts again once the analysis
+          closes.</p>`,
+      },
+    ],
+  },
+  {
     date: "2026-11-03",
     changes: [
       {
