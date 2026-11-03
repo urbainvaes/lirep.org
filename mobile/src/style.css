@@ -419,6 +419,32 @@ a {
   padding: 8px 16px 0;
 }
 
+/* ---- The profile -------------------------------------------------------- */
+
+.profile__label {
+  margin: 16px 0 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.profile__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile__preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.profile__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .chip.chip--on {
   border-color: var(--primary);
   color: var(--primary);

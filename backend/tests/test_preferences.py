@@ -43,5 +43,20 @@ class PreferencesTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 401)
 
 
+class LogoutTests(unittest.TestCase):
+    def logout(self, next=None):
+        request = Request({"type": "http", "session": {"username": "alice"}})
+        response = asyncio.run(auth.logout(request, next))
+        self.assertEqual(request.session, {})
+        return response.headers["location"]
+
+    def test_lands_on_the_given_local_path_else_the_home_page(self):
+        self.assertEqual(self.logout("/m/"), f"{auth.FRONTEND_URL}/m/")
+        self.assertEqual(self.logout(), auth.FRONTEND_URL)
+        for elsewhere in ("https://evil.example", "//evil.example", "/\\evil.example"):
+            with self.subTest(next=elsewhere):
+                self.assertEqual(self.logout(elsewhere), auth.FRONTEND_URL)
+
+
 if __name__ == "__main__":
     unittest.main()

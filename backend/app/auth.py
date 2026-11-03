@@ -212,12 +212,15 @@ async def _revoke_lichess_token(token: str) -> None:
 
 
 @router.get("/auth/logout")
-async def logout(request: Request) -> RedirectResponse:
+async def logout(request: Request, next: str | None = None) -> RedirectResponse:
+    """`next`: where to land once signed out, as for the sign-in (the
+    mobile app's "/m/"); the home page by default."""
     token = request.session.pop("access_token", None)
     request.session.clear()
     if token:
         await _revoke_lichess_token(token)
-    return RedirectResponse(FRONTEND_URL)
+    next_path = _local_path(next)
+    return RedirectResponse(f"{FRONTEND_URL}{next_path}" if next_path else FRONTEND_URL)
 
 
 class DeleteAccountIn(BaseModel):

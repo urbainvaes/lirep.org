@@ -7,6 +7,7 @@
 //   #/practice/ID a practice session on one study
 //   #/bullet/ID   Bullet on one study
 //   #/community   the leaderboards (#/community/eval: by evaluation)
+//   #/profile     the account: the badges' look, signing out
 
 import "@web/theme";
 import { syncBadgePrefs } from "@web/badgePrefs";
@@ -18,6 +19,7 @@ import { SignedOut, me, prefetch, signInUrl } from "./api";
 import { flush, onWaiting } from "./outbox";
 import { renderBullet } from "./bullet";
 import { renderCommunity, renderPracticeList, renderStudies } from "./lists";
+import { renderProfile } from "./profile";
 import { renderSession } from "./session";
 import { renderStats } from "./stats";
 import { renderStudyView } from "./studyView";
@@ -52,6 +54,7 @@ async function route(): Promise<void> {
     else if (view) leave = await renderStudyView(app, Number(view[1]));
     else if (stats) await renderStats(app, Number(stats[1]), () => location.hash === hash);
     else if (hash.startsWith("#/studies")) await renderStudies(app);
+    else if (hash.startsWith("#/profile")) leave = await renderProfile(app);
     else if (hash.startsWith("#/community")) await renderCommunity(app, hash === "#/community/eval" ? "eval" : "score");
     // Practice is the home screen (#/; #/practice too, as it used to be).
     else await renderPracticeList(app);

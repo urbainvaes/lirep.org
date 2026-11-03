@@ -8,10 +8,11 @@ import { evalPiece, formatExpectedEval, pieceBadgeHtml, scoreTier } from "@web/s
 
 import { leaderboard, practiceSummary, studies, type PracticeSummary, type Ranked, type Study } from "./api";
 
-type Tab = "studies" | "practice" | "community";
+type Tab = "studies" | "practice" | "community" | "profile";
 
 const STUDIES_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>`;
 const COMMUNITY_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+const PROFILE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
 const PRACTICE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>`;
 
 export function shell(tab: Tab, title: string, aside: string, body: string, back?: string): string {
@@ -28,6 +29,7 @@ export function shell(tab: Tab, title: string, aside: string, body: string, back
       ${link("studies", "#/studies", STUDIES_ICON, "Studies")}
       ${link("practice", "#/", PRACTICE_ICON, "Practice")}
       ${link("community", "#/community", COMMUNITY_ICON, "Community")}
+      ${link("profile", "#/profile", PROFILE_ICON, "Profile")}
     </nav>
   `;
 }
