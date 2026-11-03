@@ -117,6 +117,12 @@ const DAYS: Day[] = [
     date: "2026-11-04",
     changes: [
       {
+        area: "Editor",
+        summary: "The Explorer keeps to six moves after Suggest moves",
+        details: `<p>Coming back from Suggest moves or the settings, the Explorer could show all its moves, a dozen at times, and leave the
+          move list little room. It shows six again, scrolling for the rest.</p>`,
+      },
+      {
         area: "Mobile app",
         summary: "Add to prep from the app",
         details: `<p>In the app's analysis, a line out of prep that doesn't replace a move of yours, after an opponent's reply the study

@@ -415,15 +415,27 @@ export function renderExplorer(
     btn.addEventListener("click", () => onPlay(btn.dataset.san as string));
   });
 
-  // Measured rather than fixed in CSS, so it holds whatever the fonts.
   const list = panel.querySelector<HTMLElement>(".explorer-rows");
-  const items = list?.children;
-  if (list && items && items.length > VISIBLE_EXPLORER_ROWS) {
+  if (list && list.children.length > VISIBLE_EXPLORER_ROWS) capExplorerRows(list);
+}
+
+// More than six moves: the list shows six and scrolls. Measured rather than
+// fixed in CSS, so it holds whatever the fonts. A list rendered while hidden
+// (behind the editor's Suggest moves or settings window) has no size yet: it
+// is measured once it shows, else all its moves would push the tree aside.
+function capExplorerRows(list: HTMLElement): void {
+  const measure = (): boolean => {
+    const items = list.children;
     const top = items[0].getBoundingClientRect().top;
     const bottom = items[VISIBLE_EXPLORER_ROWS - 1].getBoundingClientRect().bottom;
-    if (bottom > top) {
-      list.style.maxHeight = `${Math.ceil(bottom - top)}px`;
-      list.classList.add("explorer-rows--scroll");
-    }
-  }
+    if (bottom <= top) return false;
+    list.style.maxHeight = `${Math.ceil(bottom - top)}px`;
+    list.classList.add("explorer-rows--scroll");
+    return true;
+  };
+  if (measure()) return;
+  const observer = new ResizeObserver(() => {
+    if (!list.isConnected || measure()) observer.disconnect();
+  });
+  observer.observe(list);
 }
