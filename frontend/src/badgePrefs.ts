@@ -80,17 +80,14 @@ export function applyBadgePrefs(): void {
 }
 
 /** The account's preferences, from /api/me: they replace this browser's
- * copy. An account without any yet takes this browser's, if chosen here
- * before they were kept with the account. */
+ * copy. An account without any has the defaults, whatever another account
+ * chose in this browser. */
 export function syncBadgePrefs(account: { badgeShine?: string; badgeIcons?: string } | undefined): void {
   if (!account) return;
   const shine = SHINES.find((s) => s.value === account.badgeShine)?.value;
   const icons = ICONS.find((i) => i.value === account.badgeIcons)?.value;
-  if (!shine && !icons) {
-    if (badgeShine() !== DEFAULT_SHINE || badgeIcons() !== DEFAULT_ICONS) void saveToAccount({ shine: badgeShine(), icons: badgeIcons() });
-    return;
-  }
-  if ((shine && shine !== badgeShine()) || (icons && icons !== badgeIcons())) keep({ shine, icons });
+  const wanted = { shine: shine ?? DEFAULT_SHINE, icons: icons ?? DEFAULT_ICONS };
+  if (wanted.shine !== badgeShine() || wanted.icons !== badgeIcons()) keep(wanted);
 }
 
 function saveToAccount(prefs: { shine?: BadgeShine; icons?: BadgeIcons }): Promise<boolean> {

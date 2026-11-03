@@ -720,7 +720,7 @@ function renderPage(
           <h2>Expected evaluation</h2>
           <button id="eval-btn" class="btn btn-secondary btn-small" type="button" ${disabled}>Recalculate</button>
         </div>
-        <p class="stat-result__what">Stockfish's evaluation where your preparation ends, averaged over the opponent's replies as weighted by the Explorer. It is measured in pawns, from ${sideName}'s point of view. ${cacheNote}</p>
+        <p class="stat-result__what">Stockfish's evaluation where your preparation ends, averaged over the opponent's replies as weighted by the Explorer. It is measured in pawns, from White's point of view (negative when Black is better). ${cacheNote}</p>
         ${evalHtml}
         <div id="eval-stale"></div>
         <p class="stat-rank" id="eval-rank"></p>
