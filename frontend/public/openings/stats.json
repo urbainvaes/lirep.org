@@ -60,6 +60,30 @@
       "evalDepth": 16,
       "scoreCalculatedAt": "2026-11-03T19:06:43.760729+00:00",
       "evalCalculatedAt": "2026-11-03T23:49:16.896504+00:00"
+    },
+    "najdorf": {
+      "file": "db7cfbe0285408cfd838c809f7258d10c452553b7adbdabfa97c76ac314aeae1",
+      "winProbability": 0.509252487445378,
+      "evalCp": -3.5456823734093574,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-03T23:50:14.276196+00:00",
+      "evalCalculatedAt": "2026-11-04T00:00:29.532819+00:00"
+    },
+    "french": {
+      "file": "07380828dc96356d508520b41cf4e800e91bb763077757c8e47179e388921fad",
+      "winProbability": 0.5119442046012798,
+      "evalCp": 0.3555161217396455,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-04T00:04:06.191937+00:00",
+      "evalCalculatedAt": "2026-11-04T00:20:14.511011+00:00"
+    },
+    "caro-kann": {
+      "file": "e07714a495549800becdb1d6b42dd8394c2f09c8e0daffbac3feaa73bcc1202c",
+      "winProbability": 0.5051460886115279,
+      "evalCp": -7.3018402353538265,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-04T14:01:42.799148+00:00",
+      "evalCalculatedAt": "2026-11-04T14:12:57.791901+00:00"
     }
   }
 }
