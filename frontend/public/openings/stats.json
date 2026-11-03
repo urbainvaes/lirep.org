@@ -84,6 +84,22 @@
       "evalDepth": 16,
       "scoreCalculatedAt": "2026-11-04T14:01:42.799148+00:00",
       "evalCalculatedAt": "2026-11-04T14:12:57.791901+00:00"
+    },
+    "petroff": {
+      "file": "9cf12a862ab7a38b3e22966e3275fc7e11b290da0aac5e28509c2a5a3458ddaf",
+      "winProbability": 0.5054842813670543,
+      "evalCp": 18.84412695815174,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-04T14:14:10.414021+00:00",
+      "evalCalculatedAt": "2026-11-04T14:37:55.662591+00:00"
+    },
+    "scandinavian": {
+      "file": "22b60a5e08fc03e5d39254363c8054be1b7e1d628b38c82faef4d2813469e9b0",
+      "winProbability": 0.5088982965737301,
+      "evalCp": -10.261105138079486,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-04T14:38:38.105034+00:00",
+      "evalCalculatedAt": "2026-11-04T14:44:59.628811+00:00"
     }
   }
 }
