@@ -28,15 +28,11 @@ const EDITOR_TIPS: EditorTip[] = [
     ids: [],
     html: "<strong>The figures after a reply</strong>, e.g. <span class=\"tree-move-stat\">25% · 55.2%</span>: how often the games reach it, and your expected score from there, with the Explorer's settings. The number in brackets after a folded line is how many moves it holds.",
   },
-  {
-    ids: ["fold-btn", "autofold-btn"],
-    html: "<strong>Fold branches</strong> puts the moves at each branching in folds, opened by a click; <strong>Auto-fold</strong> closes a variation's fold when you move out of it.",
-  },
   { ids: ["comment-btn"], html: "A <strong>comment</strong> on the selected position (Enter to finish)." },
   { ids: ["open-lichess-analysis"], html: "Opens the position on <strong>Lichess's analysis board</strong>." },
   {
     ids: ["start-point-btn"],
-    html: "Makes the selected move the study's <strong>starting point</strong>: the stats and the practice start there. Click it there again to clear it.",
+    html: "Makes the selected move the study's <strong>starting point</strong>: the stats and the practice start there. Click it again to clear it.",
   },
   { ids: ["delete-btn"], html: "<strong>Deletes</strong> the selected move and everything after it (Delete)." },
   { ids: ["keyboard-help-btn"], html: "The <strong>keyboard shortcuts</strong>." },
@@ -47,13 +43,8 @@ const EDITOR_TIPS: EditorTip[] = [
   { ids: ["flip-board-btn"], html: "<strong>Flips</strong> the board." },
   { ids: ["focus-btn"], html: "<strong>Focus mode</strong>: only the board, the moves and the tools fill the window (Space or Z)." },
   {
-    ids: ["tab-explorer"],
-    html: "The <strong>Opening Explorer</strong>: the moves played in this position, how often, and how they score, in the games the study's settings choose.",
-  },
-  { ids: ["tab-engine"], html: "<strong>Stockfish</strong>'s evaluation of the position and its best lines, in this browser." },
-  {
     ids: ["tab-suggest"],
-    html: "<strong>Suggests moves</strong> of yours to add: one at a time, each the one that raises the expected score most.",
+    html: "<strong>Suggests moves</strong> of yours to add, with an optimization algorithm (a greedy one): at each step it looks at the opponent's replies your study leaves unanswered, tries your most played answers to each (sound ones only, if you ask), and adds the one that raises the expected score most; then again, until it has added the number of moves you chose or reached the score you aimed for. <a href=\"/doc/suggested-moves.html\" target=\"_blank\" rel=\"noopener\">How it works</a>.",
   },
   {
     ids: ["tab-settings"],
