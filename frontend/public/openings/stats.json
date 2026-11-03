@@ -36,6 +36,30 @@
       "evalDepth": 16,
       "scoreCalculatedAt": "2026-11-03T18:37:59.355694+00:00",
       "evalCalculatedAt": "2026-11-03T18:48:04.929833+00:00"
+    },
+    "queens-gambit": {
+      "file": "7cadc86fa0bced1593525af0ea250779b5ebb29da06616cfbf40d039223a7cbb",
+      "winProbability": 0.5513195358687717,
+      "evalCp": 55.9852799451359,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-03T18:49:55.124201+00:00",
+      "evalCalculatedAt": "2026-11-03T19:00:59.154849+00:00"
+    },
+    "london": {
+      "file": "3693703af66d397e7f48a1b2e024ef6f9c702aea72281678bff23d7582682876",
+      "winProbability": 0.5351045948135305,
+      "evalCp": 24.10542955133575,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-03T19:01:38.817102+00:00",
+      "evalCalculatedAt": "2026-11-03T19:05:31.411190+00:00"
+    },
+    "english": {
+      "file": "b0bd1080777ed40b16a7d7831a573543a8bde371d1030425facbc0b092b397a8",
+      "winProbability": 0.5405597574370449,
+      "evalCp": 41.16834644093723,
+      "evalDepth": 16,
+      "scoreCalculatedAt": "2026-11-03T19:06:43.760729+00:00",
+      "evalCalculatedAt": "2026-11-03T23:49:16.896504+00:00"
     }
   }
 }
